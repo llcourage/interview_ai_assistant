@@ -5,13 +5,67 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/atom-one-dark.css';
 import './Overlay.css';
 
+// Session 类型定义
+interface SessionData {
+  id: string;
+  timestamp: number;
+  conversations: Array<{
+    screenshots: string[];
+    response: string;
+  }>;
+}
+
 const Overlay = () => {
-  const [screenshots, setScreenshots] = useState<string[]>([]); // 改为数组
+  // 当前 Session ID
+  const [currentSessionId] = useState<string>(() => `session_${Date.now()}`);
+  
+  // Session 数据
+  const [screenshots, setScreenshots] = useState<string[]>([]);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<Array<{screenshots: string[], response: string}>>([]);
+  
+  // UI 状态
   const [status, setStatus] = useState<string>('等待截图...');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isFocusMode, setIsFocusMode] = useState<boolean>(false); // 专注模式（不透明+可选中）
+  const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
+  
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // 💾 保存当前 Session 到 localStorage
+  const saveCurrentSession = () => {
+    if (conversationHistory.length === 0) return; // 空会话不保存
+    
+    const sessions: SessionData[] = JSON.parse(localStorage.getItem('sessions') || '[]');
+    
+    // 查找是否已存在当前 Session
+    const existingIndex = sessions.findIndex(s => s.id === currentSessionId);
+    
+    const sessionData: SessionData = {
+      id: currentSessionId,
+      timestamp: Date.now(),
+      conversations: conversationHistory
+    };
+    
+    if (existingIndex >= 0) {
+      sessions[existingIndex] = sessionData;
+    } else {
+      sessions.push(sessionData);
+    }
+    
+    localStorage.setItem('sessions', JSON.stringify(sessions));
+    console.log('💾 Session 已保存:', currentSessionId);
+  };
+
+  // 🆕 创建新 Session
+  const createNewSession = () => {
+    console.log('🆕 创建新 Session');
+    
+    // 保存当前 Session（如果有对话）
+    saveCurrentSession();
+    
+    // 重新加载页面以创建全新的 Session ID
+    window.location.reload();
+  };
 
   // 简化穿透控制：根据专注模式决定是否穿透
   useEffect(() => {
@@ -96,6 +150,18 @@ const Overlay = () => {
         setAiResponse(data.answer);
         setStatus('');
         
+        // 📝 添加到对话历史
+        const newConversation = {
+          screenshots: [...screenshots],
+          response: data.answer
+        };
+        setConversationHistory(prev => {
+          const updated = [...prev, newConversation];
+          // 保存到 localStorage
+          setTimeout(() => saveCurrentSession(), 100);
+          return updated;
+        });
+        
         // 🚨 分析完成后自动清空截图
         setScreenshots([]);
         console.log('🗑️ 截图已自动清空');
@@ -125,7 +191,7 @@ const Overlay = () => {
       console.error('window.aiShot 未定义！IPC 桥接失败。');
       setStatus('IPC 连接失败 (preload 未加载)');
     }
-  }, [screenshots, isLoading]);
+  }, [screenshots, isLoading, saveCurrentSession]);
 
   // 自动调整高度
   useEffect(() => {
@@ -193,6 +259,12 @@ const Overlay = () => {
           });
           handled = true;
           break;
+        case 'n':
+        case 'N':
+          // Ctrl+N: 创建新 Session
+          createNewSession();
+          handled = true;
+          break;
       }
 
       if (handled) {
@@ -202,7 +274,7 @@ const Overlay = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [createNewSession]);
 
   return (
     <div 
@@ -231,6 +303,9 @@ const Overlay = () => {
           </div>
           <div className="shortcut-hint">
             <kbd>Ctrl+Enter</kbd> 分析
+          </div>
+          <div className="shortcut-hint">
+            <kbd>Ctrl+N</kbd> 新会话
           </div>
           <div className="shortcut-hint">
             <kbd>Ctrl+B</kbd> 隐藏/显示
