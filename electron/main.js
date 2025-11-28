@@ -1,0 +1,484 @@
+const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain } = require('electron');
+const path = require('path');
+
+// 🚨 恢复 GPU 加速（有些系统禁用后反而黑屏）
+// app.disableHardwareAcceleration();
+
+let mainWindow = null;
+let overlayWindow = null;
+let currentScreenshot = null;
+
+const isDev = !app.isPackaged;
+
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    show: false, // 🚨 先不显示，等加载完成后再显示
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    icon: path.join(__dirname, '../resources/icon.png')
+  });
+
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  // 🚨 加载完成后显示（避免白屏闪烁）
+  mainWindow.once('ready-to-show', () => {
+    console.log('主窗口准备就绪，显示窗口');
+    mainWindow.show();
+    mainWindow.focus();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+function createOverlayWindow() {
+  // 获取屏幕尺寸
+  const { screen } = require('electron');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  
+  // 计算窗口尺寸（屏幕的一半宽度，初始高度较小）
+  const windowWidth = Math.floor(screenWidth / 2);
+  const maxHeight = Math.floor(screenHeight / 2);
+  const initialHeight = 80; // 初始高度，只显示按钮
+  
+  overlayWindow = new BrowserWindow({
+    width: windowWidth,
+    height: initialHeight,
+    maxHeight: maxHeight,
+    minHeight: initialHeight,
+    frame: false,
+    transparent: true,
+    // 🚨 尝试给一个极其微弱的背景色，而不是完全透明
+    // 有时 #00000000 会导致渲染层被忽略
+    backgroundColor: '#01000000', 
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    resizable: true,
+    focusable: true,
+    hasShadow: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    show: false
+  });
+
+  // 移除 DevTools
+  // overlayWindow.webContents.openDevTools({ mode: 'detach' });
+
+  if (isDev) {
+    // 添加 ?type=overlay 参数，确保前端能识别
+    overlayWindow.loadURL('http://localhost:5173/?type=overlay#/overlay');
+  } else {
+    overlayWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      hash: '/overlay',
+      search: 'type=overlay' // 生产环境也加上
+    });
+  }
+
+  // 设置窗口位置（顶部居中）
+  const x = Math.floor((screenWidth - windowWidth) / 2);
+  const y = 0; // 置顶
+  overlayWindow.setPosition(x, y);
+  
+  // 不需要再单独设置 opacity，上面已经设置了
+  // overlayWindow.setOpacity(1.0);
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+
+  // 🚨 调试：加载失败监听
+  overlayWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('🚨 页面加载失败:', errorCode, errorDescription);
+  });
+
+  // 🚨 调试：完成加载监听
+  overlayWindow.webContents.on('did-finish-load', () => {
+    console.log('✅ 页面加载完成');
+    
+    // 显示窗口
+    overlayWindow.show();
+    overlayWindow.focus();
+    
+    // 🚨 初始状态：不穿透，等前端 mousemove 接管后再动态切换
+    overlayWindow.setIgnoreMouseEvents(false);
+    console.log('✅ 窗口初始设为不穿透，等待前端接管');
+  });
+}
+
+// 动态调整悬浮窗高度
+function resizeOverlayWindow(height) {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    const { screen } = require('electron');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { height: screenHeight } = primaryDisplay.workAreaSize;
+    const maxHeight = Math.floor(screenHeight / 2);
+    
+    // 限制最大高度为屏幕高度的 50%
+    const newHeight = Math.min(Math.max(height, 80), maxHeight); // 至少 80px
+    const currentSize = overlayWindow.getSize();
+    const currentWidth = currentSize[0];
+    const currentHeight = currentSize[1];
+    
+    console.log(`调整悬浮窗高度: 当前=${currentHeight}px, 请求=${height}px, 实际=${newHeight}px, 最大=${maxHeight}px`);
+    
+    // 使用 setBounds 而不是 setSize，更可靠
+    const bounds = overlayWindow.getBounds();
+    overlayWindow.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: currentWidth,
+      height: newHeight
+    });
+    
+    // 强制刷新窗口
+    overlayWindow.setSize(currentWidth, newHeight);
+  }
+}
+
+// 发送消息到所有窗口
+function sendToWindows(channel, ...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send(channel, ...args);
+  }
+}
+
+// 截屏功能
+async function captureScreen() {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: 1920,
+        height: 1080
+      }
+    });
+
+    if (sources.length > 0) {
+      const image = sources[0].thumbnail.toPNG();
+      const base64Image = image.toString('base64');
+      
+      // 🚨 添加 data URL 前缀，让浏览器能识别
+      const dataUrl = `data:image/png;base64,${base64Image}`;
+      currentScreenshot = dataUrl;
+      
+      sendToWindows('screenshot-taken', dataUrl);
+      
+      // 聚焦悬浮窗
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.show();
+        overlayWindow.focus();
+      }
+      
+      return dataUrl;
+    }
+  } catch (error) {
+    console.error('截屏失败:', error);
+    sendToWindows('screenshot-error', error.message);
+  }
+  return null;
+}
+
+// 注册全局快捷键
+function registerShortcuts() {
+  // Ctrl+H: 截屏
+  globalShortcut.register('CommandOrControl+H', async () => {
+    console.log('快捷键触发: Ctrl+H (截屏)');
+    await captureScreen();
+  });
+
+  // Ctrl+Enter: 发送截图到后端
+  globalShortcut.register('CommandOrControl+Enter', () => {
+    console.log('快捷键触发: Ctrl+Enter (发送截图)');
+    if (currentScreenshot) {
+      sendToWindows('send-screenshot-request', currentScreenshot);
+    } else {
+      sendToWindows('screenshot-error', '没有截图可发送，请先按 Ctrl+H 截屏');
+    }
+  });
+
+  // Ctrl+B: 切换悬浮窗显示/隐藏
+  globalShortcut.register('CommandOrControl+B', () => {
+    console.log('快捷键触发: Ctrl+B (切换悬浮窗)');
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      if (overlayWindow.isVisible()) {
+        overlayWindow.hide();
+        console.log('悬浮窗已隐藏');
+      } else {
+        overlayWindow.show();
+        console.log('悬浮窗已显示');
+      }
+    }
+  });
+
+  // 🚨 Ctrl+Up/Down: 滚动内容
+  const upRegistered = globalShortcut.register('CommandOrControl+Up', () => {
+    console.log('快捷键触发: Ctrl+Up (向上滚动)');
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.webContents.executeJavaScript(`
+        (function() {
+          // 优先尝试滚动 overlay-response，如果不存在则滚动 overlay-content-wrapper
+          let scrollTarget = document.querySelector('.overlay-response');
+          if (!scrollTarget || scrollTarget.scrollHeight <= scrollTarget.clientHeight) {
+            scrollTarget = document.querySelector('.overlay-content-wrapper');
+          }
+          
+          if (scrollTarget) {
+            const before = scrollTarget.scrollTop;
+            scrollTarget.scrollBy({ top: -100, behavior: 'smooth' });
+            const after = scrollTarget.scrollTop;
+            return '向上滚动: ' + before + ' -> ' + after + ' (高度: ' + scrollTarget.scrollHeight + '/' + scrollTarget.clientHeight + ')';
+          } else {
+            return '未找到可滚动元素';
+          }
+        })();
+      `).then(result => {
+        console.log(result);
+      }).catch(err => {
+        console.error('执行滚动脚本失败:', err);
+      });
+    }
+  });
+  console.log('Ctrl+Up 注册结果:', upRegistered ? '成功' : '失败（可能被占用）');
+
+  const downRegistered = globalShortcut.register('CommandOrControl+Down', () => {
+    console.log('快捷键触发: Ctrl+Down (向下滚动)');
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.webContents.executeJavaScript(`
+        (function() {
+          // 优先尝试滚动 overlay-response，如果不存在则滚动 overlay-content-wrapper
+          let scrollTarget = document.querySelector('.overlay-response');
+          if (!scrollTarget || scrollTarget.scrollHeight <= scrollTarget.clientHeight) {
+            scrollTarget = document.querySelector('.overlay-content-wrapper');
+          }
+          
+          if (scrollTarget) {
+            const before = scrollTarget.scrollTop;
+            scrollTarget.scrollBy({ top: 100, behavior: 'smooth' });
+            const after = scrollTarget.scrollTop;
+            return '向下滚动: ' + before + ' -> ' + after + ' (高度: ' + scrollTarget.scrollHeight + '/' + scrollTarget.clientHeight + ')';
+          } else {
+            return '未找到可滚动元素';
+          }
+        })();
+      `).then(result => {
+        console.log(result);
+      }).catch(err => {
+        console.error('执行滚动脚本失败:', err);
+      });
+    }
+  });
+  console.log('Ctrl+Down 注册结果:', downRegistered ? '成功' : '失败（可能被占用）');
+
+  // 移动悬浮窗 (Ctrl + Arrow Keys)
+  const moveStep = 20; // 每次移动 20px
+
+  const moveWindow = (dx, dy, name) => {
+    console.log(`尝试移动窗口 (${name}): dx=${dx}, dy=${dy}`);
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      if (!overlayWindow.isVisible()) {
+        console.log('窗口不可见，强制显示');
+        overlayWindow.show();
+      }
+      
+      const bounds = overlayWindow.getBounds();
+      console.log(`当前位置: x=${bounds.x}, y=${bounds.y}`);
+      
+      overlayWindow.setBounds({
+        x: bounds.x + dx,
+        y: bounds.y + dy,
+        width: bounds.width,
+        height: bounds.height
+      });
+      console.log(`新位置: x=${bounds.x + dx}, y=${bounds.y + dy}`);
+    } else {
+      console.log('窗口不存在或已销毁');
+    }
+  };
+
+  // 注册移动快捷键 - 已移除，改为前端监听 (Local Shortcut)
+  // 这样只在悬浮窗获得焦点时生效，不影响系统
+  /*
+  // 方案 C: Ctrl + Alt + WASD (绝对不冲突)
+  registerMoveKey('CommandOrControl+Alt+W', 0, -moveStep, 'Up');
+  registerMoveKey('CommandOrControl+Alt+S', 0, moveStep, 'Down');
+  registerMoveKey('CommandOrControl+Alt+A', -moveStep, 0, 'Left');
+  registerMoveKey('CommandOrControl+Alt+D', moveStep, 0, 'Right');
+  */
+
+  console.log('全局快捷键已注册:');
+  console.log('  Ctrl+H: 截屏');
+  console.log('  Ctrl+Enter: 发送截图分析');
+  console.log('  Ctrl+B: 切换悬浮窗显示/隐藏');
+  console.log('  Ctrl+Up: 向上滚动');
+  console.log('  Ctrl+Down: 向下滚动');
+  console.log('  Ctrl+Left: 向左移动');
+  console.log('  Ctrl+Right: 向右移动');
+}
+
+// IPC 事件处理
+ipcMain.handle('capture-screen', async () => {
+  return await captureScreen();
+});
+
+ipcMain.handle('send-to-backend', async (event, imageBase64) => {
+  // 这里前端会自己调用后端 API，这个 handler 可以用于未来扩展
+  return { success: true };
+});
+
+ipcMain.on('minimize-overlay', () => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.hide();
+  }
+});
+
+ipcMain.on('show-overlay', () => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.show();
+  }
+});
+
+// 控制点击穿透（根据鼠标位置动态切换）
+ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    const winOptions = options || { forward: true };
+    overlayWindow.setIgnoreMouseEvents(ignore, winOptions);
+    // console.log(`穿透更新: ${ignore} (forward: ${winOptions.forward})`);
+  }
+});
+
+// 打开主窗口
+ipcMain.on('open-main-window', () => {
+  console.log('🔔 收到打开主窗口请求');
+  console.log('当前 mainWindow 状态:', mainWindow ? '存在' : '不存在', mainWindow && !mainWindow.isDestroyed() ? '未销毁' : '已销毁');
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    console.log('显示现有主窗口');
+    
+    // 🚨 确保窗口可见
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+      console.log('从最小化状态恢复');
+    }
+    
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.moveTop(); // 🚨 置于最前
+    
+    console.log('✅ 主窗口已显示并聚焦');
+    console.log('窗口是否可见:', mainWindow.isVisible());
+    console.log('窗口是否聚焦:', mainWindow.isFocused());
+  } else {
+    console.log('创建新的主窗口');
+    createMainWindow();
+    console.log('✅ 新主窗口已创建');
+  }
+});
+
+// 接收前端的移动请求
+ipcMain.on('move-overlay', (event, { direction, step }) => {
+  console.log(`IPC收到移动请求: direction=${direction}, step=${step}`);
+  const moveStep = step || 20;
+  let dx = 0;
+  let dy = 0;
+  
+  switch (direction) {
+    case 'up': dy = -moveStep; break;
+    case 'down': dy = moveStep; break;
+    case 'left': dx = -moveStep; break;
+    case 'right': dx = moveStep; break;
+  }
+  
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    const bounds = overlayWindow.getBounds();
+    const { screen } = require('electron');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+    
+    console.log(`屏幕尺寸: ${screenWidth}x${screenHeight}`);
+    console.log(`当前窗口: x=${bounds.x}, y=${bounds.y}, width=${bounds.width}, height=${bounds.height}`);
+    
+    // 计算新位置
+    let newX = bounds.x + dx;
+    let newY = bounds.y + dy;
+    
+    console.log(`计算新位置（边界检查前）: x=${newX}, y=${newY}`);
+    
+    // 边界检查：防止窗口移出屏幕
+    // 左边界
+    if (newX < 0) {
+      console.log(`触碰左边界，限制 x 从 ${newX} 到 0`);
+      newX = 0;
+    }
+    // 右边界（窗口右边缘不能超出屏幕右边缘）
+    if (newX + bounds.width > screenWidth) {
+      console.log(`触碰右边界，限制 x 从 ${newX} 到 ${screenWidth - bounds.width}`);
+      newX = screenWidth - bounds.width;
+    }
+    // 上边界
+    if (newY < 0) {
+      console.log(`触碰上边界，限制 y 从 ${newY} 到 0`);
+      newY = 0;
+    }
+    // 下边界（窗口下边缘不能超出屏幕下边缘）
+    if (newY + bounds.height > screenHeight) {
+      console.log(`触碰下边界，限制 y 从 ${newY} 到 ${screenHeight - bounds.height}`);
+      newY = screenHeight - bounds.height;
+    }
+    
+    console.log(`最终位置（边界检查后）: x=${newX}, y=${newY}`);
+    
+    overlayWindow.setBounds({
+      x: newX,
+      y: newY,
+      width: bounds.width,
+      height: bounds.height
+    });
+  }
+});
+
+ipcMain.on('resize-overlay', (event, height) => {
+  resizeOverlayWindow(height);
+});
+
+app.whenReady().then(() => {
+  createMainWindow();
+  createOverlayWindow();
+  registerShortcuts();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createMainWindow();
+      createOverlayWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('will-quit', () => {
+  // 注销所有快捷键
+  globalShortcut.unregisterAll();
+});
+

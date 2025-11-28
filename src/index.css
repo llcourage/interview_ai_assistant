@@ -1,0 +1,69 @@
+:root {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  /* background-color: #242424;  移除全局背景色 */
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent !important; /* 允许透明 */
+  overflow: hidden; /* 🚨 禁止 body 滚动 */
+}
+
+#root {
+  width: 100%;
+  min-height: 100%; /* 这里的 vh 改为 %，避免强制撑满 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 🚨 禁止 root 滚动 */
+}
+
+kbd {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.9em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+

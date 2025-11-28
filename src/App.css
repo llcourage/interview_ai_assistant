@@ -1,0 +1,223 @@
+.app {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+  color: #fff;
+  padding: 2rem;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #444;
+}
+
+.app-header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  color: #aaa;
+  font-size: 1rem;
+}
+
+.app-main {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+section h2 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  color: #fff;
+}
+
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+.shortcut-item span {
+  margin-left: 1rem;
+  color: #ccc;
+}
+
+.status-indicator {
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.status-indicator.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.status-indicator.error {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.button-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  flex: 1;
+  min-width: 150px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  color: #1e1e2e;
+  border: none;
+}
+
+.screenshot-preview {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.screenshot-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.ai-response {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+  line-height: 1.6;
+}
+
+/* Markdown 内容样式 */
+.markdown-content {
+  color: #fff;
+}
+
+.markdown-content h2 {
+  font-size: 1.3rem;
+  margin: 1rem 0 0.5rem 0;
+  color: #667eea;
+}
+
+.markdown-content h3 {
+  font-size: 1.1rem;
+  margin: 0.8rem 0 0.5rem 0;
+  color: #8b95ea;
+}
+
+.markdown-content p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.5rem 0;
+  padding-left: 2rem;
+}
+
+.markdown-content li {
+  margin: 0.3rem 0;
+  line-height: 1.5;
+}
+
+.markdown-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  background: #1e1e2e !important;
+  padding: 1rem !important;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  color: #e0e0e0;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+.markdown-content strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.markdown-content em {
+  color: #ccc;
+  font-style: italic;
+}
+
+.info-section ol {
+  padding-left: 1.5rem;
+}
+
+.info-section li {
+  margin-bottom: 0.8rem;
+  line-height: 1.6;
+  color: #ddd;
+}
+
+.app-footer {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .app {
+    padding: 1rem;
+  }
+  
+  .app-header h1 {
+    font-size: 2rem;
+  }
+}
+

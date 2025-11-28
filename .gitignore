@@ -1,0 +1,39 @@
+# Node modules
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+backend/venv/
+backend/.env
+
+# Environment variables
+.env
+.env.local
+
+# Build outputs
+dist/
+build/
+out/
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Electron
+release/
+
+# Logs
+*.log
+logs/

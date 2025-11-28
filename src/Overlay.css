@@ -1,0 +1,323 @@
+.overlay {
+  width: 100%;
+  min-height: 80px;
+  /* 🚨 更透明：黑底 15% (0.15) */
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  /* 恢复模糊 */
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  
+  /* 🚨 调整字体：柔和的灰白色，加透明度 */
+  color: rgba(235, 235, 235, 0.8);
+  
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  
+  /* 🚨 禁止外层滚动 */
+  overflow: hidden;
+  
+  /* 🚨 整个区域默认不可拖动 */
+  -webkit-app-region: no-drag;
+}
+
+/* 快捷键栏 - 始终显示 */
+.overlay-shortcuts-bar {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  /* 🚨 去掉紫色渐变，改为透明（统一使用父级黑底） */
+  background: transparent;
+  /* 加一条顶部分割线，稍微区分一下 */
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0 0 12px 12px;
+  flex-shrink: 0;
+  min-height: 60px;
+  
+  /* 🚨 只有快捷键栏可以拖动窗口 */
+  -webkit-app-region: drag;
+  cursor: move;
+  
+  /* 🚨 移除 pointer-events，让 Electron 控制 */
+  /* pointer-events: auto; */
+}
+
+/* 按钮本身不能拖拽，否则无法点击 */
+.overlay-shortcuts-bar .shortcut-hint {
+  -webkit-app-region: no-drag;
+  /* 🚨 移除 pointer-events */
+  /* pointer-events: auto; */
+  cursor: pointer;
+}
+
+/* 🚨 新增：设置按钮样式（右上角） */
+.settings-button {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10000;
+  transition: all 0.3s ease;
+  font-size: 1.2rem;
+  
+  /* 🚨 移除 pointer-events */
+  /* pointer-events: auto !important; */
+  -webkit-app-region: no-drag;
+}
+
+.settings-button:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+}
+
+.overlay-content-wrapper {
+  flex: 1;
+  overflow: hidden;
+  background: transparent;
+  /* 确保滚动时内容可见 */
+  
+  /* 🚨 移除 pointer-events，让 Electron 控制 */
+  /* pointer-events: auto; */
+}
+
+/* 滚动条样式 - 已移除，只保留 overlay-response 的滚动条 */
+
+.overlay-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 100%;
+  background: transparent;
+  /* 不设置 max-height，让内容自然展开 */
+  /* 窗口本身会限制最大高度为 50vh */
+}
+
+/* 多截图容器 */
+.overlay-screenshots {
+  margin-bottom: 1rem;
+}
+
+.screenshots-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.screenshots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 0.5rem;
+}
+
+.screenshot-item {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.screenshot-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 80px;
+  object-fit: cover;
+}
+
+.screenshot-number {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+/* 单张截图样式（保留兼容） */
+.overlay-screenshot {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.overlay-screenshot img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 40vh;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.overlay-status {
+  text-align: center;
+  padding: 0.8rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.status-text {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.overlay-response {
+  /* 🚨 回复区域背景：更透明 40% */
+  background: rgba(20, 20, 20, 0.4);
+  /* 边框也改暗一点 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 1rem;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  /* 🚨 限制最大高度，确保可以滚动 */
+  max-height: 400px;
+  
+  /* 🚨 移除 pointer-events，让 Electron 控制 */
+  /* pointer-events: auto; */
+}
+
+.response-label {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.response-text {
+  font-size: 1rem;
+  line-height: 1.6;
+  /* 🚨 正文颜色也调整为淡灰色带透明度 */
+  color: rgba(235, 235, 235, 0.8);
+  word-wrap: break-word;
+}
+
+/* Markdown 样式 for overlay */
+.overlay-response .markdown-content h2 {
+  font-size: 1.2rem;
+  margin: 1rem 0 0.5rem 0;
+  /* 🚨 标题颜色稍微亮一点，但也带透明度 */
+  color: rgba(139, 149, 234, 0.9);
+  font-weight: 600;
+}
+
+.overlay-response .markdown-content h3 {
+  font-size: 1rem;
+  margin: 0.8rem 0 0.4rem 0;
+  color: #9ba5ea;
+}
+
+.overlay-response .markdown-content p {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.overlay-response .markdown-content ul,
+.overlay-response .markdown-content ol {
+  margin: 0.5rem 0;
+  padding-left: 2rem;
+  font-size: 0.95rem;
+}
+
+.overlay-response .markdown-content li {
+  margin: 0.4rem 0;
+  line-height: 1.5;
+}
+
+.overlay-response .markdown-content code {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9rem;
+}
+
+.overlay-response .markdown-content pre {
+  background: rgba(0, 0, 0, 0.45) !important;
+  padding: 1rem !important;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.overlay-response .markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* 快捷键提示 */
+.overlay-shortcuts-bar .shortcut-hint {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  color: #ffffff !important;
+}
+
+.overlay-shortcuts-bar .shortcut-hint:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.overlay-shortcuts-bar .shortcut-hint kbd {
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.8rem;
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff !important;
+}
+
+/* 滚动条样式 */
+.overlay-response::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overlay-response::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.overlay-response::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.5);
+  border-radius: 3px;
+}
+
+.overlay-response::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.7);
+}
+
