@@ -8,12 +8,6 @@
       "destination": "/index.html"
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
-    }
-  ],
   "env": {
     "PYTHON_VERSION": "3.11"
   },
