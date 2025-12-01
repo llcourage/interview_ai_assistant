@@ -19,15 +19,11 @@
     {
       "src": "/api/(.*)",
       "dest": "api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
     }
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],
