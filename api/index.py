@@ -14,5 +14,7 @@ from mangum import Mangum
 from main import app
 
 # 创建 Mangum 适配器
+# Vercel 会将 /api/* 的请求路由到这里
+# Mangum 会自动处理路径匹配
 handler = Mangum(app, lifespan="off")
 
