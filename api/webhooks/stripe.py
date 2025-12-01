@@ -6,10 +6,6 @@ import sys
 import os
 from pathlib import Path
 
-# 添加 backend 目录到路径
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
 from mangum import Mangum
 from fastapi import FastAPI, HTTPException, Request
 import stripe
@@ -30,6 +26,12 @@ async def webhook_get():
 @app.post("/")
 async def webhook_post(request: Request):
     """Stripe Webhook 处理"""
+    # 延迟导入 backend 模块，避免模块级别的导入问题
+    backend_path = Path(__file__).parent.parent.parent / "backend"
+    if str(backend_path) not in sys.path:
+        sys.path.insert(0, str(backend_path))
+    
+    # 在函数内部导入，避免模块级别的导入错误
     from payment_stripe import (
         handle_checkout_completed,
         handle_subscription_updated,
@@ -56,17 +58,21 @@ async def webhook_post(request: Request):
     # 处理不同的事件类型
     event_type = event["type"]
     
-    if event_type == "checkout.session.completed":
-        session = event["data"]["object"]
-        await handle_checkout_completed(session)
-    elif event_type == "customer.subscription.updated":
-        subscription = event["data"]["object"]
-        await handle_subscription_updated(subscription)
-    elif event_type == "customer.subscription.deleted":
-        subscription = event["data"]["object"]
-        await handle_subscription_deleted(subscription)
-    
-    return {"status": "success"}
+    try:
+        if event_type == "checkout.session.completed":
+            session = event["data"]["object"]
+            await handle_checkout_completed(session)
+        elif event_type == "customer.subscription.updated":
+            subscription = event["data"]["object"]
+            await handle_subscription_updated(subscription)
+        elif event_type == "customer.subscription.deleted":
+            subscription = event["data"]["object"]
+            await handle_subscription_deleted(subscription)
+        
+        return {"status": "success", "event_type": event_type}
+    except Exception as e:
+        print(f"❌ 处理 Webhook 事件失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process webhook: {str(e)}")
 
 # Vercel Serverless Function handler
 handler = Mangum(app, lifespan="off")
