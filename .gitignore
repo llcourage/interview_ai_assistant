@@ -1,39 +1,58 @@
-# Node modules
+# Node
 node_modules/
-npm-debug.log*
+dist/
 
 # Python
-__pycache__/
-*.py[cod]
-*.so
-.Python
+backend/__pycache__/
 backend/venv/
+backend/*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+
+# Electron
+out/
+.webpack/
+
+# Env
+.env
 backend/.env
 
-# Environment variables
-.env
-.env.local
-
-# Build outputs
-dist/
-build/
-out/
-*.exe
+# Temporary and debug files
+*.txt
+!requirements.txt
+!backend/README.md
+*.log
+*_FIX.txt
+*_DEBUG.txt
+*_UPDATE.txt
+*_SUMMARY.txt
+*_GUIDE.txt
+CHANGELOG.md
+CONTRIBUTING.md
+PROJECT_STRUCTURE.md
+PROMPT_OPTIMIZATION.md
+SIMPLE_FORMAT.md
+QUICKSTART.md
+cleanup.py
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Electron
-release/
+# Build
+build/
 
-# Logs
-*.log
-logs/
+# Scripts in root (should be in scripts/)
+/*.bat
+/*.sh

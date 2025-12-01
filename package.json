@@ -12,7 +12,13 @@
     "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:5173 && electron .\"",
     "package": "npm run build && electron-builder --win"
   },
-  "keywords": ["electron", "react", "ai", "interview", "assistant"],
+  "keywords": [
+    "electron",
+    "react",
+    "ai",
+    "interview",
+    "assistant"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
@@ -28,10 +34,11 @@
     "wait-on": "^7.2.0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.86.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.21.0",
     "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.21.0",
     "rehype-highlight": "^7.0.0",
     "remark-gfm": "^4.0.0"
   },
@@ -46,7 +53,9 @@
       "dist/**/*"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "resources/icon.ico"
     },
     "nsis": {
@@ -55,4 +64,3 @@
     }
   }
 }
-

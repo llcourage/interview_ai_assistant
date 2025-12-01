@@ -1,5 +1,6 @@
-const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 // 🚨 恢复 GPU 加速（有些系统禁用后反而黑屏）
 // app.disableHardwareAcceleration();
@@ -10,11 +11,161 @@ let currentScreenshot = null;
 
 const isDev = !app.isPackaged;
 
+// 🔑 API Key 配置文件路径
+const getConfigPath = () => {
+  return path.join(app.getPath('userData'), 'config.json');
+};
+
+// 🔑 读取 API Key
+function getApiKey() {
+  try {
+    const configPath = getConfigPath();
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return config.apiKey || null;
+    }
+  } catch (error) {
+    console.error('读取 API Key 配置失败:', error);
+  }
+  return null;
+}
+
+// 🔑 保存 API Key
+function saveApiKey(apiKey) {
+  try {
+    const configPath = getConfigPath();
+    let config = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+    config.apiKey = apiKey;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    console.log('✅ API Key 已保存到:', configPath);
+    return true;
+  } catch (error) {
+    console.error('保存 API Key 失败:', error);
+    return false;
+  }
+}
+
+// 🔑 删除 API Key
+function deleteApiKey() {
+  try {
+    const configPath = getConfigPath();
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      delete config.apiKey;
+      // 如果配置为空，删除文件；否则保留其他配置
+      if (Object.keys(config).length === 0) {
+        fs.unlinkSync(configPath);
+        console.log('✅ 配置文件已删除');
+      } else {
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+        console.log('✅ API Key 已从配置中删除');
+      }
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('删除 API Key 失败:', error);
+    return false;
+  }
+}
+
+// 🎨 创建现代化菜单
+function createMenu() {
+  const template = [
+    {
+      label: 'API Key',
+      submenu: [
+        {
+          label: 'Manage API Key...',
+          click: async () => {
+            const currentApiKey = getApiKey();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('open-api-key-dialog', { action: 'view', apiKey: currentApiKey });
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Delete API Key',
+          click: async () => {
+            const currentApiKey = getApiKey();
+            if (!currentApiKey) {
+              await dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'No API Key',
+                message: 'No API Key is currently set',
+              });
+              return;
+            }
+            
+            const result = await dialog.showMessageBox(mainWindow, {
+              type: 'warning',
+              buttons: ['Cancel', 'Delete'],
+              defaultId: 0,
+              title: 'Delete API Key',
+              message: 'Are you sure you want to delete the API Key?',
+              detail: 'You will need to set it again to use AI features.',
+            });
+
+            if (result.response === 1) {
+              const success = deleteApiKey();
+              if (success) {
+                await dialog.showMessageBox(mainWindow, {
+                  type: 'info',
+                  title: 'Success',
+                  message: 'API Key has been deleted',
+                });
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send('api-key-deleted');
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About',
+          click: async () => {
+            await dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About',
+              message: 'AI Interview Assistant',
+              detail: 'Version 1.0.0\n\nAn intelligent interview preparation tool'
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
-    show: false, // 🚨 先不显示，等加载完成后再显示
+    width: 1200,
+    height: 800,
+    show: false,
+    frame: true,
+    backgroundColor: '#f5f7fa',
+    autoHideMenuBar: false, // 显示菜单栏
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -25,7 +176,7 @@ function createMainWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools(); // 🚨 关闭开发者工具
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -50,7 +201,8 @@ function createOverlayWindow() {
   
   // 计算窗口尺寸（屏幕的一半宽度，初始高度较小）
   const windowWidth = Math.floor(screenWidth / 2);
-  const maxHeight = Math.floor(screenHeight / 2);
+  // 🎯 增加最大高度到 80%，以容纳更多内容
+  const maxHeight = Math.floor(screenHeight * 0.8);
   const initialHeight = 80; // 初始高度，只显示按钮
   
   overlayWindow = new BrowserWindow({
@@ -126,9 +278,10 @@ function resizeOverlayWindow(height) {
     const { screen } = require('electron');
     const primaryDisplay = screen.getPrimaryDisplay();
     const { height: screenHeight } = primaryDisplay.workAreaSize;
-    const maxHeight = Math.floor(screenHeight / 2);
+    // 🎯 增加最大高度到 80%
+    const maxHeight = Math.floor(screenHeight * 0.8);
     
-    // 限制最大高度为屏幕高度的 50%
+    // 限制最大高度为屏幕高度的 70%
     const newHeight = Math.min(Math.max(height, 80), maxHeight); // 至少 80px
     const currentSize = overlayWindow.getSize();
     const currentWidth = currentSize[0];
@@ -228,32 +381,34 @@ function registerShortcuts() {
     }
   });
 
-  // 🚨 Ctrl+Up/Down: 滚动内容
+  // 🚨 Ctrl+Up/Down: 滚动内容 (只滚动单个回复框的内部内容)
   const upRegistered = globalShortcut.register('CommandOrControl+Up', () => {
     console.log('快捷键触发: Ctrl+Up (向上滚动)');
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.webContents.executeJavaScript(`
         (function() {
-          // 优先尝试滚动 overlay-response，如果不存在则滚动 overlay-content-wrapper
-          let scrollTarget = document.querySelector('.overlay-response');
-          if (!scrollTarget || scrollTarget.scrollHeight <= scrollTarget.clientHeight) {
-            scrollTarget = document.querySelector('.overlay-content-wrapper');
+          try {
+            // 🚨 只寻找回复框，不滚动对话历史区域
+            const el = document.querySelector('.overlay-response');
+            
+            if (!el) return '❌ 未找到 .overlay-response';
+            
+            // 检查是否可滚动
+            if (el.scrollHeight <= el.clientHeight) {
+              return '⚠️ .overlay-response 内容不需要滚动 [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
+            }
+            
+            const start = el.scrollTop;
+            el.scrollTop -= 100;
+            const end = el.scrollTop;
+            
+            return '✅ 向上滚动 (.overlay-response): ' + start + ' -> ' + end + 
+                   ' [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
+          } catch (e) {
+            return '❌ JS Error: ' + e.message;
           }
-          
-          if (scrollTarget) {
-            const before = scrollTarget.scrollTop;
-            scrollTarget.scrollBy({ top: -100, behavior: 'smooth' });
-            const after = scrollTarget.scrollTop;
-            return '向上滚动: ' + before + ' -> ' + after + ' (高度: ' + scrollTarget.scrollHeight + '/' + scrollTarget.clientHeight + ')';
-          } else {
-            return '未找到可滚动元素';
-          }
-        })();
-      `).then(result => {
-        console.log(result);
-      }).catch(err => {
-        console.error('执行滚动脚本失败:', err);
-      });
+        })()
+      `).then(result => console.log(result)).catch(err => console.error('ExecJS Failed:', err));
     }
   });
   console.log('Ctrl+Up 注册结果:', upRegistered ? '成功' : '失败（可能被占用）');
@@ -263,28 +418,31 @@ function registerShortcuts() {
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.webContents.executeJavaScript(`
         (function() {
-          // 优先尝试滚动 overlay-response，如果不存在则滚动 overlay-content-wrapper
-          let scrollTarget = document.querySelector('.overlay-response');
-          if (!scrollTarget || scrollTarget.scrollHeight <= scrollTarget.clientHeight) {
-            scrollTarget = document.querySelector('.overlay-content-wrapper');
+          try {
+            // 🚨 只寻找回复框，不滚动对话历史区域
+            const el = document.querySelector('.overlay-response');
+            
+            if (!el) return '❌ 未找到 .overlay-response';
+            
+            // 检查是否可滚动
+            if (el.scrollHeight <= el.clientHeight) {
+              return '⚠️ .overlay-response 内容不需要滚动 [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
+            }
+            
+            const start = el.scrollTop;
+            el.scrollTop += 100;
+            const end = el.scrollTop;
+            
+            return '✅ 向下滚动 (.overlay-response): ' + start + ' -> ' + end + 
+                   ' [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
+          } catch (e) {
+            return '❌ JS Error: ' + e.message;
           }
-          
-          if (scrollTarget) {
-            const before = scrollTarget.scrollTop;
-            scrollTarget.scrollBy({ top: 100, behavior: 'smooth' });
-            const after = scrollTarget.scrollTop;
-            return '向下滚动: ' + before + ' -> ' + after + ' (高度: ' + scrollTarget.scrollHeight + '/' + scrollTarget.clientHeight + ')';
-          } else {
-            return '未找到可滚动元素';
-          }
-        })();
-      `).then(result => {
-        console.log(result);
-      }).catch(err => {
-        console.error('执行滚动脚本失败:', err);
-      });
+        })()
+      `).then(result => console.log(result)).catch(err => console.error('ExecJS Failed:', err));
     }
   });
+  console.log('Ctrl+Down 注册结果:', downRegistered ? '成功' : '失败（可能被占用）');
   console.log('Ctrl+Down 注册结果:', downRegistered ? '成功' : '失败（可能被占用）');
 
   // 移动悬浮窗 (Ctrl + Arrow Keys)
@@ -332,6 +490,53 @@ function registerShortcuts() {
   console.log('  Ctrl+Left: 向左移动');
   console.log('  Ctrl+Right: 向右移动');
 }
+
+// 🔑 IPC: 获取 API Key
+ipcMain.handle('get-api-key', () => {
+  return getApiKey();
+});
+
+// 🔑 IPC: 保存 API Key
+ipcMain.handle('save-api-key', async (event, apiKey) => {
+  if (!apiKey || apiKey.trim() === '') {
+    return { success: false, message: 'API Key 不能为空' };
+  }
+  const success = saveApiKey(apiKey.trim());
+  if (success) {
+    return { success: true, message: 'API Key 已保存' };
+  }
+  return { success: false, message: '保存失败' };
+});
+
+// 🔑 IPC: 删除 API Key
+ipcMain.handle('delete-api-key', async () => {
+  const success = deleteApiKey();
+  if (success) {
+    return { success: true, message: 'API Key 已删除' };
+  }
+  return { success: false, message: '删除失败或未设置 API Key' };
+});
+
+// 🔒 IPC: 用户登录成功，创建悬浮窗
+ipcMain.handle('user-logged-in', () => {
+  console.log('🔐 用户已登录，创建悬浮窗');
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow();
+  } else {
+    overlayWindow.show();
+  }
+  return { success: true };
+});
+
+// 🔒 IPC: 用户登出，关闭悬浮窗
+ipcMain.handle('user-logged-out', () => {
+  console.log('🚪 用户已登出，关闭悬浮窗');
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.close();
+    overlayWindow = null;
+  }
+  return { success: true };
+});
 
 // IPC 事件处理
 ipcMain.handle('capture-screen', async () => {
@@ -460,13 +665,16 @@ ipcMain.on('resize-overlay', (event, height) => {
 
 app.whenReady().then(() => {
   createMainWindow();
-  createOverlayWindow();
+  // 🔒 不要自动创建悬浮窗，等待主窗口通知用户已登录
+  // createOverlayWindow();
+  createMenu(); // 🔑 创建菜单
   registerShortcuts();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
-      createOverlayWindow();
+      // 🔒 不要自动创建悬浮窗
+      // createOverlayWindow();
     }
   });
 });

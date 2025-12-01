@@ -26,24 +26,19 @@
 /* 快捷键栏 - 始终显示 */
 .overlay-shortcuts-bar {
   display: flex;
-  gap: 1rem;
+  gap: 0.6rem; /* 缩小：1rem → 0.6rem */
   justify-content: center;
   align-items: center;
-  padding: 0.8rem 1rem;
-  /* 🚨 去掉紫色渐变，改为透明（统一使用父级黑底） */
+  padding: 0.6rem 1rem; /* 缩小：0.8rem → 0.6rem */
   background: transparent;
-  /* 加一条顶部分割线，稍微区分一下 */
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0 0 12px 12px;
   flex-shrink: 0;
-  min-height: 60px;
+  min-height: 55px; /* 缩小：60px → 55px */
+  flex-wrap: wrap; /* 允许换行 */
   
-  /* 🚨 只有快捷键栏可以拖动窗口 */
   -webkit-app-region: drag;
   cursor: move;
-  
-  /* 🚨 移除 pointer-events，让 Electron 控制 */
-  /* pointer-events: auto; */
 }
 
 /* 按钮本身不能拖拽，否则无法点击 */
@@ -278,15 +273,16 @@
 /* 快捷键提示 */
 .overlay-shortcuts-bar .shortcut-hint {
   background: rgba(255, 255, 255, 0.2);
-  padding: 0.5rem 0.8rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem; /* 缩小：0.5rem 0.8rem → 0.4rem 0.6rem */
+  border-radius: 5px; /* 缩小：6px → 5px */
+  font-size: 0.75rem; /* 缩小：0.85rem → 0.75rem */
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.3rem; /* 缩小：0.4rem → 0.3rem */
   font-weight: 500;
   transition: all 0.2s;
   color: #ffffff !important;
+  white-space: nowrap; /* 防止文字换行 */
 }
 
 .overlay-shortcuts-bar .shortcut-hint:hover {
@@ -296,10 +292,12 @@
 
 .overlay-shortcuts-bar .shortcut-hint kbd {
   background: rgba(0, 0, 0, 0.3);
-  font-size: 0.8rem;
-  padding: 3px 6px;
+  font-size: 0.7rem; /* 缩小：0.8rem → 0.7rem */
+  padding: 2px 5px; /* 缩小：3px 6px → 2px 5px */
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff !important;
+  border-radius: 3px; /* 添加圆角 */
+  font-weight: 600; /* 添加字重 */
 }
 
 /* 滚动条样式 */
@@ -321,3 +319,68 @@
   background: rgba(102, 126, 234, 0.7);
 }
 
+/* 聊天输入框容器 */
+.chat-input-container {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-end;
+  width: 100%;
+}
+
+/* 输入框样式 */
+.chat-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  color: #fff;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 200px;
+  transition: all 0.2s;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: rgba(102, 126, 234, 0.6);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.chat-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 发送按钮样式 */
+.send-button {
+  background: rgba(102, 126, 234, 0.8);
+  border: none;
+  border-radius: 8px;
+  min-width: 60px;
+  min-height: 60px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.send-button:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 1);
+  transform: translateY(-2px);
+}
+
+.send-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

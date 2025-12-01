@@ -29,7 +29,7 @@ body {
 
 #root {
   width: 100%;
-  min-height: 100%; /* 这里的 vh 改为 %，避免强制撑满 */
+  height: 100vh; /* 🚨 强制高度为视口高度 */
   display: flex;
   flex-direction: column;
   overflow: hidden; /* 🚨 禁止 root 滚动 */

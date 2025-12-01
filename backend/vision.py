@@ -7,24 +7,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 初始化 OpenAI 客户端
-client = AsyncOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-)
+# ⚠️ 不再在模块级别初始化客户端，改为在函数中接收动态客户端
 
-async def analyze_image(image_base64: str | list[str], prompt: str = None) -> str:
+async def analyze_image(image_base64: str | list[str], prompt: str = None, client: AsyncOpenAI = None, model: str = None) -> str:
     """
     使用 OpenAI Vision API 分析图片（支持多张图片）
     
     Args:
         image_base64: Base64 编码的图片或图片列表
         prompt: 分析提示词（可选）
+        client: OpenAI 客户端（必须提供）
+        model: 模型名称（可选，如果不提供则使用环境变量或默认值）
         
     Returns:
         str: AI 分析结果
     """
     try:
+        # 🔑 必须提供客户端
+        if client is None:
+            raise ValueError("Client must be provided")
+        
+        api_client = client
         # 默认提示词 - 结构化面试题版
         if not prompt:
             prompt = """请仔细阅读截图中的题目。
@@ -53,8 +56,9 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None) -> st
 - 不要写 "这张图片展示了..." 等废话。
 - 保持回答专业、紧凑。"""
 
-        # 获取模型名称
-        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        # 获取模型名称（优先使用传入的模型，其次环境变量，最后默认值）
+        if model is None:
+            model = os.getenv("OPENAI_MODEL", "gpt-4o")
         
         # 将单张图片转为列表
         if isinstance(image_base64, str):
@@ -65,6 +69,11 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None) -> st
         print(f"🤖 调用模型: {model}")
         print(f"📸 图片数量: {len(image_list)}")
         print(f"📝 提示词: {prompt[:100]}...")
+        
+        # 🔍 调试：检查图片数据
+        for idx, img_base64 in enumerate(image_list):
+            print(f"📷 图片 {idx + 1} 数据长度: {len(img_base64)} 字符")
+            print(f"📷 图片 {idx + 1} 数据前50字符: {img_base64[:50]}")
         
         # 构建 content 数组
         content = [{"type": "text", "text": prompt}]
@@ -80,7 +89,7 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None) -> st
             })
         
         # 调用 OpenAI Vision API
-        response = await client.chat.completions.create(
+        response = await api_client.chat.completions.create(
             model=model,
             messages=[
                 {

@@ -4,20 +4,197 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import './App.css'
+import { supabase } from './lib/supabase'
+import { Login } from './Login'
+import { PlanSelector, PlanType } from './components/PlanSelector'
 
 // Session 类型定义
 interface SessionData {
   id: string;
   timestamp: number;
   conversations: Array<{
-    screenshots: string[];
+    type: 'image' | 'text';
+    screenshots?: string[];
+    userInput?: string;
     response: string;
   }>;
 }
 
+// 扩展 window 类型以包含 aiShot
+declare global {
+  interface Window {
+    aiShot?: {
+      getApiKey: () => Promise<string | null>;
+      saveApiKey: (apiKey: string) => Promise<{ success: boolean; message: string }>;
+      deleteApiKey: () => Promise<{ success: boolean; message: string }>;
+      onOpenApiKeyDialog: (callback: (data: { action: string; apiKey: string | null }) => void) => void;
+      onApiKeyDeleted: (callback: () => void) => void;
+    };
+  }
+}
+
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
+  // 🎨 主题状态：'dark' | 'light'
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
+  });
+  // 🔑 API Key 对话框状态
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [currentApiKey, setCurrentApiKey] = useState<string | null>(null);
+  const [apiKeyStatus, setApiKeyStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+  // 📦 Plan 状态
+  const [currentPlan, setCurrentPlan] = useState<PlanType>(() => {
+    return (localStorage.getItem('currentPlan') as PlanType) || 'starter';
+  });
+  const [showPlanSelector, setShowPlanSelector] = useState(false);
+
+  // 🔒 检查认证状态
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('Current session:', session);
+      setIsAuthenticated(!!session);
+      
+      // 🔒 如果已登录，通知 Electron 创建悬浮窗
+      if (session && window.aiShot?.userLoggedIn) {
+        await window.aiShot.userLoggedIn();
+      }
+    };
+    
+    checkAuth();
+    
+    // 监听认证状态变化
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('Auth state changed:', _event, session);
+      setIsAuthenticated(!!session);
+      
+      // 🔒 根据认证状态控制悬浮窗
+      if (session && window.aiShot?.userLoggedIn) {
+        await window.aiShot.userLoggedIn();
+      } else if (!session && window.aiShot?.userLoggedOut) {
+        await window.aiShot.userLoggedOut();
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // 🎨 监听主题变化
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  // 🔑 加载当前 API Key
+  useEffect(() => {
+    const loadApiKey = async () => {
+      if (window.aiShot?.getApiKey) {
+        const key = await window.aiShot.getApiKey();
+        setCurrentApiKey(key);
+      }
+    };
+    loadApiKey();
+  }, []);
+
+  // 🔑 监听打开 API Key 对话框事件
+  useEffect(() => {
+    if (window.aiShot?.onOpenApiKeyDialog) {
+      window.aiShot.onOpenApiKeyDialog((data) => {
+        const apiKey = data.apiKey || null;
+        setCurrentApiKey(apiKey);
+        setApiKeyInput(apiKey || '');
+        setShowApiKeyDialog(true);
+      });
+    }
+  }, []);
+
+  // 🔑 监听 API Key 删除事件
+  useEffect(() => {
+    if (window.aiShot?.onApiKeyDeleted) {
+      window.aiShot.onApiKeyDeleted(() => {
+        setCurrentApiKey(null);
+        setApiKeyInput('');
+        setApiKeyStatus({ type: 'success', message: 'API Key deleted' });
+        setTimeout(() => {
+          setShowApiKeyDialog(false);
+          setApiKeyStatus({ type: null, message: '' });
+        }, 1500);
+      });
+    }
+  }, []);
+
+  // 🔑 Save API Key
+  const handleSaveApiKey = async () => {
+    if (!window.aiShot?.saveApiKey) {
+      setApiKeyStatus({ type: 'error', message: 'IPC connection failed' });
+      return;
+    }
+
+    const result = await window.aiShot.saveApiKey(apiKeyInput);
+    if (result.success) {
+      setCurrentApiKey(apiKeyInput);
+      setApiKeyStatus({ type: 'success', message: result.message });
+      setTimeout(() => {
+        setShowApiKeyDialog(false);
+        setApiKeyStatus({ type: null, message: '' });
+      }, 1500);
+    } else {
+      setApiKeyStatus({ type: 'error', message: result.message });
+    }
+  };
+
+  // 🔑 Delete API Key
+  const handleDeleteApiKey = async () => {
+    if (!window.aiShot?.deleteApiKey) {
+      setApiKeyStatus({ type: 'error', message: 'IPC connection failed' });
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete the API Key? You will need to set it again to use AI features.')) {
+      return;
+    }
+
+    const result = await window.aiShot.deleteApiKey();
+    if (result.success) {
+      setCurrentApiKey(null);
+      setApiKeyInput('');
+      setApiKeyStatus({ type: 'success', message: result.message });
+      setTimeout(() => {
+        setShowApiKeyDialog(false);
+        setApiKeyStatus({ type: null, message: '' });
+      }, 1500);
+    } else {
+      setApiKeyStatus({ type: 'error', message: result.message });
+    }
+  };
+
+  // 🎨 切换主题
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  // 🚪 退出登录
+  const handleLogout = async () => {
+    console.log('Logging out...');
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Logout error:', error);
+    } else {
+      console.log('Logout successful');
+      setIsAuthenticated(false);
+      
+      // 🔒 通知 Electron 关闭悬浮窗
+      if (window.aiShot?.userLoggedOut) {
+        await window.aiShot.userLoggedOut();
+      }
+    }
+  };
 
   // 从 localStorage 加载所有 Session
   useEffect(() => {
@@ -60,23 +237,100 @@ function App() {
     });
   };
 
+  // 🔒 Authentication check - show loading or login page
+  if (isAuthenticated === null) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh', 
+        fontSize: '1.2rem',
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+        color: '#333'
+      }}>
+        <p>⏳ Loading...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
+
+  // 🔐 Already logged in, show main app interface
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🔥 AI 面试助手</h1>
-        <p className="subtitle">会话历史记录</p>
+        <div className="header-content">
+          <h1>🔥 AI Interview Assistant</h1>
+          <p className="subtitle">Session History</p>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button 
+            className="theme-toggle" 
+            onClick={() => setShowPlanSelector(!showPlanSelector)}
+            title="Select Plan"
+            style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+          >
+            📦 {currentPlan === 'starter' ? 'Starter' : currentPlan === 'normal' ? 'Normal' : 'High'} Plan
+          </button>
+          <button 
+            className="theme-toggle" 
+            onClick={handleLogout}
+            title="Logout"
+            style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+          >
+            🚪 Logout
+          </button>
+          <button 
+            className="theme-toggle" 
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </header>
+
+      {/* Plan Selector Modal */}
+      {showPlanSelector && (
+        <div className="modal-overlay" onClick={() => setShowPlanSelector(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <PlanSelector
+              currentPlan={currentPlan}
+              onPlanChange={(plan) => {
+                setCurrentPlan(plan);
+                localStorage.setItem('currentPlan', plan);
+                // 通知悬浮窗 plan 已更改
+                window.dispatchEvent(new CustomEvent('planChanged', { detail: plan }));
+                setShowPlanSelector(false);
+              }}
+              customApiKey={currentApiKey || ''}
+              onApiKeyChange={async (apiKey) => {
+                setApiKeyInput(apiKey);
+                if (window.aiShot?.saveApiKey) {
+                  const result = await window.aiShot.saveApiKey(apiKey);
+                  if (result.success) {
+                    setCurrentApiKey(apiKey);
+                  }
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <main className="app-main">
         <div className="sessions-layout">
-          {/* 左侧：Session 列表 */}
+          {/* Left: Session List */}
           <section className="sessions-list">
-            <h2>📚 会话列表 ({sessions.length})</h2>
+            <h2>📚 Session List ({sessions.length})</h2>
             
             {sessions.length === 0 ? (
               <div className="empty-state">
-                <p>还没有任何会话记录</p>
-                <p className="hint">使用悬浮窗开始第一次对话吧！</p>
+                <p>No session records yet</p>
+                <p className="hint">Use the overlay window to start your first conversation!</p>
               </div>
             ) : (
               <div className="session-items">
@@ -96,17 +350,20 @@ function App() {
                           e.stopPropagation();
                           deleteSession(session.id);
                         }}
-                        title="删除会话"
+                        title="Delete session"
                       >
                         🗑️
                       </button>
                     </div>
                     <div className="session-preview">
                       <span className="conversation-count">
-                        {session.conversations.length} 轮对话
+                        {session.conversations.length} conversations
                       </span>
                       <span className="screenshot-count">
-                        {session.conversations.reduce((sum, c) => sum + c.screenshots.length, 0)} 张截图
+                        {session.conversations.filter(c => c.type === 'image').length} images
+                      </span>
+                      <span className="screenshot-count">
+                        {session.conversations.filter(c => c.type === 'text').length} messages
                       </span>
                     </div>
                   </div>
@@ -115,33 +372,45 @@ function App() {
             )}
           </section>
 
-          {/* 右侧：Session 详情 */}
+          {/* Right: Session Detail */}
           <section className="session-detail">
             {selectedSession ? (
               <>
-                <h2>📖 会话详情</h2>
+                <h2>📖 Session Details</h2>
                 <div className="session-meta">
-                  <p>时间：{formatTime(selectedSession.timestamp)}</p>
-                  <p>对话轮数：{selectedSession.conversations.length}</p>
+                  <p>Time: {formatTime(selectedSession.timestamp)}</p>
+                  <p>Conversations: {selectedSession.conversations.length}</p>
                 </div>
 
                 <div className="conversations">
                   {selectedSession.conversations.map((conv, index) => (
                     <div key={index} className="conversation-item">
-                      <h3>🔹 第 {index + 1} 轮对话</h3>
+                      <h3>
+                        {conv.type === 'image' ? '🖼️' : '💬'} Round {index + 1}
+                      </h3>
                       
-                      {/* 截图 */}
-                      <div className="screenshots-grid-detail">
-                        {conv.screenshots.map((screenshot, idx) => (
-                          <div key={idx} className="screenshot-item-detail">
-                            <img src={screenshot} alt={`Screenshot ${idx + 1}`} />
-                          </div>
-                        ))}
-                      </div>
+                      {/* Image Analysis */}
+                      {conv.type === 'image' && conv.screenshots && (
+                        <div className="screenshots-grid-detail">
+                          {conv.screenshots.map((screenshot, idx) => (
+                            <div key={idx} className="screenshot-item-detail">
+                              <img src={screenshot} alt={`Screenshot ${idx + 1}`} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                      {/* AI 回复 */}
+                      {/* User Text Input */}
+                      {conv.type === 'text' && conv.userInput && (
+                        <div className="user-input-display">
+                          <h4>👤 User:</h4>
+                          <p>{conv.userInput}</p>
+                        </div>
+                      )}
+
+                      {/* AI Response */}
                       <div className="ai-response-detail">
-                        <h4>🤖 AI 回复：</h4>
+                        <h4>🤖 AI Response:</h4>
                         <div className="markdown-content">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
@@ -157,7 +426,7 @@ function App() {
               </>
             ) : (
               <div className="empty-detail">
-                <p>👈 选择一个会话查看详情</p>
+                <p>👈 Select a session to view details</p>
               </div>
             )}
           </section>
@@ -165,10 +434,80 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>💡 提示：使用 <kbd>Ctrl+N</kbd> 创建新会话</p>
+        <p>💡 Tip: Use <kbd>Ctrl+N</kbd> to create a new session</p>
       </footer>
+
+      {/* 🔑 API Key 管理对话框 */}
+      {showApiKeyDialog && (
+        <div className="api-key-dialog-overlay" onClick={() => setShowApiKeyDialog(false)}>
+          <div className="api-key-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>API Key 管理</h3>
+            
+            {/* 当前状态显示 */}
+            {currentApiKey ? (
+              <div className="api-key-current">
+                <div className="api-key-current-label">当前 API Key:</div>
+                <div className="api-key-current-value">
+                  {currentApiKey.substring(0, 8)}...{currentApiKey.substring(currentApiKey.length - 4)}
+                </div>
+              </div>
+            ) : (
+              <div className="api-key-current">
+                <div className="api-key-current-label">当前状态:</div>
+                <div className="api-key-current-value empty">未设置</div>
+              </div>
+            )}
+
+            <p className="api-key-hint">
+              {currentApiKey ? '编辑或删除你的 OpenAI API Key' : '请输入你的 OpenAI API Key。API Key 将保存在本地配置文件中。'}
+            </p>
+            
+            <input
+              type="password"
+              className="api-key-input"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="sk-..."
+              autoFocus
+            />
+            
+            {apiKeyStatus.type && (
+              <div className={`api-key-status ${apiKeyStatus.type}`}>
+                {apiKeyStatus.message}
+              </div>
+            )}
+            
+            <div className="api-key-dialog-actions">
+              <button 
+                className="api-key-btn api-key-btn-cancel"
+                onClick={() => {
+                  setShowApiKeyDialog(false);
+                  setApiKeyStatus({ type: null, message: '' });
+                }}
+              >
+                取消
+              </button>
+              {currentApiKey && (
+                <button 
+                  className="api-key-btn api-key-btn-delete"
+                  onClick={handleDeleteApiKey}
+                >
+                  删除
+                </button>
+              )}
+              <button 
+                className="api-key-btn api-key-btn-save"
+                onClick={handleSaveApiKey}
+                disabled={!apiKeyInput.trim()}
+              >
+                {currentApiKey ? '更新' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
 export default App

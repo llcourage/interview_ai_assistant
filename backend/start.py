@@ -30,16 +30,26 @@ def check_env():
             print("❌ 未找到 .env.example 文件")
             return False
     
-    # 检查 API Key
+    # 加载环境变量
     from dotenv import load_dotenv
     load_dotenv()
     
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or api_key == "your_openai_api_key_here":
-        print("⚠️  请在 .env 文件中配置 OPENAI_API_KEY")
-        return False
+    # 检查是否有任何 API Key 配置（现在支持多个计划）
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "")
     
-    return True
+    if not openai_key or openai_key == "your_openai_api_key_here":
+        if not deepseek_key:
+            print("⚠️  提示：建议至少配置一个 API Key")
+            print("   - DEEPSEEK_API_KEY (Normal Plan)")
+            print("   - OPENAI_API_KEY (High Plan 或 Starter Plan)")
+        else:
+            print("✅ DeepSeek API Key 已配置 (Normal Plan)")
+            print("⚠️  OPENAI_API_KEY 未配置 (High Plan 不可用)")
+    else:
+        print("✅ OpenAI API Key 已配置")
+    
+    return True  # 允许启动，即使没有配置（用户可以选择 Starter Plan 使用自己的 Key）
 
 def main():
     print("🚀 启动 AI 面试助手后端服务...")
@@ -81,6 +91,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

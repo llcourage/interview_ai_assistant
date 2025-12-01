@@ -67,6 +67,12 @@ export interface AiShotAPI {
   openMainWindow: () => void;
 
   /**
+   * 监听滚动事件
+   * @param callback 回调函数，接收方向 'up' | 'down'
+   */
+  onScrollContent: (callback: (direction: 'up' | 'down') => void) => void;
+
+  /**
    * 移除事件监听器
    * @param channel 事件通道名称
    */
