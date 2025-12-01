@@ -428,6 +428,16 @@ async def speech_to_text(
 
 # ========== Stripe Webhook ==========
 
+@app.get("/api/webhooks/stripe", tags=["Webhooks"])
+async def stripe_webhook_get():
+    """Webhook 端点健康检查（用于测试）"""
+    return {
+        "status": "ok",
+        "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
+        "endpoint": "/api/webhooks/stripe",
+        "methods": ["POST"]
+    }
+
 @app.post("/api/webhooks/stripe", tags=["Webhooks"])
 async def stripe_webhook(request: Request):
     """Stripe Webhook 处理"""
