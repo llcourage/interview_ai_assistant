@@ -4,6 +4,7 @@
 完全内联实现，不依赖 backend 模块
 """
 import os
+import json
 from mangum import Mangum
 from fastapi import FastAPI, HTTPException, Request
 import stripe
@@ -213,13 +214,5 @@ async def webhook_post(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to process webhook: {str(e)}")
 
 # Vercel Serverless Function handler
-# 创建 Mangum 适配器
-_mangum_adapter = Mangum(app, lifespan="off")
-
-# 导出 handler 函数（Vercel 要求 handler 必须是可调用的）
-def handler(event, context=None):
-    """
-    Vercel Serverless Function handler
-    包装 Mangum 适配器以符合 Vercel 的要求
-    """
-    return _mangum_adapter(event, context)
+# 直接导出 Mangum handler（与 api/index.py 保持一致）
+handler = Mangum(app, lifespan="off")
