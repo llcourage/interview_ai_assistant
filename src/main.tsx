@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { HashRouter, Routes, Route } from 'react-router-dom'
-import App from './App'
+import { BrowserRouter } from 'react-router-dom'
+import { AppRouter } from './AppRouter'
 import Overlay from './Overlay'
 import './index.css'
 
@@ -49,15 +49,14 @@ if (type === 'overlay') {
     </React.StrictMode>
   );
 } else {
-  // 主窗口模式
+  // 主窗口模式 - 使用 BrowserRouter 支持网页版
   root.render(
     <React.StrictMode>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<ErrorBoundary><App /></ErrorBoundary>} />
-          <Route path="/overlay" element={<ErrorBoundary><Overlay /></ErrorBoundary>} />
-        </Routes>
-      </HashRouter>
+      <BrowserRouter>
+        <ErrorBoundary>
+          <AppRouter />
+        </ErrorBoundary>
+      </BrowserRouter>
     </React.StrictMode>,
   );
 }

@@ -7,6 +7,7 @@ import './App.css'
 import { supabase } from './lib/supabase'
 import { Login } from './Login'
 import { PlanSelector, PlanType } from './components/PlanSelector'
+import { Settings } from './components/Settings'
 
 // Session 类型定义
 interface SessionData {
@@ -51,6 +52,7 @@ function App() {
     return (localStorage.getItem('currentPlan') as PlanType) || 'starter';
   });
   const [showPlanSelector, setShowPlanSelector] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // 🔒 检查认证状态
   useEffect(() => {
@@ -255,7 +257,24 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh', 
+        fontSize: '1.2rem',
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+        color: '#333'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>⏳ Loading...</p>
+          <p style={{ fontSize: '0.9rem', marginTop: '1rem' }}>
+            <a href="/" style={{ color: '#667eea', textDecoration: 'none' }}>Back to Home</a>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // 🔐 Already logged in, show main app interface
@@ -267,6 +286,14 @@ function App() {
           <p className="subtitle">Session History</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button 
+            className="theme-toggle" 
+            onClick={() => setShowSettings(!showSettings)}
+            title="Settings"
+            style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+          >
+            ⚙️ Settings
+          </button>
           <button 
             className="theme-toggle" 
             onClick={() => setShowPlanSelector(!showPlanSelector)}
@@ -292,6 +319,30 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1000px', width: '90%' }}>
+            <button 
+              onClick={() => setShowSettings(false)}
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)'
+              }}
+            >
+              ✕
+            </button>
+            <Settings />
+          </div>
+        </div>
+      )}
 
       {/* Plan Selector Modal */}
       {showPlanSelector && (

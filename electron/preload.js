@@ -109,6 +109,11 @@ contextBridge.exposeInMainWorld('aiShot', {
 
   userLoggedOut: () => {
     return ipcRenderer.invoke('user-logged-out');
+  },
+
+  // 🎤 本地语音转文字（使用本地 Whisper）
+  speechToTextLocal: (audioData, language = 'zh') => {
+    return ipcRenderer.invoke('speech-to-text-local', audioData, language);
   }
 });
 

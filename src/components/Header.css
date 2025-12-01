@@ -1,0 +1,147 @@
+/* Header Styles - Shared across pages */
+
+.landing-header {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #334155;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  width: 100%;
+}
+
+.header-top {
+  padding: 1rem 0;
+  border-bottom: 1px solid #334155;
+}
+
+.header-nav {
+  padding: 0.75rem 0;
+}
+
+.header-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left .logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: #ffffff;
+}
+
+.header-right {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.header-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-btn {
+  background: transparent;
+  color: #cbd5e1;
+  border: 1px solid #475569;
+}
+
+.login-btn:hover {
+  background: rgba(96, 165, 250, 0.1);
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+.signup-btn {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  color: #ffffff;
+  border: 1px solid #60a5fa;
+}
+
+.signup-btn:hover {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(96, 165, 250, 0.4);
+}
+
+.nav-links {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.nav-link {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.5rem 0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.nav-link:hover {
+  color: #ffffff;
+}
+
+.nav-link.active {
+  color: #60a5fa;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: #60a5fa;
+  transition: width 0.3s ease;
+}
+
+.nav-link:hover::after,
+.nav-link.active::after {
+  width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header-container {
+    padding: 0 1rem;
+  }
+
+  .header-left .logo {
+    font-size: 1.25rem;
+  }
+
+  .header-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .nav-links {
+    gap: 1rem;
+  }
+
+  .nav-link {
+    font-size: 0.9rem;
+  }
+}
+

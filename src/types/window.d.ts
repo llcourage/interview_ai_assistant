@@ -77,6 +77,38 @@ export interface AiShotAPI {
    * @param channel 事件通道名称
    */
   removeListener: (channel: string) => void;
+
+  /**
+   * API Key 相关
+   */
+  getApiKey: () => Promise<string | null>;
+  saveApiKey: (apiKey: string) => Promise<{ success: boolean; message: string }>;
+  deleteApiKey: () => Promise<{ success: boolean; message: string }>;
+  onOpenApiKeyDialog: (callback: (data: { action: string; apiKey: string | null }) => void) => void;
+  onApiKeyDeleted: (callback: () => void) => void;
+
+  /**
+   * 用户登录/登出
+   */
+  userLoggedIn: () => Promise<{ success: boolean }>;
+  userLoggedOut: () => Promise<{ success: boolean }>;
+
+  /**
+   * 本地语音转文字（使用本地 Whisper）
+   * @param audioData base64 编码的音频数据
+   * @param language 语言代码，默认为 'zh'
+   * @returns Promise，返回转写结果
+   */
+  speechToTextLocal?: (
+    audioData: string,
+    language?: string
+  ) => Promise<{
+    success: boolean;
+    text: string;
+    language: string;
+    duration: number;
+    error?: string;
+  }>;
 }
 
 declare global {

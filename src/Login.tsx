@@ -1,18 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import './Login.css';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess?: () => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Check URL parameters
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const plan = searchParams.get('plan');
+    const redirect = searchParams.get('redirect');
+
+    if (mode === 'signup') {
+      setIsRegister(true);
+    }
+
+    // If plan and redirect exist, save to localStorage
+    if (plan && redirect) {
+      localStorage.setItem('pendingPlan', plan);
+      localStorage.setItem('pendingRedirect', redirect);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +42,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     try {
       if (isRegister) {
-        // 注册
+        // Register
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -34,7 +54,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           // Auto login after registration
           setMessage('Registration successful! Signing in...');
           setTimeout(() => {
-            onLoginSuccess();
+            handleLoginSuccess();
           }, 1000);
         } else if (data.user && !data.session) {
           // Email verification required
@@ -55,7 +75,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         if (data.session) {
           setMessage('Login successful!');
           setTimeout(() => {
-            onLoginSuccess();
+            handleLoginSuccess();
           }, 500);
         }
       }
@@ -64,6 +84,26 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       setError(err.message || 'Operation failed. Please check your email and password.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = () => {
+    // Check if there's a pending plan and redirect
+    const pendingPlan = localStorage.getItem('pendingPlan');
+    const pendingRedirect = localStorage.getItem('pendingRedirect');
+
+    if (pendingPlan && pendingRedirect) {
+      // Clear temporary data
+      localStorage.removeItem('pendingPlan');
+      localStorage.removeItem('pendingRedirect');
+      // Navigate to checkout
+      navigate(`${pendingRedirect}?plan=${pendingPlan}`);
+    } else if (onLoginSuccess) {
+      // Use the provided callback
+      onLoginSuccess();
+    } else {
+      // Default redirect to home page (Landing)
+      navigate('/');
     }
   };
 

@@ -1,0 +1,418 @@
+.settings-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.settings-container h1 {
+  margin-bottom: 2rem;
+  color: var(--text-primary);
+}
+
+.message {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.message-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.message-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.message-info {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.settings-section {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.settings-section h2 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.section-description {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+/* Plan Info Card */
+.plan-info-card {
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.plan-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.plan-price {
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.plan-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Usage Bars */
+.plan-usage {
+  margin-bottom: 1.5rem;
+}
+
+.usage-item {
+  margin-bottom: 1rem;
+}
+
+.usage-item label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.usage-bar {
+  height: 8px;
+  background: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.usage-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.3s ease;
+}
+
+.usage-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* Plan Features */
+.plan-features h4 {
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.plan-features ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.plan-features li {
+  padding: 0.5rem 0;
+  color: var(--text-secondary);
+}
+
+/* Subscription Info */
+.subscription-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.subscription-info p {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+}
+
+.subscription-info .warning {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* Upgrade Options */
+.upgrade-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.plan-option {
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.plan-option:hover {
+  border-color: #667eea;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(102, 126, 234, 0.2);
+}
+
+.plan-option.featured {
+  border-color: #667eea;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+}
+
+.plan-option .badge {
+  position: absolute;
+  top: -12px;
+  right: 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.plan-option h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+}
+
+.plan-option .price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 1rem;
+}
+
+.plan-option ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem 0;
+}
+
+.plan-option li {
+  padding: 0.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.upgrade-button {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upgrade-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.upgrade-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  color: #ef4444;
+  border: 2px solid #ef4444;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #ef4444;
+  color: white;
+}
+
+.cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* API Key Management */
+.current-key-info {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.current-key-info code {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: #667eea;
+}
+
+.delete-key-button {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.delete-key-button:hover:not(:disabled) {
+  background: #ef4444;
+  color: white;
+}
+
+.api-key-form {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.api-key-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: border-color 0.2s ease;
+}
+
+.api-key-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.save-key-button {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.save-key-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.save-key-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.api-key-help {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.api-key-help h4 {
+  margin: 0 0 1rem 0;
+  color: var(--text-primary);
+}
+
+.api-key-help ol {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.api-key-help li {
+  margin-bottom: 0.5rem;
+}
+
+.api-key-help a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.api-key-help a:hover {
+  text-decoration: underline;
+}
+
+/* Dark Theme Variables */
+[data-theme="dark"] {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2a2a2a;
+  --card-bg: #2a2a2a;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --border-color: #404040;
+}
+
+/* Light Theme Variables */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --card-bg: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --border-color: #e0e0e0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settings-container {
+    padding: 1rem;
+  }
+
+  .upgrade-options {
+    grid-template-columns: 1fr;
+  }
+
+  .api-key-form {
+    flex-direction: column;
+  }
+
+  .current-key-info {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+}
+

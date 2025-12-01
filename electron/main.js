@@ -1,6 +1,10 @@
 const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
+const { promisify } = require('util');
+const writeFile = promisify(fs.writeFile);
+const unlink = promisify(fs.unlink);
 
 // 🚨 恢复 GPU 加速（有些系统禁用后反而黑屏）
 // app.disableHardwareAcceleration();
@@ -661,6 +665,114 @@ ipcMain.on('move-overlay', (event, { direction, step }) => {
 
 ipcMain.on('resize-overlay', (event, height) => {
   resizeOverlayWindow(height);
+});
+
+// 🎤 IPC: 本地语音转文字（使用本地 Whisper）
+ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh') => {
+  try {
+    // 获取 Python 解释器路径
+    const isDev = !app.isPackaged;
+    let pythonPath;
+    let whisperScriptPath;
+    
+    if (isDev) {
+      // 开发环境：使用系统 Python 或 venv
+      pythonPath = process.platform === 'win32' ? 'python' : 'python3';
+      whisperScriptPath = path.join(__dirname, 'whisper_local.py');
+    } else {
+      // 生产环境：使用打包的 Python（需要配置）
+      // 这里假设 Python 在系统 PATH 中，或者您需要配置具体路径
+      pythonPath = process.platform === 'win32' ? 'python' : 'python3';
+      whisperScriptPath = path.join(process.resourcesPath, 'whisper_local.py');
+    }
+    
+    // 创建临时音频文件
+    const tempDir = require('os').tmpdir();
+    const tempAudioPath = path.join(tempDir, `audio_${Date.now()}.webm`);
+    
+    // 将 base64 或 Buffer 写入文件
+    let audioBuffer;
+    if (typeof audioData === 'string') {
+      // Base64 字符串
+      audioBuffer = Buffer.from(audioData, 'base64');
+    } else if (Buffer.isBuffer(audioData)) {
+      audioBuffer = audioData;
+    } else {
+      throw new Error('不支持的音频数据格式');
+    }
+    
+    await writeFile(tempAudioPath, audioBuffer);
+    
+    console.log('🎤 开始本地语音转文字，音频文件:', tempAudioPath);
+    
+    // 调用 Python 脚本
+    return new Promise((resolve, reject) => {
+      const pythonProcess = spawn(pythonPath, [whisperScriptPath, tempAudioPath, language], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+        // 打印进度信息到控制台
+        console.log('Whisper:', data.toString().trim());
+      });
+      
+      pythonProcess.on('close', async (code) => {
+        // 清理临时文件
+        try {
+          await unlink(tempAudioPath);
+        } catch (err) {
+          console.error('清理临时文件失败:', err);
+        }
+        
+        if (code !== 0) {
+          console.error('Whisper 处理失败，退出码:', code);
+          console.error('stderr:', stderr);
+          reject(new Error(`Whisper 处理失败: ${stderr || '未知错误'}`));
+          return;
+        }
+        
+        try {
+          // 解析 JSON 输出
+          const result = JSON.parse(stdout.trim());
+          console.log('✅ 本地语音转文字完成:', result);
+          resolve(result);
+        } catch (err) {
+          console.error('解析 Whisper 输出失败:', err);
+          console.error('stdout:', stdout);
+          reject(new Error('解析 Whisper 输出失败'));
+        }
+      });
+      
+      pythonProcess.on('error', async (err) => {
+        // 清理临时文件
+        try {
+          await unlink(tempAudioPath);
+        } catch (unlinkErr) {
+          console.error('清理临时文件失败:', unlinkErr);
+        }
+        
+        console.error('启动 Whisper 进程失败:', err);
+        reject(new Error(`无法启动 Whisper: ${err.message}`));
+      });
+    });
+  } catch (error) {
+    console.error('❌ 本地语音转文字失败:', error);
+    return {
+      success: false,
+      error: error.message,
+      text: '',
+      language: '',
+      duration: 0.0
+    };
+  }
 });
 
 app.whenReady().then(() => {

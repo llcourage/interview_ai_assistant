@@ -4,6 +4,8 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/atom-one-dark.css';
 import './Overlay.css';
+import { supabase } from './lib/supabase';
+import { API_BASE_URL } from './lib/api';
 
 // 🚨 配置：最大保存对话轮数（防止 localStorage 过大）
 const MAX_CONVERSATIONS_TO_SAVE = 50;
@@ -23,6 +25,12 @@ interface SessionData {
 const Overlay = () => {
   // 当前 Session ID
   const [currentSessionId] = useState<string>(() => `session_${Date.now()}`);
+  
+  // 获取认证 token 的辅助函数
+  const getAuthToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token;
+  }, []);
   
   // 📦 Plan 状态
   const [currentPlan, setCurrentPlan] = useState<'starter' | 'normal' | 'high'>(() => {
@@ -178,7 +186,7 @@ const Overlay = () => {
     }
   }, [isRecording]);
 
-  // 🎤 发送录音
+  // 🎤 发送录音（使用本地 Whisper）
   const sendRecording = useCallback(async () => {
     if (audioChunksRef.current.length === 0) {
       setStatus('No recording data');
@@ -188,84 +196,115 @@ const Overlay = () => {
     if (isLoading) return;
     
     setIsLoading(true);
-    setStatus('Transcribing audio...');
+    setStatus('Transcribing audio locally...');
     
     try {
+      // 获取认证token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('未登录，请先登录');
+      }
+      
       // 合并音频片段
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
       
-      // 发送到后端进行语音转文字
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('language', 'zh'); // 中文
+      // 🎤 使用本地 Whisper 转文字（不发送到云端）
+      let transcribedText: string;
       
-      const response = await fetch('http://127.0.0.1:8000/api/speech_to_text', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('✅ 语音转文字完成:', data);
-      
-      if (data.success && data.text) {
-        // 将转写的文字作为用户输入
-        setUserInput(data.text);
-        setStatus('Thinking...');
+      if (window.aiShot?.speechToTextLocal) {
+        // 将 Blob 转为 ArrayBuffer，再转为 base64
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        // 在浏览器环境中，使用 btoa 而不是 Buffer
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const base64Audio = btoa(String.fromCharCode(...uint8Array));
         
-        // 直接发送给 ChatGPT
-        const context = conversationHistory.map(conv => {
-          if (conv.type === 'image') {
-            return `[图片分析]\n${conv.response}`;
-          } else {
-            return `用户: ${conv.userInput}\nAI: ${conv.response}`;
-          }
-        }).join('\n\n');
+        console.log('🎤 调用本地 Whisper 转文字...');
+        const result = await window.aiShot.speechToTextLocal(base64Audio, 'zh');
         
-        const chatResponse = await fetch('http://127.0.0.1:8000/api/text_chat', {
+        if (result.success && result.text) {
+          transcribedText = result.text;
+          console.log('✅ 本地语音转文字完成:', transcribedText);
+        } else {
+          throw new Error(result.error || '本地语音转文字失败');
+        }
+      } else {
+        // 降级方案：如果 Electron API 不可用，尝试使用云端（向后兼容）
+        console.warn('⚠️ 本地 Whisper 不可用，降级到云端处理');
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('language', 'zh');
+        
+        const response = await fetch(`${API_BASE_URL}/api/speech_to_text`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({
-            user_input: data.text,
-            context: context,
-            plan: currentPlan
-          }),
+          body: formData,
         });
         
-        if (!chatResponse.ok) {
-          throw new Error(`HTTP error! status: ${chatResponse.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const chatData = await chatResponse.json();
-        console.log('✅ 收到 AI 回复:', chatData);
-        
-        setAiResponse(chatData.answer);
-        setIsLoading(false);
-        setStatus('Response complete');
-        setTimeout(() => setStatus(''), 2000);
-        
-        // 添加到对话历史
-        const newConversation = {
-          type: 'text' as const,
-          userInput: data.text,
-          response: chatData.answer
-        };
-        setConversationHistory(prev => {
-          const updated = [...prev, newConversation];
-          setTimeout(() => saveCurrentSession(), 100);
-          setTimeout(() => {
-            conversationEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }, 150);
-          return updated;
-        });
-      } else {
-        throw new Error(data.error || '语音转文字失败');
+        const data = await response.json();
+        if (!data.success || !data.text) {
+          throw new Error(data.error || '语音转文字失败');
+        }
+        transcribedText = data.text;
       }
+      
+      // 将转写的文字作为用户输入
+      setUserInput(transcribedText);
+      setStatus('Thinking...');
+      
+      // 发送文字到云端 ChatGPT API
+      const context = conversationHistory.map(conv => {
+        if (conv.type === 'image') {
+          return `[图片分析]\n${conv.response}`;
+        } else {
+          return `用户: ${conv.userInput}\nAI: ${conv.response}`;
+        }
+      }).join('\n\n');
+      
+      // 🔗 使用云端 API（Vercel）
+      const chatResponse = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          user_input: transcribedText,
+          context: context
+        }),
+      });
+      
+      if (!chatResponse.ok) {
+        throw new Error(`HTTP error! status: ${chatResponse.status}`);
+      }
+      
+      const chatData = await chatResponse.json();
+      console.log('✅ 收到 AI 回复:', chatData);
+      
+      setAiResponse(chatData.answer);
+      setIsLoading(false);
+      setStatus('Response complete');
+      setTimeout(() => setStatus(''), 2000);
+      
+      // 添加到对话历史
+      const newConversation = {
+        type: 'text' as const,
+        userInput: transcribedText,
+        response: chatData.answer
+      };
+      setConversationHistory(prev => {
+        const updated = [...prev, newConversation];
+        setTimeout(() => saveCurrentSession(), 100);
+        setTimeout(() => {
+          conversationEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 150);
+        return updated;
+      });
       
       // 清空录音数据
       audioChunksRef.current = [];
@@ -276,7 +315,7 @@ const Overlay = () => {
       setStatus(`Send failed: ${error}`);
       setIsLoading(false);
     }
-  }, [isLoading, conversationHistory, saveCurrentSession]);
+  }, [isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
   // 💬 使用指定文本发送对话（用于录音转文字后）
   const handleSendTextInputWithText = useCallback(async (text: string) => {
@@ -288,6 +327,12 @@ const Overlay = () => {
     setStatus('Thinking...');
     
     try {
+      // 获取认证token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('未登录，请先登录');
+      }
+      
       // 构建上下文
       const context = conversationHistory.map(conv => {
         if (conv.type === 'image') {
@@ -297,15 +342,15 @@ const Overlay = () => {
         }
       }).join('\n\n');
       
-      const response = await fetch('http://127.0.0.1:8000/api/text_chat', {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           user_input: text,
-          context: context,
-          plan: currentPlan
+          context: context
         }),
       });
       
@@ -342,7 +387,7 @@ const Overlay = () => {
       setStatus(`Conversation failed: ${error}`);
       setAiResponse(`### 出错了\n\n请求后端失败。\n\n错误信息: ${error}`);
     }
-  }, [isLoading, conversationHistory, saveCurrentSession]);
+  }, [isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
   // 💬 处理文字对话请求
   const handleSendTextInput = useCallback(async () => {
@@ -361,6 +406,12 @@ const Overlay = () => {
     setUserInput(''); // 清空输入框
 
     try {
+      // 获取认证token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('未登录，请先登录');
+      }
+      
       // 🚨 构建完整上下文：包含图片分析和文字对话
       const context = conversationHistory
         .map(conv => {
@@ -372,15 +423,15 @@ const Overlay = () => {
         })
         .join('\n\n');
       
-      const response = await fetch('http://127.0.0.1:8000/api/text_chat', {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
           user_input: currentInput,
-          context: context,  // 传递完整上下文
-          plan: currentPlan
+          context: context  // 传递完整上下文
         }),
       });
 
@@ -420,7 +471,7 @@ const Overlay = () => {
       setAiResponse(`### 出错了\n\n请求后端失败。\n\n错误信息: ${error}`);
       setUserInput(currentInput); // 恢复输入
     }
-  }, [userInput, isLoading, conversationHistory, saveCurrentSession]);
+  }, [userInput, isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
   // 简化穿透控制：根据专注模式决定是否穿透
   useEffect(() => {
@@ -592,6 +643,12 @@ const Overlay = () => {
       setStatus('Analyzing images...');
 
       try {
+        // 获取认证token
+        const token = await getAuthToken();
+        if (!token) {
+          throw new Error('未登录，请先登录');
+        }
+        
         // 移除所有截图的 data URL 前缀
         const base64DataList = screenshots.map(img => 
           img.replace(/^data:image\/\w+;base64,/, '')
@@ -603,14 +660,14 @@ const Overlay = () => {
         // 如果只有一张图，发送字符串；多张图发送数组
         const imageData = base64DataList.length === 1 ? base64DataList[0] : base64DataList;
         
-        const response = await fetch('http://127.0.0.1:8000/api/vision_query', {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ 
-            image_base64: imageData,
-            plan: currentPlan
+            image_base64: imageData
           }),
         });
 
