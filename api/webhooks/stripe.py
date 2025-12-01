@@ -213,5 +213,13 @@ async def webhook_post(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to process webhook: {str(e)}")
 
 # Vercel Serverless Function handler
-# 直接导出 Mangum handler（Vercel 会自动识别）
-handler = Mangum(app, lifespan="off")
+# 创建 Mangum 适配器
+_mangum_adapter = Mangum(app, lifespan="off")
+
+# 导出 handler 函数（Vercel 要求 handler 必须是可调用的）
+def handler(event, context=None):
+    """
+    Vercel Serverless Function handler
+    包装 Mangum 适配器以符合 Vercel 的要求
+    """
+    return _mangum_adapter(event, context)
