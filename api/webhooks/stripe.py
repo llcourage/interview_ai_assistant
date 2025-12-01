@@ -17,10 +17,25 @@ def get_supabase() -> Client:
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
     
-    if not supabase_url or not supabase_key:
-        raise HTTPException(status_code=500, detail="Supabase credentials not configured")
+    if not supabase_url:
+        raise HTTPException(
+            status_code=500, 
+            detail="SUPABASE_URL environment variable is not configured. Please set it in Vercel Dashboard → Settings → Environment Variables."
+        )
     
-    return create_client(supabase_url, supabase_key)
+    if not supabase_key:
+        raise HTTPException(
+            status_code=500, 
+            detail="SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY environment variable is not configured. Please set it in Vercel Dashboard → Settings → Environment Variables."
+        )
+    
+    try:
+        return create_client(supabase_url, supabase_key)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create Supabase client: {str(e)}"
+        )
 
 async def update_user_plan_inline(
     user_id: str,
@@ -65,11 +80,23 @@ async def update_user_plan_inline(
 @app.get("/")
 async def webhook_get():
     """Webhook 端点健康检查"""
+    # 检查必要的环境变量
+    env_status = {
+        "SUPABASE_URL": bool(os.getenv("SUPABASE_URL")),
+        "SUPABASE_SERVICE_ROLE_KEY": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
+        "SUPABASE_ANON_KEY": bool(os.getenv("SUPABASE_ANON_KEY")),
+        "STRIPE_WEBHOOK_SECRET": bool(os.getenv("STRIPE_WEBHOOK_SECRET"))
+    }
+    
+    all_configured = all(env_status.values())
+    
     return {
-        "status": "ok",
-        "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
+        "status": "ok" if all_configured else "warning",
+        "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events." if all_configured else "Endpoint is active but some environment variables are missing.",
         "endpoint": "/api/webhooks/stripe",
-        "methods": ["POST"]
+        "methods": ["POST", "GET"],
+        "environment_variables": env_status,
+        "ready": all_configured
     }
 
 @app.post("/")
@@ -81,7 +108,10 @@ async def webhook_post(request: Request):
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     
     if not webhook_secret:
-        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+        raise HTTPException(
+            status_code=500, 
+            detail="STRIPE_WEBHOOK_SECRET environment variable is not configured. Please set it in Vercel Dashboard → Settings → Environment Variables. You can get the webhook secret from Stripe Dashboard → Developers → Webhooks → Your endpoint → Signing secret."
+        )
     
     try:
         event = stripe.Webhook.construct_event(
