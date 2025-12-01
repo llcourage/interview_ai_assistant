@@ -431,11 +431,23 @@ async def speech_to_text(
 @app.get("/api/webhooks/stripe", tags=["Webhooks"])
 async def stripe_webhook_get():
     """Webhook 端点健康检查（用于测试）"""
+    # 检查必要的环境变量
+    env_status = {
+        "SUPABASE_URL": bool(os.getenv("SUPABASE_URL")),
+        "SUPABASE_SERVICE_ROLE_KEY": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
+        "SUPABASE_ANON_KEY": bool(os.getenv("SUPABASE_ANON_KEY")),
+        "STRIPE_WEBHOOK_SECRET": bool(os.getenv("STRIPE_WEBHOOK_SECRET"))
+    }
+    
+    all_configured = all(env_status.values())
+    
     return {
-        "status": "ok",
-        "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
+        "status": "ok" if all_configured else "warning",
+        "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events." if all_configured else "Endpoint is active but some environment variables are missing.",
         "endpoint": "/api/webhooks/stripe",
-        "methods": ["POST"]
+        "methods": ["POST", "GET"],
+        "environment_variables": env_status,
+        "ready": all_configured
     }
 
 @app.post("/api/webhooks/stripe", tags=["Webhooks"])
