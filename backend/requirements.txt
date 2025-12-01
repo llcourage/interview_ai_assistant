@@ -9,4 +9,5 @@ python-dotenv>=1.0.0
 pillow>=10.2.0
 faster-whisper>=1.0.0
 supabase>=2.24.0
+stripe>=7.0.0
 
