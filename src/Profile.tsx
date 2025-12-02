@@ -52,6 +52,7 @@ export const Profile: React.FC = () => {
 
   const loadPlanInfo = async (token: string) => {
     try {
+      console.log('🔍 Loading plan info from:', `${API_BASE_URL}/api/plan`);
       const response = await fetch(`${API_BASE_URL}/api/plan`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -59,13 +60,16 @@ export const Profile: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to load plan info');
+        const errorText = await response.text();
+        console.error('❌ Failed to load plan info:', response.status, errorText);
+        throw new Error(`Failed to load plan info: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('✅ Plan info loaded:', data);
       setPlanInfo(data);
     } catch (err) {
-      console.error('Error loading plan info:', err);
+      console.error('❌ Error loading plan info:', err);
       setError('加载Plan信息失败');
     }
   };
@@ -165,12 +169,28 @@ export const Profile: React.FC = () => {
                   <h2 className="card-title">Current Plan</h2>
                   <p className="card-subtitle">Manage your subscription and usage</p>
                 </div>
-                <button
-                  className="upgrade-btn"
-                  onClick={() => navigate('/plans')}
-                >
-                  {planInfo.plan === 'high' ? 'Manage' : 'Upgrade'}
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="refresh-btn"
+                    onClick={async () => {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session) {
+                        setLoading(true);
+                        await loadPlanInfo(session.access_token);
+                        setLoading(false);
+                      }
+                    }}
+                    title="Refresh plan information"
+                  >
+                    🔄 Refresh
+                  </button>
+                  <button
+                    className="upgrade-btn"
+                    onClick={() => navigate('/plans')}
+                  >
+                    {planInfo.plan === 'high' ? 'Manage' : 'Upgrade'}
+                  </button>
+                </div>
               </div>
 
               <div className="card-body">
@@ -274,16 +294,10 @@ export const Profile: React.FC = () => {
           {/* Action Buttons */}
           <div className="profile-actions">
             <button
-              className="action-btn secondary"
-              onClick={() => navigate('/app')}
-            >
-              ← Back to Dashboard
-            </button>
-            <button
               className="action-btn primary"
               onClick={() => navigate('/plans')}
             >
-              {planInfo?.plan === 'high' ? 'Manage Subscription' : 'Upgrade Plan'}
+              {planInfo?.plan === 'high' ? 'Manage Subscription' : planInfo?.plan === 'normal' ? 'Manage Plan' : 'Upgrade Plan'}
             </button>
           </div>
         </div>

@@ -59,13 +59,6 @@ export const Header: React.FC = () => {
                   Profile
                 </button>
                 <button 
-                  className="header-btn"
-                  onClick={() => navigate('/app')}
-                  style={{ marginRight: '10px' }}
-                >
-                  Dashboard
-                </button>
-                <button 
                   className="header-btn login-btn"
                   onClick={handleLogout}
                 >

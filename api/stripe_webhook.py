@@ -190,11 +190,14 @@ class handler(BaseHTTPRequestHandler):
             subscription_id = session.get("subscription")
             customer_id = session.get("customer")
             
+            print(f"🔍 checkout.session.completed - user_id: {user_id}, plan: {plan_value}, customer_id: {customer_id}, subscription_id: {subscription_id}")
+            
             if not user_id:
                 raise Exception("Missing user_id in session metadata")
             
             # 检查记录是否存在
             response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
+            print(f"🔍 当前用户记录: {response['data']}")
             
             update_data = {
                 "plan": plan_value,
@@ -206,19 +209,29 @@ class handler(BaseHTTPRequestHandler):
             
             if response["data"]:
                 # 更新现有记录
-                supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
+                print(f"📝 更新用户 {user_id} 的 plan 为 {plan_value}")
+                result = supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
+                print(f"✅ 更新结果: {result}")
             else:
                 # 创建新记录
+                print(f"📝 创建新用户 {user_id} 的 plan 记录: {plan_value}")
                 insert_data = {
                     "user_id": user_id,
                     "plan": plan_value,
                     "created_at": datetime.now().isoformat(),
                     **update_data
                 }
-                supabase_request("POST", "user_plans", insert_data)
+                result = supabase_request("POST", "user_plans", insert_data)
+                print(f"✅ 创建结果: {result}")
+            
+            # 验证更新是否成功
+            verify_response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
+            if verify_response["data"]:
+                current_plan = verify_response["data"][0].get("plan")
+                print(f"✅ 验证: 用户 {user_id} 当前 plan 为 {current_plan}")
             
             print(f"✅ 用户 {user_id} 已升级到 {plan_value} plan")
-            return {"status": "success", "event_type": event_type}
+            return {"status": "success", "event_type": event_type, "user_id": user_id, "plan": plan_value}
             
         elif event_type == "customer.subscription.updated":
             # 订阅更新
@@ -246,11 +259,11 @@ class handler(BaseHTTPRequestHandler):
                 print(f"✅ 用户 {user_id} 订阅已激活")
             elif status in ["canceled", "past_due", "unpaid"]:
                 supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                    "plan": "normal",
+                    "plan": "starter",
                     "subscription_status": status,
                     "updated_at": datetime.now().isoformat()
                 })
-                print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 normal")
+                print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 starter")
             
             return {"status": "success", "event_type": event_type}
             
@@ -272,11 +285,11 @@ class handler(BaseHTTPRequestHandler):
             user_id = response["data"][0]["user_id"]
             
             supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                "plan": "normal",
+                "plan": "starter",
                 "subscription_status": "canceled",
                 "updated_at": datetime.now().isoformat()
             })
-            print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 normal")
+            print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 starter")
             return {"status": "success", "event_type": event_type}
         
         return {"status": "success", "event_type": event_type, "message": "Event processed"}
