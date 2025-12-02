@@ -105,8 +105,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       // Use the provided callback
       onLoginSuccess();
     } else {
-      // Default redirect to app dashboard after login
-      navigate('/app');
+      // Default redirect to profile page after login
+      navigate('/profile');
     }
   };
 
