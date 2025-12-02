@@ -64,6 +64,24 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
                     print(f"✅ 更新 Stripe Customer {customer_id} 的邮箱为 {user_email}")
                 except Exception as e:
                     print(f"⚠️ 更新 Customer 邮箱失败: {e}")
+            
+            # 创建 Checkout Session（使用 customer_id，不能同时使用 customer_email）
+            session = stripe.checkout.Session.create(
+                customer=customer_id,
+                payment_method_types=["card"],
+                line_items=[{
+                    "price": price_id,
+                    "quantity": 1,
+                }],
+                mode="subscription",
+                success_url=success_url,
+                cancel_url=cancel_url,
+                allow_promotion_codes=True,  # 启用优惠码输入框
+                metadata={
+                    "user_id": user_id,
+                    "plan": plan.value
+                }
+            )
         else:
             # 创建新客户
             customer_data = {
@@ -79,30 +97,24 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
             
             # 保存到数据库
             await update_user_plan(user_id, stripe_customer_id=customer_id)
-        
-        # 创建 Checkout Session
-        session_data = {
-            "customer": customer_id,
-            "payment_method_types": ["card"],
-            "line_items": [{
-                "price": price_id,
-                "quantity": 1,
-            }],
-            "mode": "subscription",
-            "success_url": success_url,
-            "cancel_url": cancel_url,
-            "allow_promotion_codes": True,  # 启用优惠码输入框
-            "metadata": {
-                "user_id": user_id,
-                "plan": plan.value
-            }
-        }
-        
-        # 如果提供了邮箱，在 Checkout Session 中预填邮箱
-        if user_email:
-            session_data["customer_email"] = user_email
-        
-        session = stripe.checkout.Session.create(**session_data)
+            
+            # 创建 Checkout Session（使用 customer_id）
+            session = stripe.checkout.Session.create(
+                customer=customer_id,
+                payment_method_types=["card"],
+                line_items=[{
+                    "price": price_id,
+                    "quantity": 1,
+                }],
+                mode="subscription",
+                success_url=success_url,
+                cancel_url=cancel_url,
+                allow_promotion_codes=True,  # 启用优惠码输入框
+                metadata={
+                    "user_id": user_id,
+                    "plan": plan.value
+                }
+            )
         
         return {
             "checkout_url": session.url,
