@@ -2,6 +2,7 @@
 Supabase 认证模块
 提供用户登录、注册、token 验证等功能
 """
+import os
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -98,23 +99,68 @@ async def login_user(email: str, password: str) -> Token:
 
 
 async def verify_token(token: str) -> User:
-    """验证 token 并返回用户信息"""
+    """验证 token 并返回用户信息
+    
+    使用 Supabase REST API 直接验证 token
+    """
     try:
-        supabase = get_supabase()
-        response = supabase.auth.get_user(token)
+        import httpx
         
-        if not response.user:
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY", "")
+        
+        if not supabase_url or not supabase_key:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="无效的 token"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supabase 配置未设置"
             )
         
-        return User(
-            id=response.user.id,
-            email=response.user.email,
-            created_at=response.user.created_at
+        # 使用 Supabase REST API 验证 token
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{supabase_url}/auth/v1/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "apikey": supabase_key
+                }
+            )
+            
+            if response.status_code != 200:
+                print(f"❌ Supabase auth 返回状态码: {response.status_code}")
+                print(f"响应内容: {response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token 验证失败：无效的 token 或 token 已过期"
+                )
+            
+            user_data = response.json()
+            
+            # 检查是否有用户数据
+            if not user_data or not user_data.get("id"):
+                print(f"❌ 用户数据为空: {user_data}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token 验证失败：用户不存在"
+                )
+            
+            return User(
+                id=user_data["id"],
+                email=user_data.get("email", ""),
+                created_at=user_data.get("created_at")
+            )
+            
+    except httpx.HTTPError as e:
+        print(f"❌ HTTP 请求错误: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token 验证失败：无法连接到认证服务"
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ Token 验证错误: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Token 验证失败: {str(e)}"
@@ -136,4 +182,5 @@ async def get_current_active_user(
 ) -> User:
     """获取当前活跃用户"""
     return current_user
+
 
