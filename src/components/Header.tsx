@@ -53,6 +53,13 @@ export const Header: React.FC = () => {
               <>
                 <button 
                   className="header-btn"
+                  onClick={() => navigate('/profile')}
+                  style={{ marginRight: '10px' }}
+                >
+                  Profile
+                </button>
+                <button 
+                  className="header-btn"
                   onClick={() => navigate('/app')}
                   style={{ marginRight: '10px' }}
                 >

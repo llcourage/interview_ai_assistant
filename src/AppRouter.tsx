@@ -5,6 +5,7 @@ import { Plans } from './Plans';
 import { Help } from './Help';
 import { Checkout } from './Checkout';
 import { Success } from './Success';
+import { Profile } from './Profile';
 import App from './App';
 import { Login } from './Login';
 import Overlay from './Overlay';
@@ -18,6 +19,7 @@ export const AppRouter: React.FC = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/success" element={<Success />} />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/app" element={<App />} />
       <Route path="/overlay" element={<Overlay />} />
       <Route path="*" element={<Navigate to="/" replace />} />
