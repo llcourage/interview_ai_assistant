@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
 from datetime import datetime
+import stripe  # 导入 stripe 用于错误处理
 
 # 导入现有模块
 from vision import analyze_image
@@ -465,7 +466,6 @@ async def stripe_webhook_get():
 @app.post("/api/webhooks/stripe", tags=["Webhooks"])
 async def stripe_webhook(request: Request):
     """Stripe Webhook 处理"""
-    import stripe
     
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
