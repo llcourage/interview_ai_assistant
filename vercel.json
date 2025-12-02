@@ -17,6 +17,9 @@
     },
     "api/stripe_webhook.py": {
       "maxDuration": 30
+    },
+    "api/test_minimal.py": {
+      "maxDuration": 10
     }
   }
 }

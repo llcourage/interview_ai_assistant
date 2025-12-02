@@ -53,15 +53,29 @@
 
 ### 4. 设置 Webhook
 
+> ✅ **好消息**：Webhook 端点代码已经实现好了！
+> 
+> - 代码位置：`backend/main.py` 第 431 行
+> - 端点路径：`POST /api/webhooks/stripe`
+> - 已处理的事件：`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+> 
+> 您只需要在 Stripe Dashboard 中注册这个 URL 即可。
+
+#### 在 Stripe Dashboard 中注册 Webhook
+
 1. 进入 **Developers** → **Webhooks**
-2. 点击 **Add endpoint**
+2. 点击 **Add endpoint** 按钮
 3. 配置：
-   - **Endpoint URL**: `https://your-domain.com/api/webhooks/stripe`
+   - **Endpoint URL**: `https://www.desktopai.org/api/webhooks/stripe`
+     > ⚠️ 注意：将 `your-domain.com` 替换为您的实际域名
+   - **Description**（可选）: "AI Interview Assistant Webhook"
    - **Events to send**: 选择以下事件：
-     - `checkout.session.completed` - 支付成功
-     - `customer.subscription.updated` - 订阅更新
-     - `customer.subscription.deleted` - 订阅取消
-4. 复制 **Signing secret** (whsec_xxx)
+     - ✅ `checkout.session.completed` - 支付成功
+     - ✅ `customer.subscription.updated` - 订阅更新
+     - ✅ `customer.subscription.deleted` - 订阅取消
+4. 点击 **Add endpoint** 保存
+5. 复制生成的 **Signing secret** (whsec_xxx)
+   > 这个 secret 需要添加到环境变量 `STRIPE_WEBHOOK_SECRET` 中
 
 ### 5. 配置环境变量
 
