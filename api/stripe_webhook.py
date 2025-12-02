@@ -1,6 +1,6 @@
 """
 Stripe Webhook 端点
-放在 api/ 根目录，避免子目录可能导致的导入问题
+使用最简单的格式，避免任何可能的导入问题
 """
 import os
 import json
@@ -9,30 +9,27 @@ import hashlib
 import time
 
 def handler(request):
-    """
-    Vercel Python 函数入口
-    手动验证 Stripe webhook，不使用任何外部包
-    """
-    method = request.get("method", "GET")
-    headers = request.get("headers", {})
-    body = request.get("body", "")
-    
-    # GET 请求：健康检查
-    if method == "GET":
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "status": "ok",
-                "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
-                "endpoint": "/api/stripe_webhook",
-                "methods": ["POST", "GET"]
-            })
-        }
-    
-    # POST 请求：处理 Webhook
-    if method == "POST":
-        try:
+    """Vercel Python 函数入口"""
+    try:
+        method = request.get("method", "GET")
+        headers = request.get("headers", {})
+        body = request.get("body", "")
+        
+        # GET 请求：健康检查
+        if method == "GET":
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({
+                    "status": "ok",
+                    "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
+                    "endpoint": "/api/stripe_webhook",
+                    "methods": ["POST", "GET"]
+                })
+            }
+        
+        # POST 请求：处理 Webhook
+        if method == "POST":
             # 获取 webhook secret
             webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
             if not webhook_secret:
@@ -120,7 +117,7 @@ def handler(request):
                     "body": json.dumps({"error": "Supabase credentials not configured"})
                 }
             
-            # 使用 urllib 进行 HTTP 请求
+            # 使用 urllib 进行 HTTP 请求（延迟导入）
             from urllib.request import Request, urlopen
             from urllib.error import HTTPError
             from datetime import datetime
@@ -273,21 +270,25 @@ def handler(request):
                 "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"status": "success", "event_type": event_type})
             }
-            
-        except Exception as e:
-            print(f"❌ 处理 Webhook 事件失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return {
-                "statusCode": 500,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"error": "Failed to process webhook", "details": str(e)})
-            }
-    
-    # 其他方法
-    return {
-        "statusCode": 405,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps({"error": "Method not allowed"})
-    }
-
+        
+        # 其他方法
+        return {
+            "statusCode": 405,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Method not allowed"})
+        }
+    except Exception as e:
+        # 捕获所有异常，返回错误信息
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ Webhook 处理失败: {e}")
+        print(error_details)
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "error": "Internal server error",
+                "message": str(e),
+                "type": type(e).__name__
+            })
+        }
