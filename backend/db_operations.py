@@ -57,12 +57,27 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.STARTER) -> U
         
         response = supabase.table("user_plans").insert(plan_data).execute()
         
-        if response.data:
+        # 防御性检查：确保 response 和 response.data 都存在
+        if response is None:
+            print(f"❌ Supabase insert 返回 None")
+            raise Exception("创建Plan失败：数据库操作返回空响应")
+        
+        if not hasattr(response, 'data') or not response.data:
+            print(f"❌ Supabase insert 返回的 response.data 为空: {response}")
+            raise Exception("创建Plan失败：数据库操作未返回数据")
+        
+        # 确保 data 是列表且不为空
+        if isinstance(response.data, list) and len(response.data) > 0:
             return UserPlan(**response.data[0])
+        elif not isinstance(response.data, list) and response.data:
+            return UserPlan(**response.data)
         else:
-            raise Exception("创建Plan失败")
+            print(f"❌ Supabase insert 返回的数据格式异常: {response.data}")
+            raise Exception("创建Plan失败：返回的数据格式不正确")
     except Exception as e:
         print(f"❌ 创建用户Plan失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 
@@ -96,7 +111,7 @@ async def update_user_plan(
         if plan_expires_at is not None:
             update_data["plan_expires_at"] = plan_expires_at.isoformat()
         
-        if existing.data:
+        if existing and existing.data:
             # 记录存在，更新
             response = supabase.table("user_plans").update(update_data).eq("user_id", user_id).execute()
         else:
@@ -111,10 +126,23 @@ async def update_user_plan(
             }
             response = supabase.table("user_plans").insert(insert_data).execute()
         
-        if response.data:
-            return UserPlan(**response.data[0] if isinstance(response.data, list) else response.data)
-        else:
+        # 防御性检查：确保 response 和 response.data 都存在
+        if response is None:
+            print(f"❌ Supabase update/insert 返回 None")
+            raise Exception("更新Plan失败：数据库操作返回空响应")
+        
+        if not hasattr(response, 'data') or not response.data:
+            print(f"❌ Supabase update/insert 返回的 response.data 为空: {response}")
             raise Exception("更新Plan失败：数据库操作未返回数据")
+        
+        # 处理返回的数据
+        if isinstance(response.data, list) and len(response.data) > 0:
+            return UserPlan(**response.data[0])
+        elif not isinstance(response.data, list) and response.data:
+            return UserPlan(**response.data)
+        else:
+            print(f"❌ Supabase update/insert 返回的数据格式异常: {response.data}")
+            raise Exception("更新Plan失败：返回的数据格式不正确")
     except Exception as e:
         print(f"❌ 更新用户Plan失败: {e}")
         import traceback

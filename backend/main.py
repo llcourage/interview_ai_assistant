@@ -220,6 +220,13 @@ async def create_checkout(
         # 配置错误，返回 400
         print(f"❌ Checkout 配置错误: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except AttributeError as e:
+        # AttributeError 通常是 None.data 错误
+        error_msg = f"数据访问错误: {str(e)}"
+        print(f"❌ Checkout AttributeError: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
     except stripe.error.StripeError as e:
         # Stripe API 错误
         error_msg = f"Stripe API 错误: {e.user_message if hasattr(e, 'user_message') else str(e)}"
@@ -228,7 +235,7 @@ async def create_checkout(
     except Exception as e:
         # 其他错误
         error_msg = f"创建支付会话失败: {str(e)}"
-        print(f"❌ Checkout 错误: {e}")
+        print(f"❌ Checkout 错误: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=error_msg)
