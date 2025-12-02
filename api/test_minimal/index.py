@@ -1,20 +1,20 @@
 """
-最小化测试：使用与 index.py 相同的导入延迟模式
+最小化测试：完全独立的函数，不依赖任何第三方库
+放在独立目录中，使用独立的 requirements.txt
 """
 import json
 import sys
 
-# 完全避免模块级别的任何可能出错的导入
-# 所有逻辑都在 handler 函数内部
-
 def handler(request):
     """
     Vercel Python 函数入口
-    使用最简单的格式，避免任何导入问题
+    只使用标准库，避免任何依赖冲突
     """
     try:
         # 获取请求信息
-        method = request.get("method", "GET") if isinstance(request, dict) else "GET"
+        method = "GET"
+        if isinstance(request, dict):
+            method = request.get("method", "GET")
         
         # 返回成功响应
         return {
@@ -25,10 +25,10 @@ def handler(request):
             },
             "body": json.dumps({
                 "status": "ok",
-                "message": "Minimal test works",
+                "message": "Minimal test works - isolated function",
                 "method": method,
                 "python_version": sys.version.split()[0],
-                "handler_type": "minimal"
+                "handler_type": "minimal_isolated"
             })
         }
     except Exception as e:
@@ -48,3 +48,4 @@ def handler(request):
                 "traceback": error_trace
             })
         }
+
