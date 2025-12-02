@@ -207,9 +207,10 @@ async def get_user_quota(user_id: str) -> UsageQuota:
     """获取用户配额"""
     try:
         supabase = get_supabase()
-        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).single().execute()
+        # 使用 maybe_single() 而不是 single()，避免在没有记录时抛出异常
+        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
         
-        if response.data:
+        if response and response.data:
             quota = UsageQuota(**response.data)
             
             # 检查是否需要重置配额
@@ -220,25 +221,43 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             
             return quota
         else:
-            # 创建新配额
+            # 如果没有记录，创建新配额
+            print(f"📝 用户 {user_id} 没有配额记录，创建新配额")
             return await create_user_quota(user_id)
     except Exception as e:
         print(f"⚠️ 获取用户配额失败: {e}")
+        import traceback
+        traceback.print_exc()
         # 返回默认配额
-        user_plan = await get_user_plan(user_id)
-        limits = PLAN_LIMITS[user_plan.plan]
-        
-        return UsageQuota(
-            user_id=user_id,
-            plan=user_plan.plan,
-            daily_requests=0,
-            monthly_requests=0,
-            daily_limit=limits["daily_limit"],
-            monthly_limit=limits["monthly_limit"],
-            quota_reset_date=datetime.now() + timedelta(days=1),
-            created_at=datetime.now(),
-            updated_at=datetime.now()
-        )
+        try:
+            user_plan = await get_user_plan(user_id)
+            limits = PLAN_LIMITS[user_plan.plan]
+            
+            return UsageQuota(
+                user_id=user_id,
+                plan=user_plan.plan,
+                daily_requests=0,
+                monthly_requests=0,
+                daily_limit=limits["daily_limit"],
+                monthly_limit=limits["monthly_limit"],
+                quota_reset_date=datetime.now() + timedelta(days=1),
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+        except Exception as fallback_error:
+            print(f"❌ 创建默认配额也失败: {fallback_error}")
+            # 最后返回一个基本的配额对象
+            return UsageQuota(
+                user_id=user_id,
+                plan=PlanType.STARTER,
+                daily_requests=0,
+                monthly_requests=0,
+                daily_limit=10,
+                monthly_limit=100,
+                quota_reset_date=datetime.now() + timedelta(days=1),
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
 
 
 async def create_user_quota(user_id: str) -> UsageQuota:
