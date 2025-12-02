@@ -75,10 +75,14 @@ STRIPE_PRICE_HIGH=price_1XYZ789abc123DEF456    # 替换为您的 High Plan Price
 3. 进入 **Settings** → **API**
 4. 复制：
    - **Project URL** → `SUPABASE_URL`
-   - **anon public** key → `SUPABASE_ANON_KEY`
-   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY`
+   - **anon public** key → `SUPABASE_ANON_KEY`（可选，如果前端需要直接访问）
+   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` ⚠️ **必需**
 
-> ⚠️ **安全提示**：`SUPABASE_SERVICE_ROLE_KEY` 有完整数据库访问权限，请妥善保管。
+> ⚠️ **重要提示**：
+> - `SUPABASE_SERVICE_ROLE_KEY` 是**必需的**，用于后端数据库操作
+> - 它可以绕过 RLS (Row Level Security) 限制，允许后端插入/更新数据
+> - 有完整数据库访问权限，**绝对不能暴露给前端**，只能在服务器端使用
+> - 如果不使用 SERVICE_ROLE_KEY，会遇到 "new row violates row-level security policy" 错误
 
 ### Stripe 配置
 
