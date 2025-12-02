@@ -1,13 +1,17 @@
 """
 独立的 Stripe Webhook 端点
-使用 HTTP 请求直接调用 Supabase API，避免使用 supabase Python 包
+完全避免导入 stripe 包，手动验证 webhook
 """
 import os
 import json
+import hmac
+import hashlib
+import time
 
 def handler(request):
     """
     Vercel Python 函数入口
+    手动验证 Stripe webhook，不使用 stripe 包
     """
     method = request.get("method", "GET")
     headers = request.get("headers", {})
@@ -29,9 +33,6 @@ def handler(request):
     # POST 请求：处理 Webhook
     if method == "POST":
         try:
-            # 延迟导入 stripe（只在需要时导入）
-            import stripe
-            
             # 获取 webhook secret
             webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
             if not webhook_secret:
@@ -50,30 +51,65 @@ def handler(request):
                     "body": json.dumps({"error": "Missing stripe-signature header"})
                 }
             
-            # 验证 webhook
-            try:
-                event = stripe.Webhook.construct_event(
-                    body.encode() if isinstance(body, str) else body,
-                    sig_header,
-                    webhook_secret
-                )
-            except ValueError as e:
+            # 手动验证 webhook 签名（不使用 stripe 包）
+            body_bytes = body.encode() if isinstance(body, str) else body
+            
+            # 解析签名
+            signatures = {}
+            for item in sig_header.split(","):
+                parts = item.split("=", 1)
+                if len(parts) == 2:
+                    signatures[parts[0]] = parts[1]
+            
+            timestamp = signatures.get("t")
+            signature = signatures.get("v1")
+            
+            if not timestamp or not signature:
                 return {
                     "statusCode": 400,
                     "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Invalid payload", "details": str(e)})
+                    "body": json.dumps({"error": "Invalid signature format"})
                 }
-            except stripe.error.SignatureVerificationError as e:
+            
+            # 检查时间戳（防止重放攻击）
+            current_time = int(time.time())
+            if abs(current_time - int(timestamp)) > 300:  # 5 分钟
                 return {
                     "statusCode": 400,
                     "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Invalid signature", "details": str(e)})
+                    "body": json.dumps({"error": "Timestamp too old"})
+                }
+            
+            # 计算签名
+            signed_payload = f"{timestamp}.{body_bytes.decode() if isinstance(body_bytes, bytes) else body_bytes}"
+            expected_signature = hmac.new(
+                webhook_secret.encode(),
+                signed_payload.encode(),
+                hashlib.sha256
+            ).hexdigest()
+            
+            # 验证签名
+            if not hmac.compare_digest(expected_signature, signature):
+                return {
+                    "statusCode": 400,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"error": "Invalid signature"})
+                }
+            
+            # 解析事件
+            try:
+                event = json.loads(body_bytes.decode() if isinstance(body_bytes, bytes) else body_bytes)
+            except json.JSONDecodeError as e:
+                return {
+                    "statusCode": 400,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"error": "Invalid JSON", "details": str(e)})
                 }
             
             # 处理事件
-            event_type = event["type"]
+            event_type = event.get("type")
             
-            # 使用 HTTP 请求直接调用 Supabase API（避免导入 supabase 包）
+            # 使用 HTTP 请求直接调用 Supabase API
             supabase_url = os.getenv("SUPABASE_URL")
             supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
             
@@ -84,7 +120,7 @@ def handler(request):
                     "body": json.dumps({"error": "Supabase credentials not configured"})
                 }
             
-            # 使用 urllib 进行 HTTP 请求（Python 标准库，不需要额外依赖）
+            # 使用 urllib 进行 HTTP 请求
             from urllib.request import Request, urlopen
             from urllib.error import HTTPError
             from datetime import datetime
@@ -121,7 +157,7 @@ def handler(request):
             
             if event_type == "checkout.session.completed":
                 # 支付成功
-                session = event["data"]["object"]
+                session = event.get("data", {}).get("object", {})
                 user_id = session.get("metadata", {}).get("user_id")
                 plan_value = session.get("metadata", {}).get("plan", "normal")
                 subscription_id = session.get("subscription")
@@ -162,7 +198,7 @@ def handler(request):
                 
             elif event_type == "customer.subscription.updated":
                 # 订阅更新
-                subscription = event["data"]["object"]
+                subscription = event.get("data", {}).get("object", {})
                 customer_id = subscription.get("customer")
                 status = subscription.get("status")
                 
@@ -202,7 +238,7 @@ def handler(request):
                     
             elif event_type == "customer.subscription.deleted":
                 # 订阅删除
-                subscription = event["data"]["object"]
+                subscription = event.get("data", {}).get("object", {})
                 customer_id = subscription.get("customer")
                 
                 if not customer_id:
