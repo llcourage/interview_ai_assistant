@@ -1,18 +1,33 @@
 """
 独立的 Stripe Webhook 端点
 Vercel 文件系统路由：api/webhooks/stripe.py → /api/webhooks/stripe
+使用延迟导入避免模块级别的导入错误
 """
 import os
-from mangum import Mangum
-from fastapi import FastAPI, HTTPException, Request
-import stripe
-from supabase import create_client, Client
 
-# 创建 FastAPI 应用（仅用于 webhook）
-app = FastAPI()
+# 延迟导入，避免模块级别的导入错误
+def create_app():
+    """创建 FastAPI 应用（延迟导入）"""
+    from fastapi import FastAPI, HTTPException, Request
+    app = FastAPI()
+    return app, HTTPException, Request
 
-def get_supabase() -> Client:
-    """获取 Supabase 客户端"""
+# 创建应用（延迟执行）
+try:
+    app, HTTPException, Request = create_app()
+except Exception as e:
+    # 如果导入失败，创建一个简单的错误应用
+    print(f"⚠️ 导入 FastAPI 时出错: {e}")
+    from fastapi import FastAPI
+    app = FastAPI()
+    @app.get("/")
+    @app.post("/")
+    async def error():
+        return {"error": "Failed to initialize application"}
+
+def get_supabase():
+    """获取 Supabase 客户端（延迟导入）"""
+    from supabase import create_client
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
     
@@ -74,6 +89,9 @@ async def webhook_get():
 @app.post("/")
 async def webhook_post(request: Request):
     """Stripe Webhook 处理"""
+    # 延迟导入 stripe
+    import stripe
+    
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
     
@@ -181,5 +199,18 @@ async def webhook_post(request: Request):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to process webhook: {str(e)}")
 
-# Vercel Serverless Function handler
-handler = Mangum(app, lifespan="off")
+# Vercel Serverless Function handler（延迟创建）
+def create_handler():
+    """创建 Mangum handler（延迟导入）"""
+    from mangum import Mangum
+    return Mangum(app, lifespan="off")
+
+try:
+    handler = create_handler()
+except Exception as e:
+    print(f"⚠️ 创建 handler 时出错: {e}")
+    import traceback
+    traceback.print_exc()
+    # 创建一个简单的错误 handler
+    from mangum import Mangum
+    handler = Mangum(app, lifespan="off")
