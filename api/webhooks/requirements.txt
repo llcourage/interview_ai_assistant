@@ -1,7 +1,1 @@
-fastapi>=0.109.0
-mangum>=0.17.0
-pydantic>=2.5.0
-python-multipart>=0.0.6
 stripe>=7.0.0
-supabase>=2.24.0
-python-dotenv>=1.0.0

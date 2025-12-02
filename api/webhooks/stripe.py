@@ -1,6 +1,6 @@
 """
 独立的 Stripe Webhook 端点
-使用 Vercel 原生 Python 函数格式，不使用 FastAPI/Mangum
+使用 HTTP 请求直接调用 Supabase API，避免使用 supabase Python 包
 """
 import os
 import json
@@ -8,26 +8,8 @@ import json
 def handler(request):
     """
     Vercel Python 函数入口
-    request 是一个字典，包含：
-    - method: HTTP 方法
-    - path: 请求路径
-    - headers: 请求头
-    - body: 请求体（字符串）
     """
-    # 延迟导入所有依赖
-    try:
-        import stripe
-        from supabase import create_client
-        from datetime import datetime
-    except ImportError as e:
-        return {
-            "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"error": f"Import error: {str(e)}"})
-        }
-    
     method = request.get("method", "GET")
-    path = request.get("path", "")
     headers = request.get("headers", {})
     body = request.get("body", "")
     
@@ -47,6 +29,9 @@ def handler(request):
     # POST 请求：处理 Webhook
     if method == "POST":
         try:
+            # 延迟导入 stripe（只在需要时导入）
+            import stripe
+            
             # 获取 webhook secret
             webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
             if not webhook_secret:
@@ -88,7 +73,7 @@ def handler(request):
             # 处理事件
             event_type = event["type"]
             
-            # 获取 Supabase 客户端
+            # 使用 HTTP 请求直接调用 Supabase API（避免导入 supabase 包）
             supabase_url = os.getenv("SUPABASE_URL")
             supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
             
@@ -99,7 +84,40 @@ def handler(request):
                     "body": json.dumps({"error": "Supabase credentials not configured"})
                 }
             
-            supabase = create_client(supabase_url, supabase_key)
+            # 使用 urllib 进行 HTTP 请求（Python 标准库，不需要额外依赖）
+            from urllib.request import Request, urlopen
+            from urllib.error import HTTPError
+            from datetime import datetime
+            
+            def supabase_request(method, table, data=None, filters=None):
+                """使用 HTTP 请求调用 Supabase API"""
+                url = f"{supabase_url}/rest/v1/{table}"
+                if filters:
+                    url += "?" + "&".join([f"{k}=eq.{v}" for k, v in filters.items()])
+                
+                req = Request(url)
+                req.add_header("apikey", supabase_key)
+                req.add_header("Authorization", f"Bearer {supabase_key}")
+                req.add_header("Content-Type", "application/json")
+                req.add_header("Prefer", "return=representation")
+                
+                if method == "GET":
+                    req.get_method = lambda: "GET"
+                elif method == "POST":
+                    req.get_method = lambda: "POST"
+                    req.data = json.dumps(data).encode() if data else None
+                elif method == "PATCH":
+                    req.get_method = lambda: "PATCH"
+                    req.data = json.dumps(data).encode() if data else None
+                
+                try:
+                    response = urlopen(req)
+                    result = json.loads(response.read().decode())
+                    return {"data": result if isinstance(result, list) else [result]}
+                except HTTPError as e:
+                    if e.code == 404:
+                        return {"data": []}
+                    raise
             
             if event_type == "checkout.session.completed":
                 # 支付成功
@@ -116,7 +134,9 @@ def handler(request):
                         "body": json.dumps({"error": "Missing user_id in session metadata"})
                     }
                 
-                # 更新用户 Plan
+                # 检查记录是否存在
+                response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
+                
                 update_data = {
                     "plan": plan_value,
                     "stripe_customer_id": customer_id,
@@ -125,19 +145,18 @@ def handler(request):
                     "updated_at": datetime.now().isoformat()
                 }
                 
-                # 检查记录是否存在
-                response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
-                
-                if response.data:
-                    supabase.table("user_plans").update(update_data).eq("user_id", user_id).execute()
+                if response["data"]:
+                    # 更新现有记录
+                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
                 else:
+                    # 创建新记录
                     insert_data = {
                         "user_id": user_id,
                         "plan": plan_value,
                         "created_at": datetime.now().isoformat(),
                         **update_data
                     }
-                    supabase.table("user_plans").insert(insert_data).execute()
+                    supabase_request("POST", "user_plans", insert_data)
                 
                 print(f"✅ 用户 {user_id} 已升级到 {plan_value} plan")
                 
@@ -155,9 +174,9 @@ def handler(request):
                     }
                 
                 # 从数据库查找用户
-                response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).single().execute()
+                response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
                 
-                if not response.data:
+                if not response["data"]:
                     print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
                     return {
                         "statusCode": 200,
@@ -165,20 +184,20 @@ def handler(request):
                         "body": json.dumps({"status": "warning", "message": "User not found"})
                     }
                 
-                user_id = response.data["user_id"]
+                user_id = response["data"][0]["user_id"]
                 
                 if status == "active":
-                    supabase.table("user_plans").update({
+                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                         "subscription_status": "active",
                         "updated_at": datetime.now().isoformat()
-                    }).eq("user_id", user_id).execute()
+                    })
                     print(f"✅ 用户 {user_id} 订阅已激活")
                 elif status in ["canceled", "past_due", "unpaid"]:
-                    supabase.table("user_plans").update({
+                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                         "plan": "normal",
                         "subscription_status": status,
                         "updated_at": datetime.now().isoformat()
-                    }).eq("user_id", user_id).execute()
+                    })
                     print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 normal")
                     
             elif event_type == "customer.subscription.deleted":
@@ -194,9 +213,9 @@ def handler(request):
                     }
                 
                 # 从数据库查找用户
-                response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).single().execute()
+                response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
                 
-                if not response.data:
+                if not response["data"]:
                     print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
                     return {
                         "statusCode": 200,
@@ -204,13 +223,13 @@ def handler(request):
                         "body": json.dumps({"status": "warning", "message": "User not found"})
                     }
                 
-                user_id = response.data["user_id"]
+                user_id = response["data"][0]["user_id"]
                 
-                supabase.table("user_plans").update({
+                supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                     "plan": "normal",
                     "subscription_status": "canceled",
                     "updated_at": datetime.now().isoformat()
-                }).eq("user_id", user_id).execute()
+                })
                 print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 normal")
             
             return {
