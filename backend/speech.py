@@ -1,7 +1,7 @@
 """
 语音转文字模块 - 使用 faster-whisper
 """
-from faster_whisper import WhisperModel
+# 延迟导入 faster_whisper，避免在 Vercel 环境中导入失败
 import os
 import tempfile
 from pathlib import Path
@@ -14,6 +14,14 @@ def get_model():
     """获取或初始化 Whisper 模型（单例模式）"""
     global _model
     if _model is None:
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            raise ImportError(
+                "faster-whisper 未安装。"
+                "如果不需要语音转文字功能，可以移除此依赖。"
+                "安装: pip install faster-whisper"
+            )
         print(f"🤖 加载 Whisper 模型: {_model_name} (首次运行会下载模型)")
         # device: "cpu" 或 "cuda" (如果有 GPU)
         # compute_type: "int8", "int8_float16", "float16", "float32"
@@ -100,5 +108,6 @@ async def transcribe_audio(audio_data: bytes, language: str = "zh") -> dict:
         error_msg = str(e)
         print(f"❌ 语音转文字失败: {error_msg}")
         raise Exception(f"语音转文字失败: {error_msg}")
+
 
 
