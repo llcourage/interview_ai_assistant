@@ -15,17 +15,16 @@ backend_path = Path(__file__).parent.parent / "backend"
 if str(backend_path) not in sys.path:
     sys.path.insert(0, str(backend_path))
 
-# 延迟加载 FastAPI 应用和 Mangum
-_mangum_handler = None
+# 延迟加载 FastAPI 应用
+_app = None
 
-def get_mangum_handler():
-    """获取或创建 Mangum handler（延迟导入）"""
-    global _mangum_handler
-    if _mangum_handler is None:
+def get_app():
+    """获取或创建 FastAPI 应用（延迟导入）"""
+    global _app
+    if _app is None:
         try:
-            from mangum import Mangum
             from main import app
-            _mangum_handler = Mangum(app, lifespan="off")
+            _app = app
         except Exception as e:
             # 记录详细的导入错误
             import traceback
@@ -33,7 +32,6 @@ def get_mangum_handler():
             print(f"⚠️ 导入 FastAPI 应用时出错: {e}")
             print(f"详细错误信息:\n{error_trace}")
             # 创建一个错误应用
-            from mangum import Mangum
             from fastapi import FastAPI, Request
             error_app = FastAPI()
             
@@ -49,8 +47,8 @@ def get_mangum_handler():
                     "path": str(request.url.path)
                 }
             
-            _mangum_handler = Mangum(error_app, lifespan="off")
-    return _mangum_handler
+            _app = error_app
+    return _app
 
 class handler(BaseHTTPRequestHandler):
     """Vercel Python 函数入口 - 必须继承 BaseHTTPRequestHandler"""
@@ -74,30 +72,79 @@ class handler(BaseHTTPRequestHandler):
         self._handle_request()
     
     def _handle_request(self):
-        """处理所有 HTTP 请求"""
+        """处理所有 HTTP 请求 - 使用 Mangum 适配 FastAPI"""
         try:
-            # 获取 Mangum handler
-            mangum_handler = get_mangum_handler()
+            # 获取 FastAPI 应用
+            app = get_app()
+            
+            # 使用 Mangum 处理请求
+            from mangum import Mangum
+            mangum_handler = Mangum(app, lifespan="off")
             
             # 构建 ASGI scope
             scope = self._build_scope()
             
-            # 创建 ASGI 应用调用
-            from mangum.protocols.http import ASGIAdapter
-            adapter = ASGIAdapter(mangum_handler.app)
+            # 创建消息队列
+            receive_queue = []
+            send_queue = []
             
-            # 处理请求
-            response = adapter(self._build_scope(), self._receive, self._send)
+            # 读取请求体
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                body = self.rfile.read(content_length)
+                receive_queue.append({
+                    "type": "http.request",
+                    "body": body,
+                    "more_body": False
+                })
+            else:
+                receive_queue.append({
+                    "type": "http.request",
+                    "body": b"",
+                    "more_body": False
+                })
             
-            # 等待响应完成
+            # 异步处理请求
             import asyncio
+            
+            async def run_app():
+                async def receive():
+                    return receive_queue.pop(0) if receive_queue else {"type": "http.disconnect"}
+                
+                async def send(message):
+                    send_queue.append(message)
+                
+                await mangum_handler(scope, receive, send)
+            
+            # 运行异步应用
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            loop.run_until_complete(response)
+            loop.run_until_complete(run_app())
+            
+            # 处理响应
+            status = 200
+            headers = []
+            body = b""
+            
+            for message in send_queue:
+                if message["type"] == "http.response.start":
+                    status = message["status"]
+                    headers = message.get("headers", [])
+                elif message["type"] == "http.response.body":
+                    body += message.get("body", b"")
+            
+            # 发送响应
+            self.send_response(status)
+            for header, value in headers:
+                self.send_header(header.decode() if isinstance(header, bytes) else header,
+                               value.decode() if isinstance(value, bytes) else value)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
             
         except Exception as e:
             import traceback
@@ -127,16 +174,19 @@ class handler(BaseHTTPRequestHandler):
         path = parsed_path.path
         query_string = parsed_path.query.encode()
         
-        # 读取请求体
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = b''
-        if content_length > 0:
-            body = self.rfile.read(content_length)
-        
         # 构建 headers
         headers = []
         for key, value in self.headers.items():
             headers.append((key.lower().encode(), value.encode()))
+        
+        # 获取 host
+        host = self.headers.get('Host', 'localhost')
+        if ':' in host:
+            server_host, server_port = host.split(':', 1)
+            server_port = int(server_port)
+        else:
+            server_host = host
+            server_port = 80
         
         scope = {
             "type": "http",
@@ -145,8 +195,7 @@ class handler(BaseHTTPRequestHandler):
             "raw_path": path.encode(),
             "query_string": query_string,
             "headers": headers,
-            "body": body,
-            "server": (self.headers.get('Host', 'localhost').split(':')[0], 80),
+            "server": (server_host, server_port),
             "client": self.client_address,
             "scheme": "https" if self.headers.get('X-Forwarded-Proto') == 'https' else 'http',
             "http_version": self.request_version,
@@ -154,23 +203,3 @@ class handler(BaseHTTPRequestHandler):
         }
         
         return scope
-    
-    async def _receive(self):
-        """ASGI receive 函数"""
-        return {
-            "type": "http.request",
-            "body": self._body if hasattr(self, '_body') else b'',
-            "more_body": False
-        }
-    
-    async def _send(self, message):
-        """ASGI send 函数"""
-        if message["type"] == "http.response.start":
-            self.send_response(message["status"])
-            for header, value in message.get("headers", []):
-                self.send_header(header.decode(), value.decode())
-            self.end_headers()
-        elif message["type"] == "http.response.body":
-            if "body" in message:
-                self.wfile.write(message["body"])
-
