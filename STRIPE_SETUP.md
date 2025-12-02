@@ -66,8 +66,8 @@
 1. 进入 **Developers** → **Webhooks**
 2. 点击 **Add endpoint** 按钮
 3. 配置：
-   - **Endpoint URL**: `https://www.desktopai.org/api/webhooks/stripe`
-     > ⚠️ 注意：将 `your-domain.com` 替换为您的实际域名
+   - **Endpoint URL**: `https://www.desktopai.org/api/stripe_webhook`
+     > ⚠️ 注意：将 `www.desktopai.org` 替换为您的实际域名（Vercel 部署的域名）
    - **Description**（可选）: "AI Interview Assistant Webhook"
    - **Events to send**: 选择以下事件：
      - ✅ `checkout.session.completed` - 支付成功
@@ -75,11 +75,18 @@
      - ✅ `customer.subscription.deleted` - 订阅取消
 4. 点击 **Add endpoint** 保存
 5. 复制生成的 **Signing secret** (whsec_xxx)
-   > 这个 secret 需要添加到环境变量 `STRIPE_WEBHOOK_SECRET` 中
+   > 这个 secret 需要添加到 **Vercel 环境变量** `STRIPE_WEBHOOK_SECRET` 中
 
 ### 5. 配置环境变量
 
-编辑 `backend/.env` 文件：
+> ⚠️ **重要**：由于应用部署在 Vercel，环境变量需要在 **Vercel Dashboard** 中配置，而不是本地 `.env` 文件。
+
+#### 在 Vercel 中配置环境变量
+
+1. 访问 [Vercel Dashboard](https://vercel.com/dashboard)
+2. 选择你的项目
+3. 进入 **Settings** → **Environment Variables**
+4. 添加以下环境变量：
 
 ```env
 # Stripe Configuration
@@ -87,7 +94,13 @@ STRIPE_SECRET_KEY=sk_test_your-secret-key-here
 STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret-here
 STRIPE_PRICE_NORMAL=price_xxx  # Normal Plan Price ID
 STRIPE_PRICE_HIGH=price_yyy    # High Plan Price ID
+
+# Supabase Configuration (Webhook 需要)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
+
+> 📝 **详细步骤**：参考 [VERCEL_ENV_SETUP.md](./VERCEL_ENV_SETUP.md) 获取完整的环境变量配置指南。
 
 ### 6. 安装 Stripe Python SDK
 
