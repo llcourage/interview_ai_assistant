@@ -1,10 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import './Header.css';
 
 export const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // 检查认证状态
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsAuthenticated(!!session);
+      setUserEmail(session?.user?.email || null);
+      setLoading(false);
+    };
+
+    checkAuth();
+
+    // 监听认证状态变化
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+      setUserEmail(session?.user?.email || null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
 
   return (
     <header className="landing-header">
@@ -16,18 +47,43 @@ export const Header: React.FC = () => {
             </h1>
           </div>
           <div className="header-right">
-            <button 
-              className="header-btn login-btn"
-              onClick={() => navigate('/login')}
-            >
-              Login
-            </button>
-            <button 
-              className="header-btn signup-btn"
-              onClick={() => navigate('/login?mode=signup')}
-            >
-              Sign Up
-            </button>
+            {loading ? (
+              <span style={{ color: '#666' }}>Loading...</span>
+            ) : isAuthenticated ? (
+              <>
+                <button 
+                  className="header-btn"
+                  onClick={() => navigate('/app')}
+                  style={{ marginRight: '10px' }}
+                >
+                  Dashboard
+                </button>
+                <span style={{ marginRight: '10px', color: '#666' }}>
+                  {userEmail}
+                </span>
+                <button 
+                  className="header-btn login-btn"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  className="header-btn login-btn"
+                  onClick={() => navigate('/login')}
+                >
+                  Login
+                </button>
+                <button 
+                  className="header-btn signup-btn"
+                  onClick={() => navigate('/login?mode=signup')}
+                >
+                  Sign Up
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -58,4 +114,5 @@ export const Header: React.FC = () => {
     </header>
   );
 };
+
 
