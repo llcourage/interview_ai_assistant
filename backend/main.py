@@ -212,7 +212,8 @@ async def create_checkout(
             user_id=current_user.id,
             plan=plan,
             success_url=request.success_url,
-            cancel_url=request.cancel_url
+            cancel_url=request.cancel_url,
+            user_email=current_user.email  # 传递用户邮箱
         )
         
         return checkout_data

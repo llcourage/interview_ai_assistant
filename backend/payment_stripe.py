@@ -23,7 +23,7 @@ STRIPE_PRICE_IDS = {
 }
 
 
-async def create_checkout_session(user_id: str, plan: PlanType, success_url: str, cancel_url: str) -> dict:
+async def create_checkout_session(user_id: str, plan: PlanType, success_url: str, cancel_url: str, user_email: Optional[str] = None) -> dict:
     """创建 Stripe Checkout Session
     
     Args:
@@ -31,6 +31,7 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
         plan: 订阅计划
         success_url: 支付成功后的跳转URL
         cancel_url: 取消支付后的跳转URL
+        user_email: 用户邮箱（可选，如果提供会在 Checkout 中预填）
     
     Returns:
         dict: 包含 checkout_url 的字典
@@ -53,33 +54,55 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
         
         if user_plan_data.stripe_customer_id:
             customer_id = user_plan_data.stripe_customer_id
+            # 如果提供了邮箱，更新 Customer 的邮箱
+            if user_email:
+                try:
+                    stripe.Customer.modify(
+                        customer_id,
+                        email=user_email
+                    )
+                    print(f"✅ 更新 Stripe Customer {customer_id} 的邮箱为 {user_email}")
+                except Exception as e:
+                    print(f"⚠️ 更新 Customer 邮箱失败: {e}")
         else:
             # 创建新客户
-            customer = stripe.Customer.create(
-                metadata={"user_id": user_id}
-            )
+            customer_data = {
+                "metadata": {"user_id": user_id}
+            }
+            if user_email:
+                customer_data["email"] = user_email
+            
+            customer = stripe.Customer.create(**customer_data)
             customer_id = customer.id
+            
+            print(f"✅ 创建 Stripe Customer {customer_id}，邮箱: {user_email}")
             
             # 保存到数据库
             await update_user_plan(user_id, stripe_customer_id=customer_id)
         
         # 创建 Checkout Session
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            line_items=[{
+        session_data = {
+            "customer": customer_id,
+            "payment_method_types": ["card"],
+            "line_items": [{
                 "price": price_id,
                 "quantity": 1,
             }],
-            mode="subscription",
-            success_url=success_url,
-            cancel_url=cancel_url,
-            allow_promotion_codes=True,  # 启用优惠码输入框
-            metadata={
+            "mode": "subscription",
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+            "allow_promotion_codes": True,  # 启用优惠码输入框
+            "metadata": {
                 "user_id": user_id,
                 "plan": plan.value
             }
-        )
+        }
+        
+        # 如果提供了邮箱，在 Checkout Session 中预填邮箱
+        if user_email:
+            session_data["customer_email"] = user_email
+        
+        session = stripe.checkout.Session.create(**session_data)
         
         return {
             "checkout_url": session.url,
