@@ -65,9 +65,6 @@ export const Header: React.FC = () => {
                 >
                   Dashboard
                 </button>
-                <span style={{ marginRight: '10px', color: '#666' }}>
-                  {userEmail}
-                </span>
                 <button 
                   className="header-btn login-btn"
                   onClick={handleLogout}

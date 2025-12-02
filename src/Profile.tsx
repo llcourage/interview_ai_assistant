@@ -72,9 +72,9 @@ export const Profile: React.FC = () => {
 
   const getPlanDisplayName = (plan: string) => {
     const planMap: { [key: string]: string } = {
-      'starter': 'Starter (Free)',
-      'normal': 'Normal Plan',
-      'high': 'High Plan'
+      'starter': 'Starter',
+      'normal': 'Normal',
+      'high': 'High'
     };
     return planMap[plan] || plan;
   };
@@ -82,8 +82,8 @@ export const Profile: React.FC = () => {
   const getPlanPrice = (plan: string) => {
     const priceMap: { [key: string]: string } = {
       'starter': 'Free',
-      'normal': '$19.99/month',
-      'high': '$49.99/month'
+      'normal': '$19.99',
+      'high': '$49.99'
     };
     return priceMap[plan] || 'N/A';
   };
@@ -127,104 +127,134 @@ export const Profile: React.FC = () => {
     <div className="profile-page">
       <Header />
       <div className="profile-container">
+        {/* Profile Header with Avatar */}
         <div className="profile-header">
-          <h1>👤 User Profile</h1>
-          <p className="profile-subtitle">Your account information and subscription details</p>
+          <div className="avatar-container">
+            <div className="avatar">
+              {userEmail?.charAt(0).toUpperCase() || 'U'}
+            </div>
+          </div>
+          <div className="profile-header-info">
+            <h1>Account Settings</h1>
+            <p className="profile-email">{userEmail}</p>
+          </div>
         </div>
 
         <div className="profile-content">
-          {/* Account Information */}
-          <div className="profile-section">
-            <h2 className="section-title">Account Information</h2>
-            <div className="info-card">
-              <div className="info-row">
-                <span className="info-label">Email:</span>
-                <span className="info-value">{userEmail || 'N/A'}</span>
+          {/* Account Information Card */}
+          <div className="profile-card">
+            <div className="card-header">
+              <h2 className="card-title">Account Information</h2>
+            </div>
+            <div className="card-body">
+              <div className="info-item">
+                <div className="info-icon">📧</div>
+                <div className="info-content">
+                  <div className="info-label">Email Address</div>
+                  <div className="info-value">{userEmail || 'N/A'}</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Current Plan */}
+          {/* Current Plan Card */}
           {planInfo && (
-            <div className="profile-section">
-              <h2 className="section-title">Current Plan</h2>
-              <div className="plan-info-card">
-                <div className="plan-header">
-                  <div className="plan-name-badge">
+            <div className="profile-card plan-card">
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Current Plan</h2>
+                  <p className="card-subtitle">Manage your subscription and usage</p>
+                </div>
+                <button
+                  className="upgrade-btn"
+                  onClick={() => navigate('/plans')}
+                >
+                  {planInfo.plan === 'high' ? 'Manage' : 'Upgrade'}
+                </button>
+              </div>
+
+              <div className="card-body">
+                {/* Plan Badge */}
+                <div className="plan-badge-section">
+                  <div className="plan-badge">
                     <span className="plan-name">{getPlanDisplayName(planInfo.plan)}</span>
-                    <span className="plan-price">{getPlanPrice(planInfo.plan)}</span>
+                    <span className="plan-price">{getPlanPrice(planInfo.plan)}<span className="price-unit">/month</span></span>
                   </div>
-                  <button
-                    className="upgrade-btn"
-                    onClick={() => navigate('/plans')}
-                  >
-                    {planInfo.plan === 'high' ? 'Manage Plan' : 'Upgrade Plan'}
-                  </button>
                 </div>
 
                 {/* Usage Statistics */}
-                <div className="usage-stats">
-                  <div className="stat-item">
-                    <div className="stat-label">Daily Requests</div>
-                    <div className="stat-value">
-                      {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit}
+                <div className="usage-section">
+                  <h3 className="section-subtitle">Usage Statistics</h3>
+                  <div className="usage-stats">
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-label">Daily Requests</span>
+                        <span className="stat-value">
+                          {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit}
+                        </span>
+                      </div>
+                      <div className="stat-progress">
+                        <div
+                          className="stat-progress-bar"
+                          style={{
+                            width: planInfo.daily_limit === -1
+                              ? '100%'
+                              : `${Math.min((planInfo.daily_requests / planInfo.daily_limit) * 100, 100)}%`
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="stat-progress">
-                      <div
-                        className="stat-progress-bar"
-                        style={{
-                          width: planInfo.daily_limit === -1
-                            ? '100%'
-                            : `${Math.min((planInfo.daily_requests / planInfo.daily_limit) * 100, 100)}%`
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-label">Monthly Requests</div>
-                    <div className="stat-value">
-                      {planInfo.monthly_requests} / {planInfo.monthly_limit === -1 ? '∞' : planInfo.monthly_limit}
-                    </div>
-                    <div className="stat-progress">
-                      <div
-                        className="stat-progress-bar"
-                        style={{
-                          width: planInfo.monthly_limit === -1
-                            ? '100%'
-                            : `${Math.min((planInfo.monthly_requests / planInfo.monthly_limit) * 100, 100)}%`
-                        }}
-                      />
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-label">Monthly Requests</span>
+                        <span className="stat-value">
+                          {planInfo.monthly_requests} / {planInfo.monthly_limit === -1 ? '∞' : planInfo.monthly_limit}
+                        </span>
+                      </div>
+                      <div className="stat-progress">
+                        <div
+                          className="stat-progress-bar"
+                          style={{
+                            width: planInfo.monthly_limit === -1
+                              ? '100%'
+                              : `${Math.min((planInfo.monthly_requests / planInfo.monthly_limit) * 100, 100)}%`
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Features */}
-                <div className="plan-features">
-                  <h3 className="features-title">Plan Features</h3>
-                  <ul className="features-list">
+                <div className="features-section">
+                  <h3 className="section-subtitle">Plan Features</h3>
+                  <div className="features-grid">
                     {planInfo.features.map((feature, index) => (
-                      <li key={index}>✅ {feature}</li>
+                      <div key={index} className="feature-item">
+                        <span className="feature-icon">✓</span>
+                        <span className="feature-text">{feature}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
 
                 {/* Subscription Info */}
                 {planInfo.subscription_info && (
-                  <div className="subscription-info">
-                    <h3 className="subscription-title">Subscription Details</h3>
+                  <div className="subscription-section">
+                    <h3 className="section-subtitle">Subscription Details</h3>
                     <div className="subscription-details">
-                      <div className="subscription-row">
-                        <span className="subscription-label">Status:</span>
-                        <span className={`subscription-status ${planInfo.subscription_info.status}`}>
+                      <div className="subscription-item">
+                        <span className="subscription-label">Status</span>
+                        <span className={`subscription-badge ${planInfo.subscription_info.status}`}>
                           {planInfo.subscription_info.status.toUpperCase()}
                         </span>
                       </div>
-                      <div className="subscription-row">
-                        <span className="subscription-label">Subscription ID:</span>
+                      <div className="subscription-item">
+                        <span className="subscription-label">Subscription ID</span>
                         <span className="subscription-value">{planInfo.subscription_info.subscription_id}</span>
                       </div>
-                      <div className="subscription-row">
-                        <span className="subscription-label">Current Period End:</span>
+                      <div className="subscription-item">
+                        <span className="subscription-label">Renews On</span>
                         <span className="subscription-value">
                           {formatDate(planInfo.subscription_info.current_period_end)}
                         </span>
@@ -241,19 +271,19 @@ export const Profile: React.FC = () => {
             </div>
           )}
 
-          {/* Actions */}
+          {/* Action Buttons */}
           <div className="profile-actions">
+            <button
+              className="action-btn secondary"
+              onClick={() => navigate('/app')}
+            >
+              ← Back to Dashboard
+            </button>
             <button
               className="action-btn primary"
               onClick={() => navigate('/plans')}
             >
               {planInfo?.plan === 'high' ? 'Manage Subscription' : 'Upgrade Plan'}
-            </button>
-            <button
-              className="action-btn secondary"
-              onClick={() => navigate('/app')}
-            >
-              Go to Dashboard
             </button>
           </div>
         </div>
@@ -261,4 +291,3 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
-
