@@ -1,57 +1,61 @@
 """
 Stripe Webhook 端点
-使用最简单的格式，避免任何可能的导入问题
+使用 Vercel 官方要求的格式：继承 BaseHTTPRequestHandler 的 handler 类
 """
+from http.server import BaseHTTPRequestHandler
 import os
 import json
 import hmac
 import hashlib
 import time
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+from datetime import datetime
 
-def handler(request):
-    """Vercel Python 函数入口"""
-    try:
-        method = request.get("method", "GET")
-        headers = request.get("headers", {})
-        body = request.get("body", "")
-        
-        # GET 请求：健康检查
-        if method == "GET":
-            return {
-                "statusCode": 200,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({
-                    "status": "ok",
-                    "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
-                    "endpoint": "/api/stripe_webhook",
-                    "methods": ["POST", "GET"]
-                })
+class handler(BaseHTTPRequestHandler):
+    """Vercel Python 函数入口 - 必须是继承 BaseHTTPRequestHandler 的 handler 类"""
+    
+    def do_GET(self):
+        """处理 GET 请求（健康检查）"""
+        try:
+            body = {
+                "status": "ok",
+                "message": "Stripe Webhook endpoint is active. Use POST method for actual webhook events.",
+                "endpoint": "/api/stripe_webhook",
+                "methods": ["POST", "GET"]
             }
-        
-        # POST 请求：处理 Webhook
-        if method == "POST":
+            
+            body_bytes = json.dumps(body).encode("utf-8")
+            
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body_bytes)
+        except Exception as e:
+            self._send_error(500, str(e))
+    
+    def do_POST(self):
+        """处理 POST 请求（Stripe Webhook）"""
+        try:
+            # 读取请求体
+            content_length = int(self.headers.get('Content-Length', 0))
+            body_bytes = self.rfile.read(content_length)
+            body_str = body_bytes.decode('utf-8')
+            
             # 获取 webhook secret
             webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
             if not webhook_secret:
-                return {
-                    "statusCode": 500,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Webhook secret not configured"})
-                }
+                self._send_error(500, "Webhook secret not configured")
+                return
             
             # 获取签名
-            sig_header = headers.get("stripe-signature") or headers.get("Stripe-Signature")
+            sig_header = self.headers.get("stripe-signature") or self.headers.get("Stripe-Signature")
             if not sig_header:
-                return {
-                    "statusCode": 400,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Missing stripe-signature header"})
-                }
+                self._send_error(400, "Missing stripe-signature header")
+                return
             
             # 手动验证 webhook 签名
-            body_bytes = body.encode() if isinstance(body, str) else body
-            
-            # 解析签名
             signatures = {}
             for item in sig_header.split(","):
                 parts = item.split("=", 1)
@@ -62,23 +66,17 @@ def handler(request):
             signature = signatures.get("v1")
             
             if not timestamp or not signature:
-                return {
-                    "statusCode": 400,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Invalid signature format"})
-                }
+                self._send_error(400, "Invalid signature format")
+                return
             
             # 检查时间戳（防止重放攻击）
             current_time = int(time.time())
             if abs(current_time - int(timestamp)) > 300:  # 5 分钟
-                return {
-                    "statusCode": 400,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Timestamp too old"})
-                }
+                self._send_error(400, "Timestamp too old")
+                return
             
             # 计算签名
-            signed_payload = f"{timestamp}.{body_bytes.decode() if isinstance(body_bytes, bytes) else body_bytes}"
+            signed_payload = f"{timestamp}.{body_str}"
             expected_signature = hmac.new(
                 webhook_secret.encode(),
                 signed_payload.encode(),
@@ -87,208 +85,182 @@ def handler(request):
             
             # 验证签名
             if not hmac.compare_digest(expected_signature, signature):
-                return {
-                    "statusCode": 400,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Invalid signature"})
-                }
+                self._send_error(400, "Invalid signature")
+                return
             
             # 解析事件
             try:
-                event = json.loads(body_bytes.decode() if isinstance(body_bytes, bytes) else body_bytes)
+                event = json.loads(body_str)
             except json.JSONDecodeError as e:
-                return {
-                    "statusCode": 400,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Invalid JSON", "details": str(e)})
-                }
+                self._send_error(400, f"Invalid JSON: {str(e)}")
+                return
             
             # 处理事件
             event_type = event.get("type")
+            result = self._handle_stripe_event(event_type, event)
             
-            # 使用 HTTP 请求直接调用 Supabase API
-            supabase_url = os.getenv("SUPABASE_URL")
-            supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            # 返回成功响应
+            response_body = json.dumps(result).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(response_body)
             
-            if not supabase_url or not supabase_key:
-                return {
-                    "statusCode": 500,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"error": "Supabase credentials not configured"})
-                }
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"❌ Webhook 处理失败: {e}")
+            print(error_details)
+            self._send_error(500, str(e))
+    
+    def _handle_stripe_event(self, event_type, event):
+        """处理 Stripe 事件"""
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            raise Exception("Supabase credentials not configured")
+        
+        def supabase_request(method, table, data=None, filters=None):
+            """使用 HTTP 请求调用 Supabase API"""
+            url = f"{supabase_url}/rest/v1/{table}"
+            if filters:
+                url += "?" + "&".join([f"{k}=eq.{v}" for k, v in filters.items()])
             
-            # 使用 urllib 进行 HTTP 请求（延迟导入）
-            from urllib.request import Request, urlopen
-            from urllib.error import HTTPError
-            from datetime import datetime
+            req = Request(url)
+            req.add_header("apikey", supabase_key)
+            req.add_header("Authorization", f"Bearer {supabase_key}")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Prefer", "return=representation")
             
-            def supabase_request(method, table, data=None, filters=None):
-                """使用 HTTP 请求调用 Supabase API"""
-                url = f"{supabase_url}/rest/v1/{table}"
-                if filters:
-                    url += "?" + "&".join([f"{k}=eq.{v}" for k, v in filters.items()])
-                
-                req = Request(url)
-                req.add_header("apikey", supabase_key)
-                req.add_header("Authorization", f"Bearer {supabase_key}")
-                req.add_header("Content-Type", "application/json")
-                req.add_header("Prefer", "return=representation")
-                
-                if method == "GET":
-                    req.get_method = lambda: "GET"
-                elif method == "POST":
-                    req.get_method = lambda: "POST"
-                    req.data = json.dumps(data).encode() if data else None
-                elif method == "PATCH":
-                    req.get_method = lambda: "PATCH"
-                    req.data = json.dumps(data).encode() if data else None
-                
-                try:
-                    response = urlopen(req)
-                    result = json.loads(response.read().decode())
-                    return {"data": result if isinstance(result, list) else [result]}
-                except HTTPError as e:
-                    if e.code == 404:
-                        return {"data": []}
-                    raise
+            if method == "GET":
+                req.get_method = lambda: "GET"
+            elif method == "POST":
+                req.get_method = lambda: "POST"
+                req.data = json.dumps(data).encode() if data else None
+            elif method == "PATCH":
+                req.get_method = lambda: "PATCH"
+                req.data = json.dumps(data).encode() if data else None
             
-            if event_type == "checkout.session.completed":
-                # 支付成功
-                session = event.get("data", {}).get("object", {})
-                user_id = session.get("metadata", {}).get("user_id")
-                plan_value = session.get("metadata", {}).get("plan", "normal")
-                subscription_id = session.get("subscription")
-                customer_id = session.get("customer")
-                
-                if not user_id:
-                    return {
-                        "statusCode": 400,
-                        "headers": {"Content-Type": "application/json"},
-                        "body": json.dumps({"error": "Missing user_id in session metadata"})
-                    }
-                
-                # 检查记录是否存在
-                response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
-                
-                update_data = {
+            try:
+                response = urlopen(req)
+                result = json.loads(response.read().decode())
+                return {"data": result if isinstance(result, list) else [result]}
+            except HTTPError as e:
+                if e.code == 404:
+                    return {"data": []}
+                error_body = e.read().decode()
+                print(f"Supabase HTTP Error: {e.code} - {error_body}")
+                raise
+        
+        if event_type == "checkout.session.completed":
+            # 支付成功
+            session = event.get("data", {}).get("object", {})
+            user_id = session.get("metadata", {}).get("user_id")
+            plan_value = session.get("metadata", {}).get("plan", "normal")
+            subscription_id = session.get("subscription")
+            customer_id = session.get("customer")
+            
+            if not user_id:
+                raise Exception("Missing user_id in session metadata")
+            
+            # 检查记录是否存在
+            response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
+            
+            update_data = {
+                "plan": plan_value,
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "subscription_status": "active",
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            if response["data"]:
+                # 更新现有记录
+                supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
+            else:
+                # 创建新记录
+                insert_data = {
+                    "user_id": user_id,
                     "plan": plan_value,
-                    "stripe_customer_id": customer_id,
-                    "stripe_subscription_id": subscription_id,
+                    "created_at": datetime.now().isoformat(),
+                    **update_data
+                }
+                supabase_request("POST", "user_plans", insert_data)
+            
+            print(f"✅ 用户 {user_id} 已升级到 {plan_value} plan")
+            return {"status": "success", "event_type": event_type}
+            
+        elif event_type == "customer.subscription.updated":
+            # 订阅更新
+            subscription = event.get("data", {}).get("object", {})
+            customer_id = subscription.get("customer")
+            status = subscription.get("status")
+            
+            if not customer_id:
+                raise Exception("Missing customer_id in subscription")
+            
+            # 从数据库查找用户
+            response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
+            
+            if not response["data"]:
+                print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
+                return {"status": "warning", "message": "User not found"}
+            
+            user_id = response["data"][0]["user_id"]
+            
+            if status == "active":
+                supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                     "subscription_status": "active",
                     "updated_at": datetime.now().isoformat()
-                }
-                
-                if response["data"]:
-                    # 更新现有记录
-                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
-                else:
-                    # 创建新记录
-                    insert_data = {
-                        "user_id": user_id,
-                        "plan": plan_value,
-                        "created_at": datetime.now().isoformat(),
-                        **update_data
-                    }
-                    supabase_request("POST", "user_plans", insert_data)
-                
-                print(f"✅ 用户 {user_id} 已升级到 {plan_value} plan")
-                
-            elif event_type == "customer.subscription.updated":
-                # 订阅更新
-                subscription = event.get("data", {}).get("object", {})
-                customer_id = subscription.get("customer")
-                status = subscription.get("status")
-                
-                if not customer_id:
-                    return {
-                        "statusCode": 400,
-                        "headers": {"Content-Type": "application/json"},
-                        "body": json.dumps({"error": "Missing customer_id in subscription"})
-                    }
-                
-                # 从数据库查找用户
-                response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
-                
-                if not response["data"]:
-                    print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
-                    return {
-                        "statusCode": 200,
-                        "headers": {"Content-Type": "application/json"},
-                        "body": json.dumps({"status": "warning", "message": "User not found"})
-                    }
-                
-                user_id = response["data"][0]["user_id"]
-                
-                if status == "active":
-                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                        "subscription_status": "active",
-                        "updated_at": datetime.now().isoformat()
-                    })
-                    print(f"✅ 用户 {user_id} 订阅已激活")
-                elif status in ["canceled", "past_due", "unpaid"]:
-                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                        "plan": "normal",
-                        "subscription_status": status,
-                        "updated_at": datetime.now().isoformat()
-                    })
-                    print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 normal")
-                    
-            elif event_type == "customer.subscription.deleted":
-                # 订阅删除
-                subscription = event.get("data", {}).get("object", {})
-                customer_id = subscription.get("customer")
-                
-                if not customer_id:
-                    return {
-                        "statusCode": 400,
-                        "headers": {"Content-Type": "application/json"},
-                        "body": json.dumps({"error": "Missing customer_id in subscription"})
-                    }
-                
-                # 从数据库查找用户
-                response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
-                
-                if not response["data"]:
-                    print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
-                    return {
-                        "statusCode": 200,
-                        "headers": {"Content-Type": "application/json"},
-                        "body": json.dumps({"status": "warning", "message": "User not found"})
-                    }
-                
-                user_id = response["data"][0]["user_id"]
-                
+                })
+                print(f"✅ 用户 {user_id} 订阅已激活")
+            elif status in ["canceled", "past_due", "unpaid"]:
                 supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                     "plan": "normal",
-                    "subscription_status": "canceled",
+                    "subscription_status": status,
                     "updated_at": datetime.now().isoformat()
                 })
-                print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 normal")
+                print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 normal")
             
-            return {
-                "statusCode": 200,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"status": "success", "event_type": event_type})
-            }
-        
-        # 其他方法
-        return {
-            "statusCode": 405,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"error": "Method not allowed"})
-        }
-    except Exception as e:
-        # 捕获所有异常，返回错误信息
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ Webhook 处理失败: {e}")
-        print(error_details)
-        return {
-            "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "error": "Internal server error",
-                "message": str(e),
-                "type": type(e).__name__
+            return {"status": "success", "event_type": event_type}
+            
+        elif event_type == "customer.subscription.deleted":
+            # 订阅删除
+            subscription = event.get("data", {}).get("object", {})
+            customer_id = subscription.get("customer")
+            
+            if not customer_id:
+                raise Exception("Missing customer_id in subscription")
+            
+            # 从数据库查找用户
+            response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
+            
+            if not response["data"]:
+                print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
+                return {"status": "warning", "message": "User not found"}
+            
+            user_id = response["data"][0]["user_id"]
+            
+            supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
+                "plan": "normal",
+                "subscription_status": "canceled",
+                "updated_at": datetime.now().isoformat()
             })
-        }
+            print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 normal")
+            return {"status": "success", "event_type": event_type}
+        
+        return {"status": "success", "event_type": event_type, "message": "Event processed"}
+    
+    def _send_error(self, status_code, message):
+        """发送错误响应"""
+        try:
+            error_body = json.dumps({"error": message}).encode("utf-8")
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(error_body)
+        except Exception as e:
+            print(f"Failed to send error response: {e}")
