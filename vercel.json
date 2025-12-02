@@ -15,7 +15,7 @@
     "api/index.py": {
       "maxDuration": 30
     },
-    "api/webhooks/stripe.py": {
+    "api/stripe_webhook.py": {
       "maxDuration": 30
     }
   }
