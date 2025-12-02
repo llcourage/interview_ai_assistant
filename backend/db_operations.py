@@ -35,7 +35,7 @@ async def get_user_plan(user_id: str) -> UserPlan:
         )
 
 
-async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> UserPlan:
+async def create_user_plan(user_id: str, plan: PlanType = PlanType.STARTER) -> UserPlan:
     """创建用户Plan"""
     try:
         supabase = get_supabase()

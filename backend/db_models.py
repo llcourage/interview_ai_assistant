@@ -10,8 +10,9 @@ from pydantic import BaseModel
 
 class PlanType(str, Enum):
     """用户订阅计划类型"""
-    NORMAL = "normal"
-    HIGH = "high"
+    STARTER = "starter"  # 免费计划（默认）
+    NORMAL = "normal"    # 付费计划 $19.99/月
+    HIGH = "high"        # 付费计划 $49.99/月
 
 
 class UserPlan(BaseModel):
@@ -60,6 +61,12 @@ class UsageQuota(BaseModel):
 
 # Plan 配额定义
 PLAN_LIMITS = {
+    PlanType.STARTER: {
+        "daily_limit": 10,  # 每日10次（免费计划）
+        "monthly_limit": 100,  # 每月100次
+        "models": ["gpt-4o-mini"],  # 只能用mini
+        "features": ["basic_chat", "image_analysis"]
+    },
     PlanType.NORMAL: {
         "daily_limit": 200,  # 每日200次
         "monthly_limit": 5000,  # 每月5000次
