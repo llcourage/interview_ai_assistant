@@ -1,3 +1,14 @@
+# ========== 必须在所有导入之前加载环境变量 ==========
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 明确指定 .env 文件路径，确保无论从哪里启动都能找到
+backend_dir = Path(__file__).parent.resolve()
+env_path = backend_dir / ".env"
+# 使用 override=True 确保覆盖已存在的环境变量
+load_dotenv(dotenv_path=str(env_path), override=True)
+
+# ========== 现在可以导入其他模块 ==========
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -5,9 +16,7 @@ import uvicorn
 import os
 import json
 import platform
-from pathlib import Path
 from typing import Optional, Union
-from dotenv import load_dotenv
 from datetime import datetime
 import stripe  # 导入 stripe 用于错误处理
 
@@ -32,9 +41,6 @@ from payment_stripe import (
     handle_subscription_updated, handle_subscription_deleted,
     cancel_subscription, get_subscription_info
 )
-
-# 加载环境变量
-load_dotenv()
 
 # ========== FastAPI App ==========
 
@@ -473,41 +479,86 @@ async def stripe_webhook_get():
 
 @app.post("/api/webhooks/stripe", tags=["Webhooks"])
 async def stripe_webhook(request: Request):
-    """Stripe Webhook 处理"""
+    """Stripe Webhook Handler with signature verification and database updates"""
     
-    payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
-    
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    body = await request.body()
+    event_type = "unknown"
+    event_id = "unknown"
     
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, webhook_secret
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
-        raise HTTPException(status_code=400, detail="Invalid signature")
-    
-    # 处理不同的事件类型
-    event_type = event["type"]
-    
-    if event_type == "checkout.session.completed":
-        # 支付成功
-        session = event["data"]["object"]
-        await handle_checkout_completed(session)
+        # Step 1: Get signature (body already retrieved above)
+        sig_header = request.headers.get("stripe-signature")
         
-    elif event_type == "customer.subscription.updated":
-        # 订阅更新
-        subscription = event["data"]["object"]
-        await handle_subscription_updated(subscription)
+        if not sig_header:
+            error_msg = "Missing stripe-signature header"
+            print(f"ERROR: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
         
-    elif event_type == "customer.subscription.deleted":
-        # 订阅删除
-        subscription = event["data"]["object"]
-        await handle_subscription_deleted(subscription)
-    
-    return {"status": "success"}
+        # Step 2: Get webhook secret from environment
+        webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+        
+        if not webhook_secret:
+            error_msg = "STRIPE_WEBHOOK_SECRET not configured"
+            print(f"ERROR: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        # Step 3: Verify Stripe signature
+        try:
+            event = stripe.Webhook.construct_event(
+                body, sig_header, webhook_secret
+            )
+        except ValueError as e:
+            error_msg = f"Invalid payload: {str(e)}"
+            print(f"ERROR: Webhook signature verification failed - {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        except stripe.error.SignatureVerificationError as e:
+            error_msg = f"Invalid signature: {str(e)}"
+            print(f"ERROR: Webhook signature verification failed - {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Step 4: Extract event info
+        event_type = event.get("type", "unknown")
+        event_id = event.get("id", "unknown")
+        
+        print(f"Received webhook event: {event_type} [id: {event_id}]")
+        
+        # Step 5: Handle different event types
+        if event_type == "checkout.session.completed":
+            session = event["data"]["object"]
+            await handle_checkout_completed(session)
+            print(f"Successfully processed {event_type} [id: {event_id}]")
+            
+        elif event_type == "customer.subscription.updated":
+            subscription = event["data"]["object"]
+            await handle_subscription_updated(subscription)
+            print(f"Successfully processed {event_type} [id: {event_id}]")
+            
+        elif event_type == "customer.subscription.deleted":
+            subscription = event["data"]["object"]
+            await handle_subscription_deleted(subscription)
+            print(f"Successfully processed {event_type} [id: {event_id}]")
+            
+        else:
+            # Log unhandled events but return success (Stripe expects 200 for all received events)
+            print(f"Unhandled event type: {event_type} [id: {event_id}] - returning success")
+        
+        # Step 6: Return success response
+        return {
+            "status": "success",
+            "event_type": event_type,
+            "event_id": event_id
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (they already have proper status codes)
+        raise
+    except Exception as e:
+        # Catch all other exceptions and return 500 with details
+        error_msg = f"Error processing webhook event {event_type} [id: {event_id}]: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 # ========== 保持向后兼容的API（逐步废弃）==========
@@ -541,27 +592,42 @@ async def text_chat_legacy(
 # ========== 启动服务 ==========
 
 if __name__ == "__main__":
+    # 如果是直接运行（不是通过 uvicorn backend.main:app），需要处理导入路径
+    import sys
+    from pathlib import Path
+    
+    # 获取 backend 目录的绝对路径并添加到 sys.path
+    backend_dir = Path(__file__).parent.resolve()
+    project_root = backend_dir.parent.resolve()
+    
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", 8000))
     
     print("=" * 60)
-    print("🔥 AI 面试助手后端服务 v2.0")
+    print("AI Interview Assistant Backend Service v2.0")
     print("=" * 60)
-    print(f"📡 服务地址: http://{host}:{port}")
-    print(f"📚 API 文档: http://{host}:{port}/docs")
-    print(f"🔧 健康检查: http://{host}:{port}/health")
+    print(f"Service URL: http://{host}:{port}")
+    print(f"API Docs: http://{host}:{port}/docs")
+    print(f"Health Check: http://{host}:{port}/health")
     print("=" * 60)
-    print("🆕 新功能:")
-    print("  - 统一的 /api/chat 接口")
-    print("  - Plan 订阅管理")
-    print("  - 使用统计和限流")
-    print("  - Stripe 支付集成")
+    print("Features:")
+    print("  - Unified /api/chat endpoint")
+    print("  - Plan subscription management")
+    print("  - Usage statistics and rate limiting")
+    print("  - Stripe payment integration")
+    print("=" * 60)
+    print("Tip: Use 'uvicorn backend.main:app --port 8000' from project root")
     print("=" * 60)
     
     uvicorn.run(
-        "main:app",
+        "main:app",  # 直接运行时，backend 已经在 sys.path 中
         host=host,
         port=port,
-        reload=True,
+        reload=False,  # 直接运行时暂时禁用 reload，避免路径问题
         log_level="info"
     )

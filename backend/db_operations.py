@@ -89,51 +89,60 @@ async def update_user_plan(
     subscription_status: Optional[str] = None,
     plan_expires_at: Optional[datetime] = None
 ) -> UserPlan:
-    """更新用户Plan（如果记录不存在则创建）"""
+    """更新用户Plan（如果记录不存在则创建）- 使用 upsert 避免 204 错误"""
     try:
+        from postgrest.exceptions import APIError
+        
         supabase = get_supabase()
         
-        # 先检查记录是否存在
-        existing = supabase.table("user_plans").select("user_id").eq("user_id", user_id).maybe_single().execute()
-        
-        update_data = {
-            "updated_at": datetime.now().isoformat()
+        # 构建数据字典
+        now = datetime.now()
+        data = {
+            "user_id": user_id,
+            "updated_at": now.isoformat()
         }
         
+        # 只有非 None 的值才添加到 data 中（避免覆盖已有值为 NULL）
+        # 注意：如果是新记录创建（通过 webhook），plan 总是会被传入
+        # 如果是部分更新（plan 为 None），则只更新其他字段
         if plan is not None:
-            update_data["plan"] = plan.value
-        if stripe_customer_id is not None:
-            update_data["stripe_customer_id"] = stripe_customer_id
-        if stripe_subscription_id is not None:
-            update_data["stripe_subscription_id"] = stripe_subscription_id
-        if subscription_status is not None:
-            update_data["subscription_status"] = subscription_status
-        if plan_expires_at is not None:
-            update_data["plan_expires_at"] = plan_expires_at.isoformat()
+            data["plan"] = plan.value
         
-        if existing and existing.data:
-            # 记录存在，更新
-            response = supabase.table("user_plans").update(update_data).eq("user_id", user_id).execute()
-        else:
-            # 记录不存在，创建新记录
-            print(f"📝 用户 {user_id} 的 Plan 记录不存在，创建新记录")
-            now = datetime.now()
-            insert_data = {
-                "user_id": user_id,
-                "plan": (plan or PlanType.STARTER).value,
-                "created_at": now.isoformat(),
-                **update_data
-            }
-            response = supabase.table("user_plans").insert(insert_data).execute()
+        # 这些字段只在有值时才更新
+        if stripe_customer_id is not None:
+            data["stripe_customer_id"] = stripe_customer_id
+        if stripe_subscription_id is not None:
+            data["stripe_subscription_id"] = stripe_subscription_id
+        if subscription_status is not None:
+            data["subscription_status"] = subscription_status
+        if plan_expires_at is not None:
+            data["plan_expires_at"] = plan_expires_at.isoformat()
+        
+        # 使用 upsert，以 user_id 为唯一键
+        # 如果记录不存在则插入，存在则更新
+        try:
+            # 尝试标准 upsert
+            response = supabase.table("user_plans").upsert(data).execute()
+            
+        except Exception as upsert_error:
+            # 如果标准 upsert 失败，尝试指定 on_conflict
+            try:
+                response = supabase.table("user_plans").upsert(
+                    data,
+                    on_conflict="user_id"
+                ).execute()
+            except Exception as e2:
+                print(f"Upsert failed: {e2}")
+                raise
         
         # 防御性检查：确保 response 和 response.data 都存在
         if response is None:
-            print(f"❌ Supabase update/insert 返回 None")
-            raise Exception("更新Plan失败：数据库操作返回空响应")
+            print(f"Supabase upsert returned None")
+            raise Exception("Update plan failed: Database operation returned empty response")
         
         if not hasattr(response, 'data') or not response.data:
-            print(f"❌ Supabase update/insert 返回的 response.data 为空: {response}")
-            raise Exception("更新Plan失败：数据库操作未返回数据")
+            print(f"Supabase upsert returned empty response.data: {response}")
+            raise Exception("Update plan failed: Database operation did not return data")
         
         # 处理返回的数据
         if isinstance(response.data, list) and len(response.data) > 0:
@@ -141,10 +150,16 @@ async def update_user_plan(
         elif not isinstance(response.data, list) and response.data:
             return UserPlan(**response.data)
         else:
-            print(f"❌ Supabase update/insert 返回的数据格式异常: {response.data}")
-            raise Exception("更新Plan失败：返回的数据格式不正确")
+            print(f"Supabase upsert returned unexpected data format: {response.data}")
+            raise Exception("Update plan failed: Returned data format is incorrect")
+            
+    except APIError as e:
+        print(f"Supabase upsert APIError: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     except Exception as e:
-        print(f"❌ 更新用户Plan失败: {e}")
+        print(f"Update user plan failed: {e}")
         import traceback
         traceback.print_exc()
         raise

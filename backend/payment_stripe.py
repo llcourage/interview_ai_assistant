@@ -132,8 +132,21 @@ async def handle_checkout_completed(session: dict):
         session: Stripe Checkout Session 对象
     """
     try:
-        user_id = session["metadata"]["user_id"]
-        plan_value = session["metadata"]["plan"]
+        session_id = session.get('id')
+        
+        # 检查 metadata 是否存在
+        metadata = session.get("metadata", {})
+        if not metadata:
+            print(f"Warning: Checkout session {session_id} has no metadata, skipping")
+            return
+        
+        user_id = metadata.get("user_id")
+        plan_value = metadata.get("plan")
+        
+        if not user_id or not plan_value:
+            print(f"Warning: Checkout session {session_id} missing user_id or plan in metadata")
+            return
+        
         plan = PlanType(plan_value)
         
         subscription_id = session.get("subscription")
@@ -149,9 +162,12 @@ async def handle_checkout_completed(session: dict):
             plan_expires_at=None  # 订阅模式下，过期时间由 Stripe 管理
         )
         
-        print(f"✅ 用户 {user_id} 已升级到 {plan.value} plan")
+        print(f"Success: User {user_id} upgraded to {plan.value} plan")
     except Exception as e:
-        print(f"❌ 处理支付成功 Webhook 失败: {e}")
+        error_msg = f"Failed to process checkout completed webhook: {e}"
+        print(f"Error: {error_msg}")
+        import traceback
+        traceback.print_exc()
         raise
 
 
