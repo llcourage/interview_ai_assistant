@@ -17,22 +17,29 @@ async def get_user_plan(user_id: str) -> UserPlan:
     """获取用户的Plan"""
     try:
         supabase = get_supabase()
-        response = supabase.table("user_plans").select("*").eq("user_id", user_id).single().execute()
+        # 使用 maybe_single() 而不是 single()，避免在没有记录时抛出异常
+        response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
         
         if response.data:
             return UserPlan(**response.data)
         else:
             # 如果没有记录，创建默认的 starter plan
+            print(f"📝 用户 {user_id} 没有 Plan 记录，创建默认 STARTER plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ 获取用户Plan失败: {e}")
-        # 返回默认的 starter plan
-        return UserPlan(
-            user_id=user_id,
-            plan=PlanType.STARTER,
-            created_at=datetime.now(),
-            updated_at=datetime.now()
-        )
+        # 如果创建失败，尝试返回内存中的对象（但这不是持久化的）
+        try:
+            return await create_user_plan(user_id)
+        except Exception as create_error:
+            print(f"❌ 创建用户Plan也失败: {create_error}")
+            # 最后返回一个临时对象（不推荐，但至少不会崩溃）
+            return UserPlan(
+                user_id=user_id,
+                plan=PlanType.STARTER,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
 
 
 async def create_user_plan(user_id: str, plan: PlanType = PlanType.STARTER) -> UserPlan:
@@ -67,9 +74,12 @@ async def update_user_plan(
     subscription_status: Optional[str] = None,
     plan_expires_at: Optional[datetime] = None
 ) -> UserPlan:
-    """更新用户Plan"""
+    """更新用户Plan（如果记录不存在则创建）"""
     try:
         supabase = get_supabase()
+        
+        # 先检查记录是否存在
+        existing = supabase.table("user_plans").select("user_id").eq("user_id", user_id).maybe_single().execute()
         
         update_data = {
             "updated_at": datetime.now().isoformat()
@@ -86,14 +96,29 @@ async def update_user_plan(
         if plan_expires_at is not None:
             update_data["plan_expires_at"] = plan_expires_at.isoformat()
         
-        response = supabase.table("user_plans").update(update_data).eq("user_id", user_id).execute()
+        if existing.data:
+            # 记录存在，更新
+            response = supabase.table("user_plans").update(update_data).eq("user_id", user_id).execute()
+        else:
+            # 记录不存在，创建新记录
+            print(f"📝 用户 {user_id} 的 Plan 记录不存在，创建新记录")
+            now = datetime.now()
+            insert_data = {
+                "user_id": user_id,
+                "plan": (plan or PlanType.STARTER).value,
+                "created_at": now.isoformat(),
+                **update_data
+            }
+            response = supabase.table("user_plans").insert(insert_data).execute()
         
         if response.data:
-            return UserPlan(**response.data[0])
+            return UserPlan(**response.data[0] if isinstance(response.data, list) else response.data)
         else:
-            raise Exception("更新Plan失败")
+            raise Exception("更新Plan失败：数据库操作未返回数据")
     except Exception as e:
         print(f"❌ 更新用户Plan失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 

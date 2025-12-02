@@ -136,7 +136,7 @@ async def handle_subscription_updated(subscription: dict):
         from db_supabase import get_supabase
         supabase = get_supabase()
         
-        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).single().execute()
+        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()
         
         if not response.data:
             print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
@@ -178,7 +178,7 @@ async def handle_subscription_deleted(subscription: dict):
         from db_supabase import get_supabase
         supabase = get_supabase()
         
-        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).single().execute()
+        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()
         
         if not response.data:
             print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
