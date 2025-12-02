@@ -39,7 +39,17 @@ export const Plans: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create checkout session');
+        // 尝试获取详细错误信息
+        let errorMessage = 'Failed to create checkout session';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+          console.error('Checkout API error:', errorData);
+        } catch (e) {
+          console.error('Checkout API error (non-JSON):', response.status, response.statusText);
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

@@ -45,6 +45,13 @@ export const Checkout: React.FC = () => {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
       
+      // 调试信息
+      console.log('🔍 Checkout Debug Info:');
+      console.log('  - API_BASE_URL:', API_BASE_URL);
+      console.log('  - Request URL:', `${API_BASE_URL}/api/plan/checkout`);
+      console.log('  - Plan:', plan);
+      console.log('  - Token present:', !!token);
+      
       const response = await fetch(`${API_BASE_URL}/api/plan/checkout`, {
         method: 'POST',
         headers: {
@@ -58,8 +65,29 @@ export const Checkout: React.FC = () => {
         })
       });
 
+      console.log('📡 Response status:', response.status, response.statusText);
+      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
-        throw new Error('Failed to create checkout session');
+        // 尝试获取详细错误信息
+        let errorMessage = 'Failed to create checkout session';
+        let errorData = null;
+        try {
+          const text = await response.text();
+          console.error('📡 Response body (text):', text);
+          try {
+            errorData = JSON.parse(text);
+            errorMessage = errorData.detail || errorData.message || errorMessage;
+            console.error('Checkout API error (JSON):', errorData);
+          } catch (e) {
+            errorMessage = text || `Server error: ${response.status} ${response.statusText}`;
+            console.error('Checkout API error (non-JSON):', response.status, response.statusText, text);
+          }
+        } catch (e) {
+          console.error('Failed to read response:', e);
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -69,7 +97,8 @@ export const Checkout: React.FC = () => {
       
     } catch (err) {
       console.error('Checkout error:', err);
-      setError('Failed to create checkout session. Please try again later.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create checkout session. Please try again later.';
+      setError(errorMessage);
       setLoading(false);
     }
   };

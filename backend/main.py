@@ -216,9 +216,21 @@ async def create_checkout(
         
         return checkout_data
     except ValueError as e:
+        # 配置错误，返回 400
+        print(f"❌ Checkout 配置错误: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except stripe.error.StripeError as e:
+        # Stripe API 错误
+        error_msg = f"Stripe API 错误: {e.user_message if hasattr(e, 'user_message') else str(e)}"
+        print(f"❌ Stripe API 错误: {e}")
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建支付会话失败: {str(e)}")
+        # 其他错误
+        error_msg = f"创建支付会话失败: {str(e)}"
+        print(f"❌ Checkout 错误: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/api/plan/cancel", tags=["Plan管理"])

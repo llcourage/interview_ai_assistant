@@ -36,9 +36,17 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
         dict: 包含 checkout_url 的字典
     """
     try:
+        # 检查 Stripe API Key
+        if not stripe.api_key or stripe.api_key == "":
+            raise ValueError("STRIPE_SECRET_KEY 未配置，请在环境变量中设置")
+        
         price_id = STRIPE_PRICE_IDS.get(plan)
-        if not price_id:
-            raise ValueError(f"未找到 {plan} 对应的 Stripe Price ID")
+        if not price_id or price_id in ["price_xxx", "price_yyy"]:
+            raise ValueError(
+                f"未找到 {plan} 对应的 Stripe Price ID。"
+                f"当前值: {price_id}。"
+                f"请在 Vercel 环境变量中设置 STRIPE_PRICE_{plan.value.upper()}"
+            )
         
         # 获取或创建 Stripe Customer
         user_plan_data = await get_user_plan(user_id)
@@ -66,6 +74,7 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
             mode="subscription",
             success_url=success_url,
             cancel_url=cancel_url,
+            allow_promotion_codes=True,  # 启用优惠码输入框
             metadata={
                 "user_id": user_id,
                 "plan": plan.value

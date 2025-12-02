@@ -39,14 +39,17 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
 STRIPE_SECRET_KEY=sk_test_your-stripe-secret-key
 STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
-STRIPE_PRICE_NORMAL=price_xxx
-STRIPE_PRICE_HIGH=price_yyy
+STRIPE_PRICE_NORMAL=price_1ABC123def456GHI789  # 替换为您的 Normal Plan Price ID
+STRIPE_PRICE_HIGH=price_1XYZ789abc123DEF456    # 替换为您的 High Plan Price ID
 ```
 
 > 📝 **注意**：
 > - 开发环境使用 `sk_test_...`，生产环境使用 `sk_live_...`
 > - `STRIPE_WEBHOOK_SECRET` 需要在 Stripe Dashboard 中创建 Webhook 后获取
 > - `STRIPE_PRICE_NORMAL` 和 `STRIPE_PRICE_HIGH` 是 Stripe Product 的 Price ID
+>   - 如何获取 Price ID？请参考 [STRIPE_SETUP.md](./STRIPE_SETUP.md) 第 3 节
+>   - Price ID 格式：`price_xxxxxxxxxxxxx`（约 20-30 个字符）
+>   - 直接粘贴 Price ID，**不要包含引号**
 
 ### 3. 环境变量作用域
 
@@ -103,6 +106,12 @@ STRIPE_PRICE_HIGH=price_yyy
 - Pricing: $49.99/month (Recurring)
 - 复制生成的 **Price ID** → `STRIPE_PRICE_HIGH`
 
+> 📝 **如何找到 Price ID**：
+> 1. 在 Stripe Dashboard → **Products** 中打开您创建的产品
+> 2. 在 **Pricing** 部分，您会看到类似 `price_1ABC123def456GHI789` 的 ID
+> 3. 点击 Price ID 右侧的复制图标或直接点击 ID 即可复制
+> 4. 详细步骤请参考 [STRIPE_SETUP.md](./STRIPE_SETUP.md) 第 3 节
+
 #### 配置 Stripe Webhook
 
 1. 进入 **Developers** → **Webhooks**
@@ -111,9 +120,10 @@ STRIPE_PRICE_HIGH=price_yyy
    - **Endpoint URL**: `https://www.desktopai.org/api/stripe_webhook`
    - **Description**: "AI Interview Assistant Webhook"
    - **Events to send**: 选择以下事件：
-     - ✅ `checkout.session.completed` - 支付成功
-     - ✅ `customer.subscription.updated` - 订阅更新
-     - ✅ `customer.subscription.deleted` - 订阅取消
+     - ✅ `checkout.session.completed` - 支付成功（必需）
+     - ✅ `customer.subscription.created` - 订阅创建（可选，但推荐）
+     - ✅ `customer.subscription.updated` - 订阅更新（必需）
+     - ✅ `customer.subscription.deleted` - 订阅取消（必需）
 4. 点击 **Add endpoint**
 5. 复制生成的 **Signing secret** (whsec_xxx) → `STRIPE_WEBHOOK_SECRET`
 

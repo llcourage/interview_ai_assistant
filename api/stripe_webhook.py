@@ -154,7 +154,35 @@ class handler(BaseHTTPRequestHandler):
                 print(f"Supabase HTTP Error: {e.code} - {error_body}")
                 raise
         
-        if event_type == "checkout.session.completed":
+        if event_type == "customer.subscription.created":
+            # 订阅创建（通常由 checkout.session.completed 触发，但为了完整性也处理）
+            subscription = event.get("data", {}).get("object", {})
+            customer_id = subscription.get("customer")
+            subscription_id = subscription.get("id")
+            
+            if not customer_id:
+                raise Exception("Missing customer_id in subscription")
+            
+            # 从数据库查找用户
+            response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
+            
+            if not response["data"]:
+                # 如果用户记录不存在，可能是通过其他方式创建的订阅，记录日志但不处理
+                print(f"⚠️ 订阅创建但未找到用户: customer_id={customer_id}")
+                return {"status": "warning", "message": "User not found for subscription creation"}
+            
+            user_id = response["data"][0]["user_id"]
+            
+            # 更新订阅ID（如果还没有）
+            supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
+                "stripe_subscription_id": subscription_id,
+                "subscription_status": "active",
+                "updated_at": datetime.now().isoformat()
+            })
+            print(f"✅ 用户 {user_id} 订阅已创建")
+            return {"status": "success", "event_type": event_type}
+        
+        elif event_type == "checkout.session.completed":
             # 支付成功
             session = event.get("data", {}).get("object", {})
             user_id = session.get("metadata", {}).get("user_id")
