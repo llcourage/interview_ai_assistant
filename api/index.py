@@ -72,14 +72,10 @@ class handler(BaseHTTPRequestHandler):
         self._handle_request()
     
     def _handle_request(self):
-        """处理所有 HTTP 请求 - 使用 Mangum 适配 FastAPI"""
+        """处理所有 HTTP 请求 - 直接调用 FastAPI ASGI app"""
         try:
             # 获取 FastAPI 应用
             app = get_app()
-            
-            # 使用 Mangum 处理请求
-            from mangum import Mangum
-            mangum_handler = Mangum(app, lifespan="off")
             
             # 构建 ASGI scope
             scope = self._build_scope()
@@ -114,7 +110,8 @@ class handler(BaseHTTPRequestHandler):
                 async def send(message):
                     send_queue.append(message)
                 
-                await mangum_handler(scope, receive, send)
+                # 直接调用 FastAPI app（它是 ASGI 应用）
+                await app(scope, receive, send)
             
             # 运行异步应用
             try:

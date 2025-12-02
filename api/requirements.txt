@@ -1,7 +1,7 @@
 # 固定版本以避免 Vercel 环境中的兼容性问题
 # 注意：pydantic 2.11.7 需要 typing-extensions>=4.12.2
 fastapi==0.109.0
-mangum==0.17.0
+# mangum 已移除 - Vercel Python runtime 不需要，直接调用 FastAPI app
 pydantic==2.11.7
 pydantic-settings==2.1.0
 typing-extensions>=4.14.0
