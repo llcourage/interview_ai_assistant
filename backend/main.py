@@ -179,6 +179,7 @@ async def root():
 
 
 @app.get("/health")
+@app.get("/api/health")  # 同时支持 /health 和 /api/health
 async def health_check():
     """健康检查接口 - 包含环境变量状态"""
     is_vercel = os.getenv("VERCEL")
