@@ -469,25 +469,16 @@ async def create_checkout(
     
     # 非桌面版：正常处理
     try:
-        plan = PlanType(request.plan)
-        
-        checkout_data = await create_checkout_session(
-            user_id=current_user.id,
-            plan=plan,
-            success_url=request.success_url,
-            cancel_url=request.cancel_url,
-            user_email=current_user.email  # 传递用户邮箱
-        )
-        
-        # 非桌面版：正常处理（需要验证 token）
+        # 验证 token 并获取用户信息
         auth_header = http_request.headers.get("Authorization", "")
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="缺少认证 token")
         
         token = auth_header.replace("Bearer ", "")
         current_user = await verify_token(token)
-        plan = PlanType(request.plan)
         
+        # 创建支付会话
+        plan = PlanType(request.plan)
         checkout_data = await create_checkout_session(
             user_id=current_user.id,
             plan=plan,
