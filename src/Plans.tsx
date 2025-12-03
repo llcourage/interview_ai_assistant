@@ -77,9 +77,9 @@ export const Plans: React.FC = () => {
           {/* Normal Plan */}
           <div className="plan-card featured">
             <div className="plan-badge">Recommended</div>
-            <h3 className="plan-name">Normal</h3>
-            <p className="plan-description">We provide GPT-4o mini</p>
-            <div className="plan-price">$19.99<span className="price-unit">/month</span></div>
+            <h3 className="plan-name">Normal Plan</h3>
+            <p className="plan-description">Great model, 500K token per week</p>
+            <div className="plan-price">$19.9<span className="price-unit">/week</span></div>
             <button
               className="plan-button"
               onClick={() => handlePlanSelect('normal')}
@@ -91,9 +91,9 @@ export const Plans: React.FC = () => {
 
           {/* High Plan */}
           <div className="plan-card">
-            <h3 className="plan-name">High</h3>
-            <p className="plan-description">We provide GPT-4o</p>
-            <div className="plan-price">$49.99<span className="price-unit">/month</span></div>
+            <h3 className="plan-name">High Plan</h3>
+            <p className="plan-description">Premium model with advanced features</p>
+            <div className="plan-price">$29.9<span className="price-unit">/week</span></div>
             <button
               className="plan-button"
               onClick={() => handlePlanSelect('high')}

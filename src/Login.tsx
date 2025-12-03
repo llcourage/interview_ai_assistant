@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { isElectron } from './utils/isElectron';
 import './Login.css';
 
 interface LoginProps {
@@ -105,8 +106,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       // Use the provided callback
       onLoginSuccess();
     } else {
-      // Default redirect to profile page after login
-      navigate('/profile');
+      // In Electron client, redirect to /app; in web browser, redirect to /profile
+      if (isElectron()) {
+        navigate('/app');
+      } else {
+        navigate('/profile');
+      }
     }
   };
 

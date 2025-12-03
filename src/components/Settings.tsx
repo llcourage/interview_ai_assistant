@@ -57,7 +57,7 @@ export const Settings: React.FC = () => {
       setPlanInfo(data);
     } catch (error) {
       console.error('Error loading plan info:', error);
-      setMessage({ type: 'error', text: '加载Plan信息失败' });
+      setMessage({ type: 'error', text: 'Failed to load plan information' });
     }
   };
 
@@ -83,12 +83,12 @@ export const Settings: React.FC = () => {
 
   const handleSaveApiKey = async () => {
     if (!newApiKey.trim()) {
-      setMessage({ type: 'error', text: '请输入API Key' });
+      setMessage({ type: 'error', text: 'Please enter API Key' });
       return;
     }
 
     if (!newApiKey.startsWith('sk-')) {
-      setMessage({ type: 'error', text: 'OpenAI API Key 应该以 sk- 开头' });
+      setMessage({ type: 'error', text: 'OpenAI API Key should start with sk-' });
       return;
     }
 
@@ -97,7 +97,7 @@ export const Settings: React.FC = () => {
 
     try {
       const token = await getAuthToken();
-      if (!token) throw new Error('未登录');
+      if (!token) throw new Error('Not logged in');
 
       const response = await fetch(`${API_BASE_URL}/api/apikey`, {
         method: 'POST',
@@ -113,19 +113,19 @@ export const Settings: React.FC = () => {
 
       if (!response.ok) throw new Error('Failed to save API key');
 
-      setMessage({ type: 'success', text: 'API Key 已保存成功' });
+      setMessage({ type: 'success', text: 'API Key saved successfully' });
       setNewApiKey('');
       await loadApiKeyInfo();
     } catch (error) {
       console.error('Error saving API key:', error);
-      setMessage({ type: 'error', text: '保存API Key失败' });
+      setMessage({ type: 'error', text: 'Failed to save API Key' });
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteApiKey = async () => {
-    if (!confirm('确定要删除API Key吗？删除后您将无法使用AI功能，直到重新设置。')) {
+    if (!confirm('Are you sure you want to delete the API Key? You will not be able to use AI features until you set it again.')) {
       return;
     }
 
@@ -134,7 +134,7 @@ export const Settings: React.FC = () => {
 
     try {
       const token = await getAuthToken();
-      if (!token) throw new Error('未登录');
+      if (!token) throw new Error('Not logged in');
 
       const response = await fetch(`${API_BASE_URL}/api/apikey`, {
         method: 'DELETE',
@@ -145,11 +145,11 @@ export const Settings: React.FC = () => {
 
       if (!response.ok) throw new Error('Failed to delete API key');
 
-      setMessage({ type: 'success', text: 'API Key 已删除' });
+      setMessage({ type: 'success', text: 'API Key deleted' });
       await loadApiKeyInfo();
     } catch (error) {
       console.error('Error deleting API key:', error);
-      setMessage({ type: 'error', text: '删除API Key失败' });
+      setMessage({ type: 'error', text: 'Failed to delete API Key' });
     } finally {
       setLoading(false);
     }
@@ -161,7 +161,7 @@ export const Settings: React.FC = () => {
 
     try {
       const token = await getAuthToken();
-      if (!token) throw new Error('未登录');
+      if (!token) throw new Error('Not logged in');
 
       const successUrl = `${window.location.origin}/settings?payment=success`;
       const cancelUrl = `${window.location.origin}/settings?payment=cancel`;
@@ -187,14 +187,14 @@ export const Settings: React.FC = () => {
       window.location.href = data.checkout_url;
     } catch (error) {
       console.error('Error creating checkout:', error);
-      setMessage({ type: 'error', text: '创建支付会话失败' });
+      setMessage({ type: 'error', text: 'Failed to create payment session' });
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancelSubscription = async () => {
-    if (!confirm('确定要取消订阅吗？订阅将在当前周期结束时取消，之后自动降级为Starter Plan。')) {
+    if (!confirm('Are you sure you want to cancel the subscription? The subscription will be canceled at the end of the current period.')) {
       return;
     }
 
@@ -203,7 +203,7 @@ export const Settings: React.FC = () => {
 
     try {
       const token = await getAuthToken();
-      if (!token) throw new Error('未登录');
+      if (!token) throw new Error('Not logged in');
 
       const response = await fetch(`${API_BASE_URL}/api/plan/cancel`, {
         method: 'POST',
@@ -219,7 +219,7 @@ export const Settings: React.FC = () => {
       await loadPlanInfo();
     } catch (error) {
       console.error('Error canceling subscription:', error);
-      setMessage({ type: 'error', text: '取消订阅失败' });
+      setMessage({ type: 'error', text: 'Failed to cancel subscription' });
     } finally {
       setLoading(false);
     }
@@ -235,15 +235,15 @@ export const Settings: React.FC = () => {
 
   const getPlanPrice = (plan: string) => {
     const prices: Record<string, string> = {
-      'normal': '$19.99/月',
-      'high': '$49.99/月'
+      'normal': '$19.9/week',
+      'high': '$29.9/week'
     };
-    return prices[plan] || '未知';
+    return prices[plan] || 'N/A';
   };
 
   return (
     <div className="settings-container">
-      <h1>⚙️ 设置</h1>
+      <h1>⚙️ Settings</h1>
 
       {message && (
         <div className={`message message-${message.type}`}>
@@ -253,7 +253,7 @@ export const Settings: React.FC = () => {
 
       {/* Plan 信息 */}
       <section className="settings-section">
-        <h2>📦 订阅计划</h2>
+        <h2>📦 Subscription Plan</h2>
         
         {planInfo ? (
           <div className="plan-info-card">
@@ -262,12 +262,12 @@ export const Settings: React.FC = () => {
                 <h3>{getPlanDisplayName(planInfo.plan)}</h3>
                 <p className="plan-price">{getPlanPrice(planInfo.plan)}</p>
               </div>
-              <span className="plan-badge">当前计划</span>
+              <span className="plan-badge">Current Plan</span>
             </div>
 
             <div className="plan-usage">
               <div className="usage-item">
-                <label>今日使用:</label>
+                <label>Daily Usage:</label>
                 <div className="usage-bar">
                   <div 
                     className="usage-progress" 
@@ -278,12 +278,12 @@ export const Settings: React.FC = () => {
                   />
                 </div>
                 <span className="usage-text">
-                  {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '无限' : planInfo.daily_limit}
+                  {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? 'Unlimited' : planInfo.daily_limit}
                 </span>
               </div>
 
               <div className="usage-item">
-                <label>本月使用:</label>
+                <label>Monthly Usage:</label>
                 <div className="usage-bar">
                   <div 
                     className="usage-progress" 
@@ -294,13 +294,13 @@ export const Settings: React.FC = () => {
                   />
                 </div>
                 <span className="usage-text">
-                  {planInfo.monthly_requests} / {planInfo.monthly_limit === -1 ? '无限' : planInfo.monthly_limit}
+                  {planInfo.monthly_requests} / {planInfo.monthly_limit === -1 ? 'Unlimited' : planInfo.monthly_limit}
                 </span>
               </div>
             </div>
 
             <div className="plan-features">
-              <h4>功能特性:</h4>
+              <h4>Features:</h4>
               <ul>
                 {planInfo.features.map((feature, index) => (
                   <li key={index}>✓ {feature}</li>
@@ -310,39 +310,35 @@ export const Settings: React.FC = () => {
 
             {planInfo.subscription_info && (
               <div className="subscription-info">
-                <p>订阅状态: {planInfo.subscription_info.status}</p>
-                <p>下次续费: {new Date(planInfo.subscription_info.current_period_end).toLocaleDateString()}</p>
+                <p>Subscription Status: {planInfo.subscription_info.status}</p>
+                <p>Next Renewal: {new Date(planInfo.subscription_info.current_period_end).toLocaleDateString()}</p>
                 {planInfo.subscription_info.cancel_at_period_end && (
-                  <p className="warning">⚠️ 订阅将在当前周期结束时取消</p>
+                  <p className="warning">⚠️ Subscription will be canceled at the end of the current period</p>
                 )}
               </div>
             )}
           </div>
         ) : (
-          <p>加载中...</p>
+          <p>Loading...</p>
         )}
 
-        {/* 升级/降级按钮 */}
+        {/* Upgrade/Downgrade buttons */}
         {planInfo && planInfo.plan === 'normal' && (
           <div className="upgrade-options">
             <div className="plan-option featured">
-              <div className="badge">升级</div>
+              <div className="badge">Upgrade</div>
               <h3>High Plan</h3>
-              <p className="price">$49.99/月</p>
+              <p className="price">$29.9/week</p>
               <ul>
-                <li>无限请求</li>
-                <li>GPT-4o 完整版模型</li>
-                <li>支持所有高级模型</li>
-                <li>PDF 导出</li>
-                <li>高级分析</li>
-                <li>优先支持</li>
+                <li>Premium model</li>
+                <li>Advanced features</li>
               </ul>
               <button 
                 className="upgrade-button"
                 onClick={() => handleUpgradePlan('high')}
                 disabled={loading}
               >
-                升级到 High
+                Upgrade to High
               </button>
             </div>
           </div>
@@ -350,7 +346,7 @@ export const Settings: React.FC = () => {
 
         {planInfo && planInfo.plan === 'high' && (
           <div className="plan-actions">
-            <p className="plan-message">🎉 您正在使用最高级别的 High Plan！</p>
+            <p className="plan-message">🎉 You are using the highest level High Plan!</p>
           </div>
         )}
 
@@ -360,12 +356,12 @@ export const Settings: React.FC = () => {
             onClick={handleCancelSubscription}
             disabled={loading}
           >
-            取消订阅
+            Cancel Subscription
           </button>
         )}
       </section>
 
-      {/* API Key 管理已移除 - 所有用户使用服务器 API Key */}
+      {/* API Key management removed - All users use server API Key */}
     </div>
   );
 };

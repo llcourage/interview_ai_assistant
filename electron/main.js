@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain, Menu, dialog } = require('electron');
+const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -192,6 +192,31 @@ function createMainWindow() {
     mainWindow.focus();
   });
 
+  // 🔗 拦截外部链接，在系统默认浏览器中打开
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // 检查是否为外部链接
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // 不是 localhost，在系统默认浏览器中打开
+      if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+        shell.openExternal(url);
+        return { action: 'deny' }; // 阻止在应用内打开
+      }
+    }
+    return { action: 'allow' }; // 允许本地链接在应用内打开
+  });
+
+  // 🔗 拦截导航到外部链接
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // 检查是否为外部链接
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // 不是 localhost，在系统默认浏览器中打开
+      if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+        event.preventDefault();
+        shell.openExternal(url);
+      }
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -260,6 +285,31 @@ function createOverlayWindow() {
   // 🚨 调试：加载失败监听
   overlayWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.error('🚨 页面加载失败:', errorCode, errorDescription);
+  });
+
+  // 🔗 拦截外部链接，在系统默认浏览器中打开
+  overlayWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // 检查是否为外部链接
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // 不是 localhost，在系统默认浏览器中打开
+      if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+        shell.openExternal(url);
+        return { action: 'deny' }; // 阻止在应用内打开
+      }
+    }
+    return { action: 'allow' }; // 允许本地链接在应用内打开
+  });
+
+  // 🔗 拦截导航到外部链接
+  overlayWindow.webContents.on('will-navigate', (event, url) => {
+    // 检查是否为外部链接
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // 不是 localhost，在系统默认浏览器中打开
+      if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+        event.preventDefault();
+        shell.openExternal(url);
+      }
+    }
   });
 
   // 🚨 调试：完成加载监听

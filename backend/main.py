@@ -20,23 +20,23 @@ from typing import Optional, Union
 from datetime import datetime
 import stripe  # 导入 stripe 用于错误处理
 
-# 导入现有模块
-from vision import analyze_image
-from speech import transcribe_audio
+# 导入现有模块 - 使用绝对导入（backend 作为包）
+from backend.vision import analyze_image
+from backend.speech import transcribe_audio
 from openai import AsyncOpenAI
 
 # 导入认证模块
-from auth_supabase import (
+from backend.auth_supabase import (
     User, UserRegister, UserLogin, Token,
     register_user, login_user, get_current_active_user
 )
 
 # 导入新的数据库模块
-from db_models import PlanType, PLAN_LIMITS, MODEL_PRICING
-from db_operations import (
+from backend.db_models import PlanType, PLAN_LIMITS, MODEL_PRICING
+from backend.db_operations import (
     get_user_plan, get_user_quota, increment_user_quota, check_rate_limit, log_usage
 )
-from payment_stripe import (
+from backend.payment_stripe import (
     create_checkout_session, handle_checkout_completed,
     handle_subscription_updated, handle_subscription_deleted,
     cancel_subscription, get_subscription_info
@@ -192,9 +192,8 @@ async def get_plan(current_user: User = Depends(get_current_active_user)):
     limits = PLAN_LIMITS[user_plan.plan]
     
     # 获取订阅信息
-    subscription_info = None
-    if user_plan.plan != PlanType.STARTER:
-        subscription_info = await get_subscription_info(current_user.id)
+    # Get subscription info for all plans (both NORMAL and HIGH have subscriptions)
+    subscription_info = await get_subscription_info(current_user.id)
     
     monthly_token_limit = limits.get("monthly_token_limit")
     monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)

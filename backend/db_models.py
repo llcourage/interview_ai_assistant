@@ -10,15 +10,14 @@ from pydantic import BaseModel
 
 class PlanType(str, Enum):
     """用户订阅计划类型"""
-    STARTER = "starter"  # 免费计划（默认）
-    NORMAL = "normal"    # 付费计划 $19.99/月
-    HIGH = "high"        # 付费计划 $49.99/月
+    NORMAL = "normal"    # 付费计划 $19.9/week
+    HIGH = "high"        # 付费计划 $29.9/week
 
 
 class UserPlan(BaseModel):
     """用户订阅计划"""
     user_id: str
-    plan: PlanType = PlanType.STARTER
+    plan: PlanType = PlanType.NORMAL
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
     subscription_status: Optional[str] = None  # active, canceled, past_due
@@ -62,13 +61,6 @@ class UsageQuota(BaseModel):
 
 # Plan 配额定义
 PLAN_LIMITS = {
-    PlanType.STARTER: {
-        "daily_limit": 10,  # 每日10次（免费计划）
-        "monthly_limit": 100,  # 每月100次
-        "monthly_token_limit": 50_000,  # 每月50k tokens
-        "models": ["gpt-4o-mini"],  # 只能用mini
-        "features": ["basic_chat", "image_analysis"]
-    },
     PlanType.NORMAL: {
         "daily_limit": 200,  # 每日200次
         "monthly_limit": 5000,  # 每月5000次

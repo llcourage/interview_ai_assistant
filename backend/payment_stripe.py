@@ -7,8 +7,8 @@ import stripe
 from datetime import datetime, timedelta
 from typing import Optional
 from dotenv import load_dotenv
-from db_operations import get_user_plan, update_user_plan
-from db_models import PlanType
+from backend.db_operations import get_user_plan, update_user_plan
+from backend.db_models import PlanType
 
 load_dotenv()
 
@@ -184,7 +184,7 @@ async def handle_subscription_updated(subscription: dict):
         # 从数据库查找用户
         # 注意：这里需要通过 stripe_customer_id 查找用户
         # 你需要在 db_operations.py 中添加一个函数
-        from db_supabase import get_supabase
+        from backend.db_supabase import get_supabase
         supabase = get_supabase()
         
         response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()
@@ -226,7 +226,7 @@ async def handle_subscription_deleted(subscription: dict):
         customer_id = subscription["customer"]
         
         # 从数据库查找用户
-        from db_supabase import get_supabase
+        from backend.db_supabase import get_supabase
         supabase = get_supabase()
         
         response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()

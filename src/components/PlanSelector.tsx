@@ -1,100 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import './PlanSelector.css';
 
-export type PlanType = 'starter' | 'normal' | 'high';
+export type PlanType = 'normal' | 'high';
 
 interface PlanSelectorProps {
   currentPlan: PlanType;
   onPlanChange: (plan: PlanType) => void;
-  customApiKey?: string;
-  onApiKeyChange?: (apiKey: string) => void;
 }
 
 export const PlanSelector: React.FC<PlanSelectorProps> = ({ 
   currentPlan, 
-  onPlanChange,
-  customApiKey = '',
-  onApiKeyChange
+  onPlanChange
 }) => {
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(customApiKey);
-
-  useEffect(() => {
-    setApiKeyInput(customApiKey);
-  }, [customApiKey]);
-
   const plans = [
     {
-      id: 'starter' as PlanType,
-      name: 'Starter',
-      icon: '🚀',
-      price: 'Free',
-      description: 'Use your own OpenAI API Key',
-      features: [
-        'Custom API Key',
-        'Full GPT-4 access',
-        'Pay as you go',
-        'Your own usage limits'
-      ],
-      color: '#4A90E2'
-    },
-    {
       id: 'normal' as PlanType,
-      name: 'Normal',
+      name: 'Normal Plan',
       icon: '⚡',
-      price: 'Included',
-      description: 'Powered by GPT-4o Mini',
+      price: '$19.9/week',
+      description: 'Great model, 500K token per week',
       features: [
-        'GPT-4o Mini included',
+        'Great model',
+        '500K token per week',
         'Vision support (screenshots)',
-        'Fast & affordable',
-        'No setup needed'
+        'Fast & affordable'
       ],
       color: '#50C878'
     },
     {
       id: 'high' as PlanType,
-      name: 'High',
+      name: 'High Plan',
       icon: '👑',
-      price: 'Premium',
-      description: 'Powered by GPT-4o',
+      price: '$29.9/week',
+      description: 'Premium model with advanced features',
       features: [
-        'GPT-4o included',
+        'Premium model',
+        'Advanced features',
         'Best quality & vision',
-        'Latest model',
-        'Advanced reasoning'
+        'Latest model'
       ],
       color: '#FFD700'
     }
   ];
 
-  const handleSaveApiKey = () => {
-    if (onApiKeyChange) {
-      onApiKeyChange(apiKeyInput);
-    }
-    setShowApiKeyInput(false);
-  };
-
   return (
     <div className="plan-selector-container">
-      <h2 className="plan-title">Choose Your Plan</h2>
-      <p className="plan-subtitle">Select the AI model that fits your needs</p>
+      <h2 className="plan-title">Current Plan</h2>
+      <p className="plan-subtitle">Your subscription plan information</p>
       
       <div className="plans-grid">
-        {plans.map(plan => (
+        {plans
+          .filter(plan => plan.id === currentPlan) // Only show current plan
+          .map(plan => (
           <div 
             key={plan.id}
             className={`plan-card ${currentPlan === plan.id ? 'active' : ''}`}
-            onClick={() => {
-              onPlanChange(plan.id);
-              if (plan.id === 'starter') {
-                setShowApiKeyInput(true);
-              } else {
-                setShowApiKeyInput(false);
-              }
-            }}
             style={{ 
-              borderColor: currentPlan === plan.id ? plan.color : 'rgba(255, 255, 255, 0.1)'
+              borderColor: plan.color
             }}
           >
             <div className="plan-header">
@@ -120,51 +82,28 @@ export const PlanSelector: React.FC<PlanSelectorProps> = ({
               </div>
             )}
           </div>
-        ))}
+          ))}
       </div>
-
-      {/* API Key Input for Starter Plan */}
-      {showApiKeyInput && currentPlan === 'starter' && (
-        <div className="api-key-config">
-          <h3>Configure Your API Key</h3>
-          <p className="hint">Enter your OpenAI API Key to use the Starter Plan</p>
-          
-          <input
-            type="text"
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            placeholder="sk-..."
-            className="api-key-input"
-          />
-          
-          <div className="api-key-buttons">
-            <button 
-              className="btn-secondary"
-              onClick={() => setShowApiKeyInput(false)}
+      
+      {currentPlan !== 'high' && (
+        <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
+          <p style={{ color: '#aaa', marginBottom: '0.5rem' }}>Want to upgrade your plan?</p>
+          <p style={{ color: '#888', fontSize: '0.9rem' }}>
+            Please visit the{' '}
+            <a
+              href="https://www.desktopai.org/plans"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: '#4CAF50',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
             >
-              Cancel
-            </button>
-            <button 
-              className="btn-primary"
-              onClick={handleSaveApiKey}
-              disabled={!apiKeyInput.trim()}
-            >
-              Save API Key
-            </button>
-          </div>
-        </div>
-      )}
-
-      {customApiKey && currentPlan === 'starter' && !showApiKeyInput && (
-        <div className="current-api-key">
-          <p>
-            Current API Key: <code>{customApiKey.substring(0, 8)}...{customApiKey.substring(customApiKey.length - 4)}</code>
-            <button 
-              className="btn-edit"
-              onClick={() => setShowApiKeyInput(true)}
-            >
-              Edit
-            </button>
+              web interface
+            </a>
+            {' '}to upgrade or manage your subscription
           </p>
         </div>
       )}

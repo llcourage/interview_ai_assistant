@@ -33,15 +33,15 @@ const Overlay = () => {
   }, []);
   
   // 📦 Plan 状态
-  const [currentPlan, setCurrentPlan] = useState<'starter' | 'normal' | 'high'>(() => {
-    return (localStorage.getItem('currentPlan') as 'starter' | 'normal' | 'high') || 'starter';
+  const [currentPlan, setCurrentPlan] = useState<'normal' | 'high'>(() => {
+    return (localStorage.getItem('currentPlan') as 'normal' | 'high') || 'normal';
   });
   
   // 📦 监听 localStorage 中 plan 的变化（与主窗口同步）
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'currentPlan' && e.newValue) {
-        setCurrentPlan(e.newValue as 'starter' | 'normal' | 'high');
+        setCurrentPlan(e.newValue as 'normal' | 'high');
       }
     };
     
@@ -49,7 +49,7 @@ const Overlay = () => {
     
     // 也监听同窗口内的变化（通过自定义事件）
     const handlePlanChange = (e: CustomEvent) => {
-      const newPlan = e.detail as 'starter' | 'normal' | 'high';
+      const newPlan = e.detail as 'normal' | 'high';
       setCurrentPlan(newPlan);
     };
     

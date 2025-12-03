@@ -78,6 +78,11 @@ export const Profile: React.FC = () => {
       
       setPlanInfo(data);
       setError(null);
+      
+      // 同步 plan 到 localStorage，并通知其他窗口（如 Electron 客户端）
+      const plan = data.plan as 'normal' | 'high';
+      localStorage.setItem('currentPlan', plan);
+      window.dispatchEvent(new CustomEvent('planChanged', { detail: plan }));
     } catch (err: any) {
       console.error('❌ Error loading plan info:', err);
       const errorMsg = err?.message || '加载Plan信息失败，请检查网络连接和服务器状态';
@@ -88,7 +93,6 @@ export const Profile: React.FC = () => {
 
   const getPlanDisplayName = (plan: string) => {
     const planMap: { [key: string]: string } = {
-      'starter': 'Starter',
       'normal': 'Normal',
       'high': 'High'
     };
@@ -97,7 +101,6 @@ export const Profile: React.FC = () => {
 
   const getPlanPrice = (plan: string) => {
     const priceMap: { [key: string]: string } = {
-      'starter': 'Free',
       'normal': '$19.99',
       'high': '$49.99'
     };

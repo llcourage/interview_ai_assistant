@@ -8,6 +8,7 @@ import { supabase } from './lib/supabase'
 import { Login } from './Login'
 import { PlanSelector, PlanType } from './components/PlanSelector'
 import { Settings } from './components/Settings'
+import { API_BASE_URL } from './lib/api'
 
 // Session 类型定义
 interface SessionData {
@@ -49,10 +50,68 @@ function App() {
   const [apiKeyStatus, setApiKeyStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
   // 📦 Plan 状态
   const [currentPlan, setCurrentPlan] = useState<PlanType>(() => {
-    return (localStorage.getItem('currentPlan') as PlanType) || 'starter';
+    return (localStorage.getItem('currentPlan') as PlanType) || 'normal';
   });
   const [showPlanSelector, setShowPlanSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // 📦 从后端 API 加载 Plan 信息（与网页端同步）
+  useEffect(() => {
+    const loadPlanFromAPI = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch(`${API_BASE_URL}/api/plan`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+
+        if (response.ok) {
+          const planData = await response.json();
+          if (planData.plan) {
+            const newPlan = planData.plan as PlanType;
+            setCurrentPlan(newPlan);
+            localStorage.setItem('currentPlan', newPlan);
+            // 触发自定义事件，通知其他窗口（如悬浮窗）更新 plan
+            window.dispatchEvent(new CustomEvent('planChanged', { detail: newPlan }));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load plan from API:', error);
+        // 如果 API 调用失败，保持使用 localStorage 中的值
+      }
+    };
+
+    // 登录后立即加载 plan
+    if (isAuthenticated) {
+      loadPlanFromAPI();
+    }
+
+    // 监听 localStorage 的 storage 事件（跨窗口同步）
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'currentPlan' && e.newValue) {
+        const newPlan = e.newValue as PlanType;
+        setCurrentPlan(newPlan);
+      }
+    };
+
+    // 监听自定义 planChanged 事件（同窗口同步）
+    const handlePlanChange = (e: CustomEvent) => {
+      const newPlan = e.detail as PlanType;
+      setCurrentPlan(newPlan);
+      localStorage.setItem('currentPlan', newPlan);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('planChanged', handlePlanChange as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('planChanged', handlePlanChange as EventListener);
+    };
+  }, [isAuthenticated]);
 
   // 🔒 检查认证状态
   useEffect(() => {
@@ -300,7 +359,7 @@ function App() {
             title="Select Plan"
             style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
           >
-            📦 {currentPlan === 'starter' ? 'Starter' : currentPlan === 'normal' ? 'Normal' : 'High'} Plan
+            📦 {currentPlan === 'normal' ? 'Normal' : 'High'} Plan
           </button>
           <button 
             className="theme-toggle" 
@@ -351,21 +410,8 @@ function App() {
             <PlanSelector
               currentPlan={currentPlan}
               onPlanChange={(plan) => {
-                setCurrentPlan(plan);
-                localStorage.setItem('currentPlan', plan);
-                // 通知悬浮窗 plan 已更改
-                window.dispatchEvent(new CustomEvent('planChanged', { detail: plan }));
-                setShowPlanSelector(false);
-              }}
-              customApiKey={currentApiKey || ''}
-              onApiKeyChange={async (apiKey) => {
-                setApiKeyInput(apiKey);
-                if (window.aiShot?.saveApiKey) {
-                  const result = await window.aiShot.saveApiKey(apiKey);
-                  if (result.success) {
-                    setCurrentApiKey(apiKey);
-                  }
-                }
+                // Plan switching is disabled in client - users must upgrade through web interface
+                console.log('Plan switching is not allowed in client. Please upgrade through web interface.');
               }}
             />
           </div>

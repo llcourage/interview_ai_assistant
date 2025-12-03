@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from db_supabase import get_supabase
+from backend.db_supabase import get_supabase
 
 # HTTP Bearer token
 security = HTTPBearer()

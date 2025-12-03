@@ -5,8 +5,8 @@
 import os
 from typing import Optional
 from datetime import datetime, timedelta
-from db_supabase import get_supabase
-from db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
+from backend.db_supabase import get_supabase
+from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
 
 # 已移除加密相关代码 - 所有用户使用服务器 API Key
 
@@ -29,8 +29,8 @@ async def get_user_plan(user_id: str) -> UserPlan:
             if direct_response.data and len(direct_response.data) > 0:
                 return UserPlan(**direct_response.data[0])
             
-            # 如果直接查询也没有结果，创建默认的 starter plan
-            print(f"User {user_id} has no plan record, creating default STARTER plan")
+            # If no plan record found, create default NORMAL plan
+            print(f"User {user_id} has no plan record, creating default NORMAL plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ 获取用户Plan失败: {e}")
@@ -42,13 +42,13 @@ async def get_user_plan(user_id: str) -> UserPlan:
             # 最后返回一个临时对象（不推荐，但至少不会崩溃）
             return UserPlan(
                 user_id=user_id,
-                plan=PlanType.STARTER,
+                plan=PlanType.NORMAL,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             )
 
 
-async def create_user_plan(user_id: str, plan: PlanType = PlanType.STARTER) -> UserPlan:
+async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> UserPlan:
     """创建用户Plan"""
     try:
         supabase = get_supabase()
@@ -189,7 +189,7 @@ async def log_usage(
 ) -> UsageLog:
     """记录API使用"""
     try:
-        from db_models import MODEL_PRICING
+        from backend.db_models import MODEL_PRICING
         
         # 计算成本
         pricing = MODEL_PRICING.get(model_used, {"input": 0, "output": 0})
@@ -273,14 +273,16 @@ async def get_user_quota(user_id: str) -> UsageQuota:
         except Exception as fallback_error:
             print(f"❌ 创建默认配额也失败: {fallback_error}")
             # 最后返回一个基本的配额对象
+            # Fallback to NORMAL plan limits
+            limits = PLAN_LIMITS[PlanType.NORMAL]
             return UsageQuota(
                 user_id=user_id,
-                plan=PlanType.STARTER,
+                plan=PlanType.NORMAL,
                 daily_requests=0,
                 monthly_requests=0,
                 monthly_tokens_used=0,
-                daily_limit=10,
-                monthly_limit=100,
+                daily_limit=limits["daily_limit"],
+                monthly_limit=limits["monthly_limit"],
                 quota_reset_date=datetime.now() + timedelta(days=1),
                 created_at=datetime.now(),
                 updated_at=datetime.now()
