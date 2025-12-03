@@ -145,11 +145,11 @@ class handler(BaseHTTPRequestHandler):
                     body += message.get("body", b"")
             
             # 发送响应
+            # FastAPI 的 CORSMiddleware 已经设置了所有必要的 CORS 头部，不需要手动添加
             self.send_response(status)
             for header, value in headers:
                 self.send_header(header.decode() if isinstance(header, bytes) else header,
                                value.decode() if isinstance(value, bytes) else value)
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
             
