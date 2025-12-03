@@ -1,0 +1,77 @@
+/* ========== 品牌配色方案 ========== */
+
+:root {
+  /* 背景 & 卡片 - 高级 SaaS 风格 */
+  --color-bg-body: #0A0F1E; /* 更沉稳统一 */
+  --color-bg-body-gradient-start: #0A0F1E;
+  --color-bg-body-gradient-end: #0F172A;
+  --color-bg-surface: #111827; /* slate-900 - 对比更明显 */
+  --color-border-subtle: rgba(255, 255, 255, 0.06); /* border-white/10 */
+
+  /* 品牌主色 / 次色 - 统一品牌体系 */
+  --color-primary: #3B82F6; /* blue-500 - 冷静的蓝色 */
+  --color-secondary: #8B5CF6; /* violet-500 - 温暖紫色 */
+  --color-accent: #A78BFA; /* violet-400 - 更柔和，不刺眼 */
+
+  /* 文本 */
+  --color-text-primary: #F9FAFB; /* 几乎白 */
+  --color-text-secondary: #9CA3AF; /* slate-400 - 完美灰度 */
+  --color-text-muted: #6B7280; /* slate-500 */
+
+  /* 状态色 */
+  --color-success: #22C55E; /* green-500 */
+  --color-danger: #F97373; /* red-400 */
+  --color-warning: #FBBF24; /* amber-400 */
+
+  /* 渐变 - 统一蓝紫渐变 */
+  --gradient-primary: linear-gradient(to right, var(--color-primary) 0%, var(--color-secondary) 100%);
+  --gradient-body: linear-gradient(to bottom, var(--color-bg-body-gradient-start) 0%, var(--color-bg-body-gradient-end) 100%);
+  --gradient-card: linear-gradient(to bottom, rgba(30, 41, 59, 0.4) 0%, rgba(17, 24, 39, 0.8) 100%);
+  
+  /* 光晕效果 */
+  --glow-primary: rgba(59, 130, 246, 0.15);
+  --glow-secondary: rgba(139, 92, 246, 0.25);
+}
+
+/* ========== 工具类（可选，方便使用）========== */
+
+.bg-body {
+  background: var(--color-bg-body);
+}
+
+.bg-body-gradient {
+  background: var(--gradient-body);
+}
+
+.bg-surface {
+  background: var(--color-bg-surface);
+}
+
+.border-subtle {
+  border-color: var(--color-border-subtle);
+}
+
+.text-primary {
+  color: var(--color-text-primary);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+}
+
+.bg-primary {
+  background: var(--color-primary);
+}
+
+.bg-secondary {
+  background: var(--color-secondary);
+}
+
+.bg-gradient-primary {
+  background: var(--gradient-primary);
+}
+

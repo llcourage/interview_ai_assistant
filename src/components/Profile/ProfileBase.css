@@ -3,7 +3,7 @@
 /* 页面背景 */
 .page-bg {
   min-height: 100vh;
-  background: #151826;
+  background: var(--color-bg-body);
   padding-top: 80px;
   padding-bottom: 4rem;
 }
@@ -17,10 +17,10 @@
 
 /* 卡片基础样式 */
 .card {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--color-bg-surface);
   border-radius: 20px;
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border-subtle);
   padding: 2rem 2.5rem;
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
@@ -36,7 +36,7 @@
 .section-title {
   font-size: 22px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-primary);
   margin: 0;
   letter-spacing: -0.3px;
 }

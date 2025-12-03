@@ -1,9 +1,9 @@
 /* Header Styles - Shared across pages */
 
 .landing-header {
-  background: rgba(15, 23, 42, 0.95);
+  background: rgba(2, 6, 23, 0.95); /* 使用 --color-bg-body */
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid var(--color-border-subtle);
   position: fixed;
   top: 0;
   left: 0;
@@ -14,12 +14,12 @@
 }
 
 .header-top {
-  padding: 1rem 0;
-  border-bottom: 1px solid #334155;
+  padding: 0.75rem 0; /* 减小 padding，整体上移 */
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .header-nav {
-  padding: 0.75rem 0;
+  padding: 0.5rem 0; /* 减小 padding，让 tab 往上移 */
 }
 
 .header-container {
@@ -35,7 +35,7 @@
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
-  color: #ffffff;
+  color: var(--color-text-primary);
 }
 
 .header-right {
@@ -56,27 +56,27 @@
 
 .login-btn {
   background: transparent;
-  color: #cbd5e1;
-  border: 1px solid #475569;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
 }
 
 .login-btn:hover {
-  background: rgba(96, 165, 250, 0.1);
-  border-color: #60a5fa;
-  color: #ffffff;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  color: var(--color-text-primary);
 }
 
 .signup-btn {
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-  color: #ffffff;
-  border: 1px solid #60a5fa;
+  background: var(--gradient-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-primary);
 }
 
 .signup-btn:hover {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  border-color: #3b82f6;
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  border-color: var(--color-primary);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(96, 165, 250, 0.4);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .nav-links {
@@ -88,7 +88,7 @@
 .nav-link {
   background: transparent;
   border: none;
-  color: #cbd5e1;
+  color: var(--color-text-secondary);
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
@@ -98,11 +98,11 @@
 }
 
 .nav-link:hover {
-  color: #ffffff;
+  color: var(--color-text-primary);
 }
 
 .nav-link.active {
-  color: #60a5fa;
+  color: var(--color-primary);
 }
 
 .nav-link::after {
@@ -112,7 +112,7 @@
   left: 0;
   width: 0;
   height: 2px;
-  background: #60a5fa;
+  background: var(--color-primary);
   transition: width 0.3s ease;
 }
 

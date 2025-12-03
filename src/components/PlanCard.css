@@ -1,0 +1,129 @@
+/* Plan Card 基础样式 - Linear/Vercel 风格 */
+.plan-card {
+  background: var(--gradient-card); /* 卡片光泽 - subtle inner glow */
+  border-radius: 20px;
+  border: 1px solid var(--color-border-subtle);
+  padding: 2rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05); /* inner shadow */
+  position: relative;
+  overflow: visible; /* 改为 visible，让标签可以超出边界 */
+}
+
+.plan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0 40px rgba(67, 56, 202, 0.25), 0 12px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08); /* 蓝紫外发光 */
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+/* 顶部：标题 + 推荐标签 */
+.plan-card-header {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.plan-name {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* 推荐标签 - 移到右上角 */
+.plan-tag {
+  position: absolute;
+  top: -12px; /* -top-3 */
+  right: -12px; /* -right-3 */
+  padding: 0.5rem 0.75rem; /* px-3 py-1 */
+  background: var(--gradient-primary); /* 使用统一渐变 */
+  border: none;
+  border-radius: 9999px; /* rounded-full */
+  font-size: 0.75rem; /* text-xs */
+  font-weight: 600; /* font-semibold */
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  z-index: 10;
+}
+
+/* 中部：描述 */
+.plan-desc {
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.5rem 0;
+  flex: 1;
+}
+
+/* 价格区域 */
+.plan-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plan-price {
+  font-size: 2.5rem;
+  font-weight: 600; /* font-semibold - 更粗 */
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+
+.plan-billing {
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* 底部按钮 */
+.plan-footer {
+  margin-top: auto;
+}
+
+.plan-button {
+  width: 100%;
+  padding: 1rem 2rem;
+  background: var(--gradient-primary);
+  color: var(--color-text-primary);
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.plan-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+}
+
+.plan-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .plan-card {
+    padding: 1.5rem;
+  }
+
+  .plan-name {
+    font-size: 1.5rem;
+  }
+
+  .plan-price {
+    font-size: 2rem;
+  }
+}
+

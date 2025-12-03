@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { Header } from './components/Header';
+import { PlanCard } from './components/PlanCard';
 import './Plans.css';
 
 export const Plans: React.FC = () => {
@@ -70,38 +71,36 @@ export const Plans: React.FC = () => {
     <div className="plans-page">
       <Header />
       <div className="plans-container">
+        {/* 焦点渐变光 - 让标题和卡片区域成为视觉中心 */}
+        <div className="plans-glow"></div>
+        
         <h1 className="plans-title">Choose Your Plan</h1>
         <p className="plans-subtitle">Select the perfect plan for your needs</p>
         
-        <div className="plans-cards">
-          {/* Normal Plan */}
-          <div className="plan-card featured">
-            <div className="plan-badge">Recommended</div>
-            <h3 className="plan-name">Normal Plan</h3>
-            <p className="plan-description">Great model, 500K token per week</p>
-            <div className="plan-price">$19.9<span className="price-unit">/week</span></div>
-            <button
-              className="plan-button"
-              onClick={() => handlePlanSelect('normal')}
-              disabled={loading === 'normal'}
-            >
-              {loading === 'normal' ? 'Processing...' : 'Get Started'}
-            </button>
-          </div>
+        <div className="plans-grid">
+          <PlanCard
+            name="Normal Plan"
+            features={[
+              "Great Model",
+              "500K Tokens per Week"
+            ]}            
+            price="$19.9"
+            billing="/week"
+            loading={loading === 'normal'}
+            onSelect={() => handlePlanSelect('normal')}
+          />
 
-          {/* High Plan */}
-          <div className="plan-card">
-            <h3 className="plan-name">High Plan</h3>
-            <p className="plan-description">Premium model with advanced features</p>
-            <div className="plan-price">$29.9<span className="price-unit">/week</span></div>
-            <button
-              className="plan-button"
-              onClick={() => handlePlanSelect('high')}
-              disabled={loading === 'high'}
-            >
-              {loading === 'high' ? 'Processing...' : 'Get Started'}
-            </button>
-          </div>
+          <PlanCard
+            name="High Plan"
+            features={[
+              "Premium Model",
+              "Advanced Features"
+            ]}
+            price="$29.9"
+            billing="/week"
+            loading={loading === 'high'}
+            onSelect={() => handlePlanSelect('high')}
+          />
         </div>
       </div>
     </div>

@@ -1,10 +1,13 @@
+/* 导入统一配色方案 */
+@import './styles/colors.css';
+
 :root {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
+  color: var(--color-text-primary);
   /* background-color: #242424;  移除全局背景色 */
 
   font-synthesis: none;

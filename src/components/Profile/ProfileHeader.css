@@ -13,15 +13,15 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2rem;
   font-weight: 700;
-  color: white;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+  border: 3px solid var(--color-border-subtle);
   flex-shrink: 0;
 }
 
@@ -38,14 +38,14 @@
 .page-title {
   font-size: 32px;
   font-weight: 700;
-  color: #fff;
+  color: var(--color-text-primary);
   margin: 0 0 0.5rem 0;
   line-height: 1.2;
 }
 
 .subtitle {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   font-weight: 400;
   margin: 0 0 1rem 0;
 }
@@ -59,16 +59,16 @@
 
 .chip {
   padding: 0.4rem 0.8rem;
-  background: rgba(102, 126, 234, 0.2);
-  border: 1px solid rgba(102, 126, 234, 0.3);
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.3);
   border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-primary);
 }
 
 .meta-text {
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
 }
 
