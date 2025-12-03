@@ -441,26 +441,47 @@ const Overlay = () => {
         })
         .join('\n\n');
       
+      const requestUrl = `${API_BASE_URL}/api/chat`;
       console.log('📡 发送 API 请求:', {
-        url: `${API_BASE_URL}/api/chat`,
+        url: requestUrl,
         method: 'POST',
         hasToken: !!token,
-        inputLength: currentInput.length
+        inputLength: currentInput.length,
+        API_BASE_URL: API_BASE_URL,
+        contextLength: context.length
       });
       
-      const response = await fetch(`${API_BASE_URL}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          user_input: currentInput,
-          context: context  // 传递完整上下文
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(requestUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ 
+            user_input: currentInput,
+            context: context  // 传递完整上下文
+          }),
+        });
+      } catch (fetchError: any) {
+        console.error('❌ Fetch 请求失败:', {
+          error: fetchError,
+          errorType: fetchError?.constructor?.name,
+          errorMessage: fetchError?.message,
+          errorStack: fetchError?.stack,
+          url: requestUrl,
+          API_BASE_URL: API_BASE_URL
+        });
+        throw fetchError;
+      }
 
-      console.log('📡 API 响应状态:', response.status, response.statusText);
+      console.log('📡 API 响应状态:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -722,7 +743,12 @@ const Overlay = () => {
           }),
         });
 
-        console.log('📡 API 响应状态:', response.status, response.statusText);
+        console.log('📡 API 响应状态:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
 
         if (!response.ok) {
           const errorText = await response.text();
