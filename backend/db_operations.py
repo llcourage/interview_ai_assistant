@@ -232,7 +232,11 @@ async def get_user_quota(user_id: str) -> UsageQuota:
         response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
         
         if response and response.data:
-            quota = UsageQuota(**response.data)
+            quota_data = response.data
+            # 确保 monthly_tokens_used 字段存在（兼容旧数据）
+            if 'monthly_tokens_used' not in quota_data:
+                quota_data['monthly_tokens_used'] = 0
+            quota = UsageQuota(**quota_data)
             
             # 检查是否需要重置配额
             now = datetime.now()
@@ -259,6 +263,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 plan=user_plan.plan,
                 daily_requests=0,
                 monthly_requests=0,
+                monthly_tokens_used=0,
                 daily_limit=limits["daily_limit"],
                 monthly_limit=limits["monthly_limit"],
                 quota_reset_date=datetime.now() + timedelta(days=1),
@@ -273,6 +278,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 plan=PlanType.STARTER,
                 daily_requests=0,
                 monthly_requests=0,
+                monthly_tokens_used=0,
                 daily_limit=10,
                 monthly_limit=100,
                 quota_reset_date=datetime.now() + timedelta(days=1),
@@ -315,8 +321,13 @@ async def create_user_quota(user_id: str) -> UsageQuota:
         raise
 
 
-async def increment_user_quota(user_id: str) -> UsageQuota:
-    """增加用户配额使用次数"""
+async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota:
+    """增加用户配额使用次数和 token 使用量
+    
+    Args:
+        user_id: 用户ID
+        tokens_used: 本次使用的 token 数量（可选，默认为0）
+    """
     try:
         quota = await get_user_quota(user_id)
         
@@ -329,14 +340,21 @@ async def increment_user_quota(user_id: str) -> UsageQuota:
             "updated_at": datetime.now().isoformat()
         }
         
+        # 如果有 token 使用量，添加到 monthly_tokens_used
+        if tokens_used > 0:
+            current_tokens = getattr(quota, 'monthly_tokens_used', 0)
+            update_data["monthly_tokens_used"] = current_tokens + tokens_used
+        
         response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
         if response.data:
             return UsageQuota(**response.data[0])
         else:
-            raise Exception("更新配额失败")
+            raise Exception("Update quota failed")
     except Exception as e:
-        print(f"❌ 增加用户配额失败: {e}")
+        print(f"Increment user quota failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 
@@ -372,23 +390,33 @@ async def check_rate_limit(user_id: str) -> tuple[bool, str]:
         (bool, str): (是否允许, 错误信息)
     """
     try:
+        user_plan = await get_user_plan(user_id)
         quota = await get_user_quota(user_id)
+        limits = PLAN_LIMITS[user_plan.plan]
         
-        # High plan 无限制
-        if quota.daily_limit == -1:
-            return True, ""
+        # High plan 请求数无限制，但 token 有限制
+        if quota.daily_limit != -1:
+            # 检查每日限制
+            if quota.daily_requests >= quota.daily_limit:
+                return False, f"已达到每日请求限制 ({quota.daily_limit} 次)。请明天再试或升级Plan。"
         
-        # 检查每日限制
-        if quota.daily_requests >= quota.daily_limit:
-            return False, f"已达到每日请求限制 ({quota.daily_limit} 次)。请明天再试或升级Plan。"
+        if quota.monthly_limit != -1:
+            # 检查每月请求限制
+            if quota.monthly_requests >= quota.monthly_limit:
+                return False, f"已达到每月请求限制 ({quota.monthly_limit} 次)。请下月再试或升级Plan。"
         
-        # 检查每月限制
-        if quota.monthly_requests >= quota.monthly_limit:
-            return False, f"已达到每月请求限制 ({quota.monthly_limit} 次)。请下月再试或升级Plan。"
+        # 检查每月 token 限制
+        monthly_token_limit = limits.get("monthly_token_limit")
+        if monthly_token_limit is not None:
+            monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
+            if monthly_tokens_used >= monthly_token_limit:
+                return False, f"本月 tokens 已用完：{monthly_tokens_used:,}/{monthly_token_limit:,}。请下月再试或升级Plan。"
         
         return True, ""
     except Exception as e:
-        print(f"❌ 检查限流失败: {e}")
+        print(f"Check rate limit failed: {e}")
+        import traceback
+        traceback.print_exc()
         # 出错时允许请求，避免阻塞
         return True, ""
 

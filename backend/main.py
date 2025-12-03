@@ -84,6 +84,8 @@ class PlanResponse(BaseModel):
     monthly_requests: int
     daily_limit: int
     monthly_limit: int
+    monthly_token_limit: Optional[int] = None
+    monthly_tokens_used: Optional[int] = None
     features: list[str]
     subscription_info: Optional[dict] = None
 
@@ -194,12 +196,17 @@ async def get_plan(current_user: User = Depends(get_current_active_user)):
     if user_plan.plan != PlanType.STARTER:
         subscription_info = await get_subscription_info(current_user.id)
     
+    monthly_token_limit = limits.get("monthly_token_limit")
+    monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
+    
     return PlanResponse(
         plan=user_plan.plan.value,
         daily_requests=quota.daily_requests,
         monthly_requests=quota.monthly_requests,
         daily_limit=limits["daily_limit"],
         monthly_limit=limits["monthly_limit"],
+        monthly_token_limit=monthly_token_limit,
+        monthly_tokens_used=monthly_tokens_used,
         features=limits["features"],
         subscription_info=subscription_info
     )
@@ -295,17 +302,16 @@ async def chat(
             # 图片分析
             print(f"🖼️ 用户 {current_user.id} ({user_plan.plan.value}) 请求图片分析")
             
-            answer = await analyze_image(
+            answer, token_usage = await analyze_image(
                 image_base64=request.image_base64,
                 prompt=request.prompt,
                 client=client,
                 model=model
             )
             
-            # 估算token使用（图片分析难以精确计算，这里用估算值）
-            image_count = 1 if isinstance(request.image_base64, str) else len(request.image_base64)
-            estimated_input_tokens = 1000 * image_count  # 每张图约1000 tokens
-            estimated_output_tokens = len(answer) // 4  # 粗略估算
+            # 使用真实的 token 使用量
+            estimated_input_tokens = token_usage["input_tokens"]
+            estimated_output_tokens = token_usage["output_tokens"]
             
         elif request.user_input:
             # 文字对话
@@ -358,10 +364,13 @@ async def chat(
                 detail="请提供 user_input（文字）或 image_base64（图片）"
             )
         
-        # 5. 增加配额计数
-        await increment_user_quota(current_user.id)
+        # 5. 计算总 token 使用量
+        total_tokens = estimated_input_tokens + estimated_output_tokens
         
-        # 6. 记录使用日志
+        # 6. 增加配额计数（包括 token 使用量）
+        await increment_user_quota(current_user.id, tokens_used=total_tokens)
+        
+        # 7. 记录使用日志
         await log_usage(
             user_id=current_user.id,
             plan=user_plan.plan,
@@ -378,7 +387,7 @@ async def chat(
             usage={
                 "input_tokens": estimated_input_tokens,
                 "output_tokens": estimated_output_tokens,
-                "total_tokens": estimated_input_tokens + estimated_output_tokens,
+                "total_tokens": total_tokens,
                 "model": model
             }
         )

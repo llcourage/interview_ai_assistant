@@ -51,6 +51,7 @@ class UsageQuota(BaseModel):
     plan: PlanType
     daily_requests: int = 0  # 今日已用请求数
     monthly_requests: int = 0  # 本月已用请求数
+    monthly_tokens_used: int = 0  # 本月已用 tokens
     daily_limit: int = 100  # 每日限制
     monthly_limit: int = 3000  # 每月限制
     last_request_at: Optional[datetime] = None
@@ -64,18 +65,21 @@ PLAN_LIMITS = {
     PlanType.STARTER: {
         "daily_limit": 10,  # 每日10次（免费计划）
         "monthly_limit": 100,  # 每月100次
+        "monthly_token_limit": 50_000,  # 每月50k tokens
         "models": ["gpt-4o-mini"],  # 只能用mini
         "features": ["basic_chat", "image_analysis"]
     },
     PlanType.NORMAL: {
         "daily_limit": 200,  # 每日200次
         "monthly_limit": 5000,  # 每月5000次
+        "monthly_token_limit": 500_000,  # 每月500k tokens
         "models": ["gpt-4o-mini"],  # 只能用mini
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
         "daily_limit": -1,  # 无限制
         "monthly_limit": -1,  # 无限制
+        "monthly_token_limit": 500_000,  # 每月500k tokens
         "models": ["gpt-4o-mini", "gpt-4o", "o1-mini", "o1"],  # 全模型
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "pdf_export", "advanced_analytics"]
     }

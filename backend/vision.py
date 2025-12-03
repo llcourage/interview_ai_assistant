@@ -9,7 +9,7 @@ load_dotenv()
 
 # ⚠️ 不再在模块级别初始化客户端，改为在函数中接收动态客户端
 
-async def analyze_image(image_base64: str | list[str], prompt: str = None, client: AsyncOpenAI = None, model: str = None) -> str:
+async def analyze_image(image_base64: str | list[str], prompt: str = None, client: AsyncOpenAI = None, model: str = None) -> tuple[str, dict]:
     """
     使用 OpenAI Vision API 分析图片（支持多张图片）
     
@@ -104,23 +104,34 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None, clien
         # 提取回复
         answer = response.choices[0].message.content
         
-        print(f"✅ 分析完成，回复长度: {len(answer)} 字符")
+        # 提取 token 使用量
+        token_usage = {
+            "input_tokens": response.usage.prompt_tokens,
+            "output_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens
+        }
         
-        return answer
+        print(f"✅ 分析完成，回复长度: {len(answer)} 字符")
+        print(f"📊 Token 使用: {token_usage['total_tokens']} (输入: {token_usage['input_tokens']}, 输出: {token_usage['output_tokens']})")
+        
+        return answer, token_usage
         
     except Exception as e:
         error_msg = str(e)
         print(f"❌ 视觉分析失败: {error_msg}")
         
         # 返回友好的错误信息
+        error_message = ""
         if "api_key" in error_msg.lower():
-            return "❌ API Key 错误，请检查 .env 文件中的 OPENAI_API_KEY"
+            error_message = "❌ API Key 错误，请检查 .env 文件中的 OPENAI_API_KEY"
         elif "rate_limit" in error_msg.lower():
-            return "❌ API 调用频率超限，请稍后再试"
+            error_message = "❌ API 调用频率超限，请稍后再试"
         elif "insufficient_quota" in error_msg.lower():
-            return "❌ API 配额不足，请检查你的 OpenAI 账户余额"
+            error_message = "❌ API 配额不足，请检查你的 OpenAI 账户余额"
         else:
-            return f"❌ 分析失败: {error_msg}"
+            error_message = f"❌ 分析失败: {error_msg}"
+        
+        return error_message, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
 def validate_image_base64(image_base64: str) -> bool:
@@ -180,11 +191,12 @@ async def analyze_image_with_context(
     if context:
         prompt += f"\n\n额外信息: {context}"
     
-    answer = await analyze_image(image_base64, prompt)
+    answer, token_usage = await analyze_image(image_base64, prompt)
     
     return {
         "answer": answer,
         "question_type": question_type,
-        "has_context": bool(context)
+        "has_context": bool(context),
+        "token_usage": token_usage
     }
 
