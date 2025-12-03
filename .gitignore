@@ -118,6 +118,16 @@ build-desktop/
 # 测试目录（包含打包文件）
 test-desktop/
 test-build/
+test-launcher/
+
+# C# / .NET 构建输出
+launcher/bin/
+launcher/obj/
+**/bin/
+**/obj/
+*.dll
+*.pdb
+*.cache
 
 # ========================================
 # Temporary Files

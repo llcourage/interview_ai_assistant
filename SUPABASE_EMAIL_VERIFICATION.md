@@ -95,3 +95,7 @@ const { data, error } = await supabase.auth.signUp({
 4. ✅ 重新注册测试
 5. ✅ 检查邮箱中的验证链接
 
+
+
+
+

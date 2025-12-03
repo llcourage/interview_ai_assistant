@@ -14,6 +14,8 @@ let overlayWindow = null;
 let currentScreenshot = null;
 
 const isDev = !app.isPackaged;
+// Check if running in desktop mode (backend serves static files on port 8000)
+const isDesktopMode = process.env.DESKTOP_MODE === 'true' || process.argv.includes('--desktop-mode');
 
 // 🔑 API Key 配置文件路径
 const getConfigPath = () => {
@@ -178,7 +180,10 @@ function createMainWindow() {
     icon: path.join(__dirname, '../resources/icon.png')
   });
 
-  if (isDev) {
+  if (isDesktopMode) {
+    // Desktop mode: backend serves static files on port 8000
+    mainWindow.loadURL('http://127.0.0.1:8000');
+  } else if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     // mainWindow.webContents.openDevTools(); // 🚨 关闭开发者工具
   } else {
@@ -260,7 +265,10 @@ function createOverlayWindow() {
   // 移除 DevTools
   // overlayWindow.webContents.openDevTools({ mode: 'detach' });
 
-  if (isDev) {
+  if (isDesktopMode) {
+    // Desktop mode: backend serves static files on port 8000
+    overlayWindow.loadURL('http://127.0.0.1:8000/?type=overlay#/overlay');
+  } else if (isDev) {
     // 添加 ?type=overlay 参数，确保前端能识别
     overlayWindow.loadURL('http://localhost:5173/?type=overlay#/overlay');
   } else {

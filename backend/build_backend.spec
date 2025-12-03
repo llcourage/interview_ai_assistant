@@ -84,26 +84,37 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# Use onedir mode (directory mode) instead of onefile
+# This makes startup faster and file organization clearer
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,  # Key: Don't pack binaries into exe
     name='backend',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,  # 显示控制台窗口（用于调试）
+    console=True,  # Show console window (for debugging)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # 可以添加图标路径
+    icon=None,  # Can add icon path here
+)
+
+# Copy binaries to directory
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='backend'
 )
 

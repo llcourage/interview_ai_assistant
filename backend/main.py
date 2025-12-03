@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import uvicorn
 import os
+import sys
 import json
 import platform
 from typing import Optional, Union
@@ -99,10 +100,14 @@ def find_ui_directory():
     import sys
     possible_dirs = []
     
-    # 如果是打包后的 exe，UI 在 exe 同目录的 ui/ 文件夹
+    # 如果是打包后的 exe，UI 可能在多个位置
     if getattr(sys, 'frozen', False):
         exe_dir = Path(sys.executable).parent.resolve()
+        # 1. exe 同目录的 ui/ 文件夹
         possible_dirs.append(exe_dir / "ui")
+        # 2. 父目录的 ui/ 文件夹（用于 release_root 结构）
+        parent_dir = exe_dir.parent.resolve()
+        possible_dirs.append(parent_dir / "ui")
     else:
         # 开发环境
         backend_dir = Path(__file__).parent.resolve()
@@ -200,31 +205,19 @@ class SpeechToTextResponse(BaseModel):
 async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOpenAI, str]:
     """根据用户Plan获取对应的OpenAI客户端和模型
     
+    Note: 此函数仅在非桌面版（Vercel/本地开发）环境下调用
+    桌面版的所有请求都会直接转发到 Vercel API，不会调用此函数
+    
     Returns:
         (AsyncOpenAI, model_name)
     """
-    # 检测是否为桌面版（打包后的 exe）
-    is_desktop = getattr(sys, 'frozen', False)
-    
     # 所有Plan都使用服务器的 API Key
     server_api_key = os.getenv("OPENAI_API_KEY")
     if not server_api_key:
-        # 如果是桌面版，不需要本地 API key（将转发到 Vercel）
-        if is_desktop:
-            print("ℹ️  桌面版模式：未配置本地 API Key，将使用云端 API")
-            # 返回 None，表示需要转发到云端
-            return None, None
-        else:
-            # 开发环境或服务器环境需要 API key
-            is_vercel = os.getenv("VERCEL")
-            print(f"❌ OPENAI_API_KEY 未配置")
-            print(f"   - VERCEL 环境: {is_vercel}")
-            print(f"   - 环境变量 OPENAI_API_KEY 是否存在: {os.getenv('OPENAI_API_KEY') is not None}")
-            print(f"   - 环境变量 OPENAI_API_KEY 是否为空: {not os.getenv('OPENAI_API_KEY')}")
-            raise HTTPException(
-                status_code=500,
-                detail="服务器API Key未配置。请在 Vercel Dashboard -> Settings -> Environment Variables 中配置 OPENAI_API_KEY"
-            )
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY not configured. Please configure it in Vercel Dashboard -> Settings -> Environment Variables"
+        )
     
     client = AsyncOpenAI(
         api_key=server_api_key,
@@ -237,7 +230,7 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
     elif plan == PlanType.HIGH:
         model = "gpt-4o"  # High使用完整版
     else:
-        raise HTTPException(status_code=400, detail=f"不支持的Plan类型: {plan}")
+        raise HTTPException(status_code=400, detail=f"Unsupported plan type: {plan}")
     
     return client, model
 
@@ -644,42 +637,6 @@ async def chat(
         
         # 3. 获取对应的API客户端和模型
         client, model = await get_api_client_for_user(current_user.id, user_plan.plan)
-            import httpx
-            vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
-            
-            # 获取用户的认证 token（从 HTTP 请求头）
-            auth_header = http_request.headers.get("Authorization", "")
-            
-            if not auth_header:
-                raise HTTPException(
-                    status_code=401,
-                    detail="缺少认证 token，无法转发请求到云端"
-                )
-            
-            # 转发请求到 Vercel API
-            async with httpx.AsyncClient() as http_client:
-                try:
-                    response = await http_client.post(
-                        f"{vercel_api_url}/api/chat",
-                        json={
-                            "user_input": request.user_input,
-                            "image_base64": request.image_base64,
-                            "context": request.context,
-                            "prompt": request.prompt
-                        },
-                        headers={
-                            "Authorization": auth_header,
-                            "Content-Type": "application/json"
-                        },
-                        timeout=60.0
-                    )
-                    response.raise_for_status()
-                    return response.json()
-                except httpx.HTTPError as e:
-                    raise HTTPException(
-                        status_code=502,
-                        detail=f"无法连接到云端 API: {str(e)}"
-                    )
         
         # 4. 处理请求
         if request.image_base64:
@@ -1018,7 +975,7 @@ if __name__ == "__main__":
     print("=" * 60)
     
     uvicorn.run(
-        "main:app",  # 直接运行时，backend 已经在 sys.path 中
+        app,  # 直接传递 app 对象，而不是字符串（PyInstaller 打包后无法使用字符串导入）
         host=host,
         port=port,
         reload=False,  # 直接运行时暂时禁用 reload，避免路径问题

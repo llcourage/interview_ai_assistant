@@ -33,3 +33,6 @@ python -m PyInstaller build_launcher.spec --clean
 - 使用 urllib 检测后端健康状态
 - 使用 webbrowser 模块打开浏览器
 
+
+
+

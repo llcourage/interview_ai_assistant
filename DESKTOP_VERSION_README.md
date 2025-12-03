@@ -106,3 +106,6 @@ AI-Interview-Assistant-Desktop/
 
 详细文档请参考 [DESKTOP_BUILD.md](./DESKTOP_BUILD.md)
 
+
+
+

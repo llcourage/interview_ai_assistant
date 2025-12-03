@@ -157,3 +157,6 @@ AI-Interview-Assistant-Desktop/
 4. 上传新的 ZIP 文件
 5. 更新网站下载链接
 
+
+
+
