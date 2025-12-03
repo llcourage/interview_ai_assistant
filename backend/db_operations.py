@@ -3,12 +3,20 @@
 提供用户Plan、API Keys、Usage的CRUD操作
 """
 import os
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from backend.db_supabase import get_supabase
 from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
 
 # 已移除加密相关代码 - 所有用户使用服务器 API Key
+
+
+def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """兼容旧数据：将 'starter' plan 转换为 'normal'"""
+    if isinstance(data, dict) and data.get('plan') == 'starter':
+        data = data.copy()  # 创建副本，避免修改原始数据
+        data['plan'] = 'normal'
+    return data
 
 
 # ========== User Plan Operations ==========
@@ -21,13 +29,15 @@ async def get_user_plan(user_id: str) -> UserPlan:
         response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
         
         if response.data:
-            return UserPlan(**response.data)
+            plan_data = normalize_plan_data(response.data)
+            return UserPlan(**plan_data)
         else:
             # 如果没有记录，先尝试直接查询（不使用 maybe_single）
             direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
             
             if direct_response.data and len(direct_response.data) > 0:
-                return UserPlan(**direct_response.data[0])
+                plan_data = normalize_plan_data(direct_response.data[0])
+                return UserPlan(**plan_data)
             
             # If no plan record found, create default NORMAL plan
             print(f"User {user_id} has no plan record, creating default NORMAL plan")
@@ -74,9 +84,11 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> Us
         
         # 确保 data 是列表且不为空
         if isinstance(response.data, list) and len(response.data) > 0:
-            return UserPlan(**response.data[0])
+            plan_data = normalize_plan_data(response.data[0])
+            return UserPlan(**plan_data)
         elif not isinstance(response.data, list) and response.data:
-            return UserPlan(**response.data)
+            plan_data = normalize_plan_data(response.data)
+            return UserPlan(**plan_data)
         else:
             print(f"❌ Supabase insert 返回的数据格式异常: {response.data}")
             raise Exception("创建Plan失败：返回的数据格式不正确")
@@ -152,9 +164,11 @@ async def update_user_plan(
         
         # 处理返回的数据
         if isinstance(response.data, list) and len(response.data) > 0:
-            return UserPlan(**response.data[0])
+            plan_data = normalize_plan_data(response.data[0])
+            return UserPlan(**plan_data)
         elif not isinstance(response.data, list) and response.data:
-            return UserPlan(**response.data)
+            plan_data = normalize_plan_data(response.data)
+            return UserPlan(**plan_data)
         else:
             print(f"Supabase upsert returned unexpected data format: {response.data}")
             raise Exception("Update plan failed: Returned data format is incorrect")
@@ -232,11 +246,23 @@ async def get_user_quota(user_id: str) -> UsageQuota:
         response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
         
         if response and response.data:
-            quota_data = response.data
+            # 保存原始 plan 值，用于检查是否需要更新数据库
+            original_plan = response.data.get('plan')
+            
+            quota_data = normalize_plan_data(response.data)
             # 确保 monthly_tokens_used 字段存在（兼容旧数据）
             if 'monthly_tokens_used' not in quota_data:
                 quota_data['monthly_tokens_used'] = 0
             quota = UsageQuota(**quota_data)
+            
+            # 如果从 'starter' 转换而来，更新数据库
+            if original_plan == 'starter':
+                try:
+                    supabase = get_supabase()
+                    supabase.table("usage_quotas").update({"plan": "normal"}).eq("user_id", user_id).execute()
+                    print(f"✅ 已将用户 {user_id} 的 quota plan 从 'starter' 更新为 'normal'")
+                except Exception as update_error:
+                    print(f"⚠️ 更新 quota plan 失败: {update_error}")
             
             # 检查是否需要重置配额
             now = datetime.now()
@@ -315,7 +341,8 @@ async def create_user_quota(user_id: str) -> UsageQuota:
         response = supabase.table("usage_quotas").insert(quota_data).execute()
         
         if response.data:
-            return UsageQuota(**response.data[0])
+            quota_data = normalize_plan_data(response.data[0])
+            return UsageQuota(**quota_data)
         else:
             raise Exception("创建配额失败")
     except Exception as e:
@@ -350,7 +377,8 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
         response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
         if response.data:
-            return UsageQuota(**response.data[0])
+            quota_data = normalize_plan_data(response.data[0])
+            return UsageQuota(**quota_data)
         else:
             raise Exception("Update quota failed")
     except Exception as e:
@@ -377,7 +405,8 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
         if response.data:
-            return UsageQuota(**response.data[0])
+            quota_data = normalize_plan_data(response.data[0])
+            return UsageQuota(**quota_data)
         else:
             raise Exception("重置配额失败")
     except Exception as e:

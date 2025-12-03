@@ -123,7 +123,7 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None, clien
         # 返回友好的错误信息
         error_message = ""
         if "api_key" in error_msg.lower():
-            error_message = "❌ API Key 错误，请检查 .env 文件中的 OPENAI_API_KEY"
+            error_message = "❌ API Key 错误，请检查 OPENAI_API_KEY 环境变量配置"
         elif "rate_limit" in error_msg.lower():
             error_message = "❌ API 调用频率超限，请稍后再试"
         elif "insufficient_quota" in error_msg.lower():

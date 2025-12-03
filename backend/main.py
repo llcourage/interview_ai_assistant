@@ -1,12 +1,18 @@
 # ========== 必须在所有导入之前加载环境变量 ==========
 from pathlib import Path
 from dotenv import load_dotenv
+import os
 
-# 明确指定 .env 文件路径，确保无论从哪里启动都能找到
-backend_dir = Path(__file__).parent.resolve()
-env_path = backend_dir / ".env"
-# 使用 override=True 确保覆盖已存在的环境变量
-load_dotenv(dotenv_path=str(env_path), override=True)
+# 只在开发环境（本地）加载 .env 文件
+# 在生产环境（Vercel）中，应该从系统环境变量读取
+is_production = os.getenv("VERCEL") or os.getenv("ENVIRONMENT") == "production"
+if not is_production:
+    # 明确指定 .env 文件路径，确保无论从哪里启动都能找到
+    backend_dir = Path(__file__).parent.resolve()
+    env_path = backend_dir / ".env"
+    # 不使用 override，优先使用系统环境变量（Vercel 环境变量）
+    if env_path.exists():
+        load_dotenv(dotenv_path=str(env_path), override=False)
 
 # ========== 现在可以导入其他模块 ==========
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header
