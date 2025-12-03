@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { API_BASE_URL } from './lib/api';
-import { Header } from './components/Header';
+import { TopNav } from './components/Profile/TopNav';
+import { ProfileHeader } from './components/Profile/ProfileHeader';
+import { AccountInfoCard } from './components/Profile/AccountInfoCard';
+import { UsageCard } from './components/Profile/UsageCard';
+import { CurrentPlanCard } from './components/Profile/CurrentPlanCard';
+import './components/Profile/ProfileBase.css';
 import './Profile.css';
 
 interface PlanInfo {
@@ -91,299 +96,73 @@ export const Profile: React.FC = () => {
     }
   };
 
-  const getPlanDisplayName = (plan: string) => {
-    const planMap: { [key: string]: string } = {
-      'normal': 'Normal',
-      'high': 'High'
-    };
-    return planMap[plan] || plan;
-  };
-
-  const getPlanPrice = (plan: string) => {
+  const getPlanPrice = (plan: string | null): string => {
+    if (!plan) return '$0';
     const priceMap: { [key: string]: string } = {
       'normal': '$19.99',
       'high': '$49.99'
     };
-    return priceMap[plan] || 'N/A';
+    return priceMap[plan] || '$0';
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } catch {
-      return dateString;
+  const handleRefresh = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      setLoading(true);
+      await loadPlanInfo(session.access_token);
+      setLoading(false);
     }
+  };
+
+  const handleManagePlan = () => {
+    navigate('/plans');
   };
 
   if (loading) {
     return (
-      <div className="profile-page">
-        <Header />
-        <div className="profile-container">
+      <div className="page-bg">
+        <TopNav />
+        <div className="main-container">
           <div className="loading-spinner">⏳ Loading...</div>
         </div>
       </div>
     );
   }
 
-  // Don't block the entire page if only planInfo fails to load
-  // The error will be shown in the plan card section
-
   return (
-    <div className="profile-page">
-      <Header />
-      <div className="profile-container">
-        {/* Profile Header with Avatar */}
-        <div className="profile-header">
-          <div className="avatar-container">
-            <div className="avatar">
-              {userEmail?.charAt(0).toUpperCase() || 'U'}
-            </div>
-          </div>
-          <div className="profile-header-info">
-            <h1>Account Settings</h1>
-            <p className="profile-email">{userEmail}</p>
-          </div>
-        </div>
+    <div className="page-bg">
+      <TopNav />
 
-        <div className="profile-content">
-          {/* Account Information Card */}
-          <div className="profile-card">
-            <div className="card-header">
-              <h2 className="card-title">Account Information</h2>
-            </div>
-            <div className="card-body">
-              <div className="info-item">
-                <div className="info-icon">📧</div>
-                <div className="info-content">
-                  <div className="info-label">Email Address</div>
-                  <div className="info-value">{userEmail || 'N/A'}</div>
-                </div>
-              </div>
-              {planInfo && (
-                <>
-                  <div className="info-item">
-                    <div className="info-icon">📋</div>
-                    <div className="info-content">
-                      <div className="info-label">Current Plan</div>
-                      <div className="info-value">{getPlanDisplayName(planInfo.plan)}</div>
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <div className="info-icon">📊</div>
-                    <div className="info-content">
-                      <div className="info-label">Daily Usage</div>
-                      <div className="info-value">
-                        {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit} requests today
-                      </div>
-                      {planInfo.daily_limit !== -1 && (
-                        <div className="stat-progress" style={{ marginTop: '0.75rem' }}>
-                          <div
-                            className="stat-progress-bar"
-                            style={{
-                              width: `${Math.min((planInfo.daily_requests / planInfo.daily_limit) * 100, 100)}%`
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-              {!planInfo && !loading && error && (
-                <div className="info-item">
-                  <div className="info-icon">⚠️</div>
-                  <div className="info-content">
-                    <div className="info-label">Plan Status</div>
-                    <div className="info-value" style={{ color: '#ffc107' }}>Failed to load plan information</div>
-                  </div>
-                </div>
-              )}
-            </div>
+      <div className="main-container">
+        {/* 1. 顶部 Profile 头部卡片 */}
+        <ProfileHeader
+          email={userEmail}
+          plan={planInfo?.plan || null}
+          nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
+        />
+
+        {/* 2. 内容区：左右两列 */}
+        <div className="two-column-layout">
+          {/* 左侧 */}
+          <div className="column">
+            <AccountInfoCard 
+              email={userEmail} 
+              plan={planInfo?.plan || null} 
+            />
+            <UsageCard
+              used={planInfo?.daily_requests || 0}
+              limit={planInfo?.daily_limit || 0}
+              onRefresh={handleRefresh}
+            />
           </div>
 
-          {/* Current Plan Card */}
-          {planInfo ? (
-            <div className="profile-card plan-card">
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Current Plan</h2>
-                  <p className="card-subtitle">Manage your subscription and usage</p>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="refresh-btn"
-                    onClick={async () => {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      if (session) {
-                        setLoading(true);
-                        await loadPlanInfo(session.access_token);
-                        setLoading(false);
-                      }
-                    }}
-                    title="Refresh plan information"
-                  >
-                    🔄 Refresh
-                  </button>
-                  <button
-                    className="upgrade-btn"
-                    onClick={() => navigate('/plans')}
-                  >
-                    {planInfo.plan === 'high' ? 'Manage' : 'Upgrade'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="card-body">
-                {/* Plan Badge */}
-                <div className="plan-badge-section">
-                  <div className="plan-badge">
-                    <span className="plan-name">{getPlanDisplayName(planInfo.plan)}</span>
-                    <span className="plan-price">{getPlanPrice(planInfo.plan)}<span className="price-unit">/month</span></span>
-                  </div>
-                </div>
-
-                {/* Usage Statistics */}
-                <div className="usage-section">
-                  <h3 className="section-subtitle">Usage Statistics</h3>
-                  <div className="usage-stats">
-                    <div className="stat-card">
-                      <div className="stat-header">
-                        <span className="stat-label">Daily Requests</span>
-                        <span className="stat-value">
-                          {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit}
-                        </span>
-                      </div>
-                      <div className="stat-progress">
-                        <div
-                          className="stat-progress-bar"
-                          style={{
-                            width: planInfo.daily_limit === -1
-                              ? '100%'
-                              : `${Math.min((planInfo.daily_requests / planInfo.daily_limit) * 100, 100)}%`
-                          }}
-                        />
-                      </div>
-                      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                        {planInfo.daily_limit === -1 
-                          ? 'Unlimited requests' 
-                          : `${planInfo.daily_limit - planInfo.daily_requests} requests remaining today`
-                        }
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div className="stat-header">
-                        <span className="stat-label">Monthly Requests</span>
-                        <span className="stat-value">
-                          {planInfo.monthly_requests} / {planInfo.monthly_limit === -1 ? '∞' : planInfo.monthly_limit}
-                        </span>
-                      </div>
-                      <div className="stat-progress">
-                        <div
-                          className="stat-progress-bar"
-                          style={{
-                            width: planInfo.monthly_limit === -1
-                              ? '100%'
-                              : `${Math.min((planInfo.monthly_requests / planInfo.monthly_limit) * 100, 100)}%`
-                          }}
-                        />
-                      </div>
-                      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>
-                        {planInfo.monthly_limit === -1 
-                          ? 'Unlimited requests' 
-                          : `${planInfo.monthly_limit - planInfo.monthly_requests} requests remaining this month`
-                        }
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Features */}
-                <div className="features-section">
-                  <h3 className="section-subtitle">Plan Features</h3>
-                  <div className="features-grid">
-                    {planInfo.features.map((feature, index) => (
-                      <div key={index} className="feature-item">
-                        <span className="feature-icon">✓</span>
-                        <span className="feature-text">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Subscription Info */}
-                {planInfo.subscription_info && (
-                  <div className="subscription-section">
-                    <h3 className="section-subtitle">Subscription Details</h3>
-                    <div className="subscription-details">
-                      <div className="subscription-item">
-                        <span className="subscription-label">Status</span>
-                        <span className={`subscription-badge ${planInfo.subscription_info.status}`}>
-                          {planInfo.subscription_info.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="subscription-item">
-                        <span className="subscription-label">Subscription ID</span>
-                        <span className="subscription-value">{planInfo.subscription_info.subscription_id}</span>
-                      </div>
-                      <div className="subscription-item">
-                        <span className="subscription-label">Renews On</span>
-                        <span className="subscription-value">
-                          {formatDate(planInfo.subscription_info.current_period_end)}
-                        </span>
-                      </div>
-                      {planInfo.subscription_info.cancel_at_period_end && (
-                        <div className="subscription-warning">
-                          ⚠️ Subscription will cancel at period end
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : !loading && (
-            <div className="profile-card">
-              <div className="card-header">
-                <h2 className="card-title">Current Plan</h2>
-              </div>
-              <div className="card-body">
-                <div style={{ textAlign: 'center', padding: '2rem' }}>
-                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', marginBottom: '1rem' }}>
-                    {error || 'Unable to load plan information'}
-                  </p>
-                  <button
-                    className="refresh-btn"
-                    onClick={async () => {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      if (session) {
-                        setLoading(true);
-                        setError(null);
-                        await loadPlanInfo(session.access_token);
-                        setLoading(false);
-                      }
-                    }}
-                  >
-                    🔄 Retry Loading Plan
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="profile-actions">
-            <button
-              className="action-btn primary"
-              onClick={() => navigate('/plans')}
-            >
-              {planInfo?.plan === 'high' ? 'Manage Subscription' : planInfo?.plan === 'normal' ? 'Manage Plan' : 'Upgrade Plan'}
-            </button>
+          {/* 右侧 */}
+          <div className="column">
+            <CurrentPlanCard
+              plan={planInfo?.plan || null}
+              price={getPlanPrice(planInfo?.plan || null)}
+              onManagePlan={handleManagePlan}
+            />
           </div>
         </div>
       </div>
