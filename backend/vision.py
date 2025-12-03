@@ -122,8 +122,16 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None, clien
         
         # 返回友好的错误信息
         error_message = ""
-        if "api_key" in error_msg.lower():
-            error_message = "❌ API Key 错误，请检查 OPENAI_API_KEY 环境变量配置"
+        if "api_key" in error_msg.lower() or "invalid api key" in error_msg.lower() or "authentication" in error_msg.lower():
+            error_message = "❌ API Key 错误。"
+            # 检查是否在 Vercel 环境
+            import os
+            is_vercel = os.getenv("VERCEL")
+            if is_vercel:
+                error_message += " 请在 Vercel Dashboard -> Settings -> Environment Variables 中检查 OPENAI_API_KEY 是否正确配置。"
+            else:
+                error_message += " 请检查 backend/.env 文件中的 OPENAI_API_KEY 是否正确配置。"
+            error_message += " 确保 API Key 以 'sk-' 开头且完整。"
         elif "rate_limit" in error_msg.lower():
             error_message = "❌ API 调用频率超限，请稍后再试"
         elif "insufficient_quota" in error_msg.lower():

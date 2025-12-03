@@ -128,9 +128,15 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
     # 所有Plan都使用服务器的 API Key
     server_api_key = os.getenv("OPENAI_API_KEY")
     if not server_api_key:
+        # 添加详细的调试信息
+        is_vercel = os.getenv("VERCEL")
+        print(f"❌ OPENAI_API_KEY 未配置")
+        print(f"   - VERCEL 环境: {is_vercel}")
+        print(f"   - 环境变量 OPENAI_API_KEY 是否存在: {os.getenv('OPENAI_API_KEY') is not None}")
+        print(f"   - 环境变量 OPENAI_API_KEY 是否为空: {not os.getenv('OPENAI_API_KEY')}")
         raise HTTPException(
             status_code=500,
-            detail="服务器API Key未配置"
+            detail="服务器API Key未配置。请在 Vercel Dashboard -> Settings -> Environment Variables 中配置 OPENAI_API_KEY"
         )
     
     client = AsyncOpenAI(
@@ -163,8 +169,26 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """健康检查接口"""
-    return {"status": "healthy"}
+    """健康检查接口 - 包含环境变量状态"""
+    is_vercel = os.getenv("VERCEL")
+    env_status = {
+        "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
+        "SUPABASE_URL": bool(os.getenv("SUPABASE_URL")),
+        "SUPABASE_SERVICE_ROLE_KEY": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
+        "SUPABASE_ANON_KEY": bool(os.getenv("SUPABASE_ANON_KEY")),
+        "STRIPE_SECRET_KEY": bool(os.getenv("STRIPE_SECRET_KEY")),
+        "STRIPE_WEBHOOK_SECRET": bool(os.getenv("STRIPE_WEBHOOK_SECRET"))
+    }
+    
+    all_configured = all(env_status.values())
+    
+    return {
+        "status": "healthy" if all_configured else "warning",
+        "environment": "Vercel" if is_vercel else "Local",
+        "message": "All environment variables configured" if all_configured else "Some environment variables are missing",
+        "environment_variables": env_status,
+        "ready": all_configured
+    }
 
 
 # ========== 认证相关 API ==========
