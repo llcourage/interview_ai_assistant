@@ -79,6 +79,10 @@ class handler(BaseHTTPRequestHandler):
             print(f"   - User-Agent: {self.headers.get('User-Agent', 'N/A')}")
             print(f"   - Origin: {self.headers.get('Origin', 'N/A')}")
             print(f"   - Content-Type: {self.headers.get('Content-Type', 'N/A')}")
+            # 打印所有相关 headers 以调试路径问题
+            for header_name in ['X-Rewrite-Url', 'X-Original-Url', 'X-Forwarded-Uri']:
+                if self.headers.get(header_name):
+                    print(f"   - {header_name}: {self.headers.get(header_name)}")
             
             # 获取 FastAPI 应用
             app = get_app()

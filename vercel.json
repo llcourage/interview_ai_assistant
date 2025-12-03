@@ -8,7 +8,11 @@
       "destination": "/api/index"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/health",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!api/|health).*)",
       "destination": "/index.html"
     }
   ],
