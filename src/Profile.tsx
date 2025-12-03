@@ -177,10 +177,20 @@ export const Profile: React.FC = () => {
                   <div className="info-item">
                     <div className="info-icon">📊</div>
                     <div className="info-content">
-                      <div className="info-label">Usage</div>
+                      <div className="info-label">Daily Usage</div>
                       <div className="info-value">
-                        {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit} daily requests
+                        {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit} requests today
                       </div>
+                      {planInfo.daily_limit !== -1 && (
+                        <div className="stat-progress" style={{ marginTop: '0.75rem' }}>
+                          <div
+                            className="stat-progress-bar"
+                            style={{
+                              width: `${Math.min((planInfo.daily_requests / planInfo.daily_limit) * 100, 100)}%`
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
@@ -259,6 +269,12 @@ export const Profile: React.FC = () => {
                           }}
                         />
                       </div>
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                        {planInfo.daily_limit === -1 
+                          ? 'Unlimited requests' 
+                          : `${planInfo.daily_limit - planInfo.daily_requests} requests remaining today`
+                        }
+                      </div>
                     </div>
                     <div className="stat-card">
                       <div className="stat-header">
@@ -276,6 +292,12 @@ export const Profile: React.FC = () => {
                               : `${Math.min((planInfo.monthly_requests / planInfo.monthly_limit) * 100, 100)}%`
                           }}
                         />
+                      </div>
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                        {planInfo.monthly_limit === -1 
+                          ? 'Unlimited requests' 
+                          : `${planInfo.monthly_limit - planInfo.monthly_requests} requests remaining this month`
+                        }
                       </div>
                     </div>
                   </div>

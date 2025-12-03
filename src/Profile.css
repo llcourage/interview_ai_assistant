@@ -1,27 +1,29 @@
+/* ========== 整体布局 ========== */
 .profile-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 50%, #1e1e2e 100%);
-  padding-top: 140px;
+  background: #151826; /* 调亮 20%：从 #0F111A 到 #151826 */
+  padding-top: 80px;
   padding-bottom: 4rem;
 }
 
 .profile-container {
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 2rem;
 }
 
-/* Profile Header with Avatar */
+/* ========== Profile Header - 重做 ========== */
 .profile-header {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 3rem 2.5rem;
+  margin-bottom: 3rem;
   display: flex;
   align-items: center;
-  gap: 2rem;
-  margin-bottom: 3rem;
-  padding: 2rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 2.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .avatar-container {
@@ -36,10 +38,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 700;
   color: white;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  border: 3px solid rgba(255, 255, 255, 0.1);
 }
 
 .profile-header-info {
@@ -47,82 +50,90 @@
 }
 
 .profile-header-info h1 {
-  font-size: 2rem;
+  font-size: 32px; /* H1: 26-32px */
   font-weight: 700;
   color: #fff;
-  margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.2;
 }
 
 .profile-email {
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.6); /* 浅色灰字 #9CA3AF 的变体 */
   font-weight: 400;
+  margin: 0;
 }
 
-/* Profile Content */
+/* ========== Profile Content ========== */
 .profile-content {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 2rem; /* 48px 间距 */
 }
 
-/* Card Styles */
+/* ========== 卡片样式 - 现代化玻璃拟态 ========== */
 .profile-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05); /* 略透明 */
+  border-radius: 20px; /* 圆角 16-24px */
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08); /* subtle border */
   overflow: hidden;
-  transition: transform 0.3s, box-shadow 0.3s;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
 }
 
 .profile-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 1.5rem 2rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2rem 2.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .card-title {
-  font-size: 1.5rem;
+  font-size: 22px; /* Section 标题 20-22px */
   font-weight: 600;
   color: #fff;
-  margin: 0;
+  margin: 0 0 0.25rem 0;
 }
 
 .card-subtitle {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin-top: 0.25rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.5); /* #9CA3AF 的变体 */
+  margin: 0;
+  font-weight: 400;
 }
 
 .card-body {
-  padding: 2rem;
+  padding: 2.5rem;
 }
 
-/* Account Information */
+/* ========== Account Information - Grid 布局 ========== */
 .info-item {
   display: flex;
   align-items: center;
   gap: 1.5rem;
   padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 12px;
-  transition: background 0.3s;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.3s ease, border-color 0.3s ease;
+  margin-bottom: 1rem;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
 }
 
 .info-item:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .info-icon {
@@ -132,9 +143,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(102, 126, 234, 0.2);
+  background: rgba(102, 126, 234, 0.15);
   border-radius: 12px;
   flex-shrink: 0;
+  border: 1px solid rgba(102, 126, 234, 0.2);
 }
 
 .info-content {
@@ -142,8 +154,8 @@
 }
 
 .info-label {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.5); /* #9CA3AF 的变体 */
   margin-bottom: 0.5rem;
   font-weight: 500;
 }
@@ -151,86 +163,92 @@
 .info-value {
   font-size: 1.1rem;
   color: #fff;
-  font-weight: 500;
+  font-weight: 600; /* 半粗 */
 }
 
-/* Plan Badge */
+/* ========== Plan Badge - 重新设计 ========== */
 .plan-badge-section {
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
 }
 
 .plan-badge {
   display: inline-flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1.5rem 2rem;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
-  border-radius: 12px;
+  gap: 0.75rem;
+  padding: 2rem 2.5rem;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.25) 100%);
+  border-radius: 16px;
   border: 1px solid rgba(102, 126, 234, 0.3);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.2);
 }
 
 .plan-name {
-  font-size: 1.8rem;
-  font-weight: 700;
+  font-size: 2rem; /* 更大更强 */
+  font-weight: 700; /* Bold */
   color: #fff;
+  letter-spacing: -0.5px;
 }
 
 .plan-price {
-  font-size: 1.3rem;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.5rem; /* 放大 */
+  color: rgba(255, 255, 255, 0.95); /* 减少透明度 */
   font-weight: 600;
 }
 
 .price-unit {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.7);
   font-weight: 400;
   margin-left: 0.25rem;
 }
 
-/* Upgrade Button */
-.upgrade-btn {
+/* ========== 按钮样式 - 统一风格 ========== */
+.upgrade-btn,
+.refresh-btn {
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
+  border-radius: 10px; /* 更小圆角 */
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.2s ease;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+}
+
+.upgrade-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .upgrade-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .refresh-btn {
-  padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-  white-space: nowrap;
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .refresh-btn:hover {
   transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* Usage Statistics */
+/* ========== Usage Statistics - 改进的进度条 ========== */
 .usage-section {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 2.5rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .section-subtitle {
@@ -242,15 +260,21 @@
 
 .usage-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1.5rem;
 }
 
 .stat-card {
-  padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 1.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .stat-header {
@@ -262,41 +286,60 @@
 
 .stat-label {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.6); /* #9CA3AF 的变体 */
   font-weight: 500;
 }
 
 .stat-value {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #fff;
 }
 
 .stat-progress {
   width: 100%;
-  height: 8px;
+  height: 10px; /* 稍微加高 */
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
+  position: relative;
 }
 
 .stat-progress-bar {
   height: 100%;
   background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  transition: width 0.3s ease;
-  border-radius: 4px;
+  transition: width 0.5s ease;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+  position: relative;
 }
 
-/* Features */
+.stat-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ========== Features ========== */
 .features-section {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 2.5rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
 }
 
@@ -304,14 +347,17 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  transition: background 0.3s;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
 }
 
 .feature-item:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateX(4px);
 }
 
 .feature-icon {
@@ -320,24 +366,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(102, 126, 234, 0.3);
+  background: rgba(102, 126, 234, 0.2);
   border-radius: 50%;
   color: #667eea;
   font-weight: 700;
   font-size: 0.9rem;
   flex-shrink: 0;
+  border: 1px solid rgba(102, 126, 234, 0.3);
 }
 
 .feature-text {
   color: rgba(255, 255, 255, 0.9);
   font-size: 0.95rem;
+  font-weight: 400;
 }
 
-/* Subscription Info */
+/* ========== Subscription Info ========== */
 .subscription-section {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 2.5rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .subscription-details {
@@ -350,14 +398,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .subscription-label {
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.6); /* #9CA3AF 的变体 */
   font-size: 0.95rem;
 }
 
@@ -366,11 +415,12 @@
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 0.9rem;
   word-break: break-all;
+  font-weight: 500;
 }
 
 .subscription-badge {
-  padding: 0.4rem 0.8rem;
-  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
   font-weight: 600;
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -396,50 +446,60 @@
 }
 
 .subscription-warning {
-  padding: 1rem 1.5rem;
+  padding: 1.25rem 1.5rem;
   background: rgba(255, 193, 7, 0.1);
   border-left: 4px solid #ffc107;
-  border-radius: 8px;
+  border-radius: 12px;
   color: #ffc107;
   font-weight: 500;
   margin-top: 0.5rem;
 }
 
-/* Action Buttons */
+/* ========== Action Buttons ========== */
 .profile-actions {
   display: flex;
   gap: 1rem;
   justify-content: flex-end;
-  margin-top: 1rem;
+  margin-top: 2rem;
 }
 
 .action-btn {
   padding: 1rem 2rem;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px; /* 更小圆角 */
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .action-btn.primary {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.action-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
 }
 
 .action-btn.secondary {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.action-btn:hover {
+.action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* Loading & Error */
+/* ========== Loading & Error ========== */
 .loading-spinner,
 .error-message {
   text-align: center;
@@ -451,11 +511,11 @@
 .error-message {
   background: rgba(220, 53, 69, 0.2);
   border: 1px solid rgba(220, 53, 69, 0.3);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 2rem;
 }
 
-/* Responsive */
+/* ========== Responsive ========== */
 @media (max-width: 768px) {
   .profile-container {
     padding: 0 1rem;
@@ -465,16 +525,22 @@
     flex-direction: column;
     text-align: center;
     gap: 1.5rem;
+    padding: 2rem 1.5rem;
   }
 
   .profile-header-info h1 {
-    font-size: 1.5rem;
+    font-size: 24px;
   }
 
   .card-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
+    padding: 1.5rem;
+  }
+
+  .card-body {
+    padding: 1.5rem;
   }
 
   .usage-stats {
