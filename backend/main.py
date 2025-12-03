@@ -17,6 +17,8 @@ if not is_production:
 # ========== 现在可以导入其他模块 ==========
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -34,7 +36,7 @@ from openai import AsyncOpenAI
 # 导入认证模块
 from backend.auth_supabase import (
     User, UserRegister, UserLogin, Token,
-    register_user, login_user, get_current_active_user
+    register_user, login_user, get_current_active_user, verify_token
 )
 
 # 导入新的数据库模块
@@ -61,10 +63,23 @@ app = FastAPI(
 async def startup_event():
     import os
     is_vercel = os.getenv("VERCEL")
+    is_desktop = getattr(sys, 'frozen', False)  # 检测是否为打包后的桌面版
+    
     print("=" * 60)
     print("🚀 FastAPI 应用启动")
-    print(f"   环境: {'Vercel' if is_vercel else 'Local'}")
-    print(f"   OPENAI_API_KEY 已配置: {bool(os.getenv('OPENAI_API_KEY'))}")
+    if is_vercel:
+        print(f"   环境: Vercel (云端)")
+        print(f"   ✅ 所有 API Key 在云端")
+    elif is_desktop:
+        print(f"   环境: Desktop (桌面版)")
+        print(f"   ⚠️  桌面版模式：不包含任何配置和 API Key")
+        print(f"   ✅ 所有 API 请求将转发到 Vercel（包括认证、数据库、AI、支付）")
+        vercel_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        print(f"   云端 API: {vercel_url}")
+        print(f"   ✅ 桌面版不直接连接 Supabase 或任何外部服务")
+    else:
+        print(f"   环境: Local (本地开发)")
+        print(f"   OPENAI_API_KEY 已配置: {bool(os.getenv('OPENAI_API_KEY'))}")
     print("=" * 60)
 
 # 配置 CORS
@@ -75,6 +90,58 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ========== 静态文件服务（桌面版）==========
+# 仅在桌面版模式下提供静态文件服务
+
+def find_ui_directory():
+    """查找 UI 目录"""
+    import sys
+    possible_dirs = []
+    
+    # 如果是打包后的 exe，UI 在 exe 同目录的 ui/ 文件夹
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent.resolve()
+        possible_dirs.append(exe_dir / "ui")
+    else:
+        # 开发环境
+        backend_dir = Path(__file__).parent.resolve()
+        project_root = backend_dir.parent.resolve()
+        possible_dirs.append(project_root / "dist")
+        possible_dirs.append(project_root / "ui")
+    
+    for dir_path in possible_dirs:
+        if dir_path.exists() and (dir_path / "index.html").exists():
+            return dir_path
+    return None
+
+# 查找并设置 UI 目录
+ui_directory = find_ui_directory()
+if ui_directory:
+    print(f"📁 检测到 UI 目录: {ui_directory}")
+    
+    # 挂载静态资源目录
+    assets_dir = ui_directory / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+        print(f"✅ 已挂载静态资源: /assets")
+    
+    # SPA 路由支持（必须在最后定义，作为 catch-all）
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """提供 SPA 路由支持"""
+        # 排除 API 和文档路径
+        if (full_path.startswith("api/") or 
+            full_path in ["docs", "redoc", "openapi.json"]):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # 返回 index.html
+        index_path = ui_directory / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        raise HTTPException(status_code=404, detail="UI not found")
+else:
+    print("ℹ️  未检测到 UI 目录，仅提供 API 服务")
 
 # ========== Request/Response Models ==========
 
@@ -136,19 +203,28 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
     Returns:
         (AsyncOpenAI, model_name)
     """
+    # 检测是否为桌面版（打包后的 exe）
+    is_desktop = getattr(sys, 'frozen', False)
+    
     # 所有Plan都使用服务器的 API Key
     server_api_key = os.getenv("OPENAI_API_KEY")
     if not server_api_key:
-        # 添加详细的调试信息
-        is_vercel = os.getenv("VERCEL")
-        print(f"❌ OPENAI_API_KEY 未配置")
-        print(f"   - VERCEL 环境: {is_vercel}")
-        print(f"   - 环境变量 OPENAI_API_KEY 是否存在: {os.getenv('OPENAI_API_KEY') is not None}")
-        print(f"   - 环境变量 OPENAI_API_KEY 是否为空: {not os.getenv('OPENAI_API_KEY')}")
-        raise HTTPException(
-            status_code=500,
-            detail="服务器API Key未配置。请在 Vercel Dashboard -> Settings -> Environment Variables 中配置 OPENAI_API_KEY"
-        )
+        # 如果是桌面版，不需要本地 API key（将转发到 Vercel）
+        if is_desktop:
+            print("ℹ️  桌面版模式：未配置本地 API Key，将使用云端 API")
+            # 返回 None，表示需要转发到云端
+            return None, None
+        else:
+            # 开发环境或服务器环境需要 API key
+            is_vercel = os.getenv("VERCEL")
+            print(f"❌ OPENAI_API_KEY 未配置")
+            print(f"   - VERCEL 环境: {is_vercel}")
+            print(f"   - 环境变量 OPENAI_API_KEY 是否存在: {os.getenv('OPENAI_API_KEY') is not None}")
+            print(f"   - 环境变量 OPENAI_API_KEY 是否为空: {not os.getenv('OPENAI_API_KEY')}")
+            raise HTTPException(
+                status_code=500,
+                detail="服务器API Key未配置。请在 Vercel Dashboard -> Settings -> Environment Variables 中配置 OPENAI_API_KEY"
+            )
     
     client = AsyncOpenAI(
         api_key=server_api_key,
@@ -170,12 +246,26 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
 
 @app.get("/")
 async def root():
-    """根路径 - 健康检查"""
-    return {
-        "status": "running",
-        "message": "AI Interview Assistant API v2.0",
-        "version": "2.0.0"
-    }
+    """根路径 - 健康检查或返回 UI"""
+    # 尝试查找 UI 目录
+    ui_dir = None
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent.resolve()
+        ui_dir = exe_dir / "ui"
+    else:
+        backend_dir = Path(__file__).parent.resolve()
+        project_root = backend_dir.parent.resolve()
+        ui_dir = project_root / "ui"
+    
+    if ui_dir and (ui_dir / "index.html").exists():
+        return FileResponse(str(ui_dir / "index.html"))
+    else:
+        # 否则返回 API 信息
+        return {
+            "status": "running",
+            "message": "AI Interview Assistant API v2.0",
+            "version": "2.0.0"
+        }
 
 
 @app.get("/health")
@@ -206,28 +296,123 @@ async def health_check():
 # ========== 认证相关 API ==========
 
 @app.post("/api/register", response_model=Token, tags=["认证"])
-async def register(user_data: UserRegister):
+async def register(user_data: UserRegister, http_request: Request):
     """用户注册"""
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/register",
+                    json={"email": user_data.email, "password": user_data.password},
+                    headers={"Content-Type": "application/json"},
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理
     return await register_user(user_data.email, user_data.password)
 
 
 @app.post("/api/login", response_model=Token, tags=["认证"])
-async def login(user_data: UserLogin):
+async def login(user_data: UserLogin, http_request: Request):
     """用户登录"""
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/login",
+                    json={"email": user_data.email, "password": user_data.password},
+                    headers={"Content-Type": "application/json"},
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理
     return await login_user(user_data.email, user_data.password)
 
 
 @app.get("/api/me", response_model=User, tags=["认证"])
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(http_request: Request):
     """获取当前用户信息"""
+    # 如果是桌面版，转发到 Vercel（不验证 token，让 Vercel 验证）
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        auth_header = http_request.headers.get("Authorization", "")
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="缺少认证 token")
+        
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.get(
+                    f"{vercel_api_url}/api/me",
+                    headers={"Authorization": auth_header},
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理（需要验证 token）
+    # 从请求头获取 token
+    auth_header = http_request.headers.get("Authorization", "")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少认证 token")
+    
+    token = auth_header.replace("Bearer ", "")
+    current_user = await verify_token(token)
     return current_user
 
 
 # ========== 用户Plan相关 API ==========
 
 @app.get("/api/plan", response_model=PlanResponse, tags=["Plan管理"])
-async def get_plan(current_user: User = Depends(get_current_active_user)):
+async def get_plan(http_request: Request):
     """获取用户当前Plan信息"""
+    # 如果是桌面版，转发到 Vercel（不验证 token，让 Vercel 验证）
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        auth_header = http_request.headers.get("Authorization", "")
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="缺少认证 token")
+        
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.get(
+                    f"{vercel_api_url}/api/plan",
+                    headers={"Authorization": auth_header},
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理（需要验证 token）
+    auth_header = http_request.headers.get("Authorization", "")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少认证 token")
+    
+    token = auth_header.replace("Bearer ", "")
+    current_user = await verify_token(token)
     user_plan = await get_user_plan(current_user.id)
     quota = await get_user_quota(current_user.id)
     
@@ -256,10 +441,58 @@ async def get_plan(current_user: User = Depends(get_current_active_user)):
 @app.post("/api/plan/checkout", tags=["Plan管理"])
 async def create_checkout(
     request: CheckoutRequest,
-    current_user: User = Depends(get_current_active_user)
+    http_request: Request
 ):
     """创建Stripe支付会话"""
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        auth_header = http_request.headers.get("Authorization", "")
+        
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="缺少认证 token")
+        
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/plan/checkout",
+                    json={
+                        "plan": request.plan,
+                        "success_url": request.success_url,
+                        "cancel_url": request.cancel_url
+                    },
+                    headers={
+                        "Authorization": auth_header,
+                        "Content-Type": "application/json"
+                    },
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理
     try:
+        plan = PlanType(request.plan)
+        
+        checkout_data = await create_checkout_session(
+            user_id=current_user.id,
+            plan=plan,
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            user_email=current_user.email  # 传递用户邮箱
+        )
+        
+        # 非桌面版：正常处理（需要验证 token）
+        auth_header = http_request.headers.get("Authorization", "")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="缺少认证 token")
+        
+        token = auth_header.replace("Bearer ", "")
+        current_user = await verify_token(token)
         plan = PlanType(request.plan)
         
         checkout_data = await create_checkout_session(
@@ -297,8 +530,40 @@ async def create_checkout(
 
 
 @app.post("/api/plan/cancel", tags=["Plan管理"])
-async def cancel_plan(current_user: User = Depends(get_current_active_user)):
+async def cancel_plan(http_request: Request):
     """取消当前订阅"""
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        auth_header = http_request.headers.get("Authorization", "")
+        
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="缺少认证 token")
+        
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/plan/cancel",
+                    headers={
+                        "Authorization": auth_header,
+                        "Content-Type": "application/json"
+                    },
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理（需要验证 token）
+    auth_header = http_request.headers.get("Authorization", "")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少认证 token")
+    
+    token = auth_header.replace("Bearer ", "")
+    current_user = await verify_token(token)
     success = await cancel_subscription(current_user.id)
     
     if success:
@@ -316,7 +581,7 @@ async def cancel_plan(current_user: User = Depends(get_current_active_user)):
 @app.post("/api/chat", response_model=ChatResponse, tags=["AI功能"])
 async def chat(
     request: ChatRequest,
-    current_user: User = Depends(get_current_active_user)
+    http_request: Request
 ):
     """统一的Chat接口 - 支持文字对话和图片分析
     
@@ -326,7 +591,49 @@ async def chat(
     - 自动进行限流检查
     - 自动记录使用统计
     """
+    # 如果是桌面版，直接转发到 Vercel（不验证 token，让 Vercel 验证）
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        auth_header = http_request.headers.get("Authorization", "")
+        
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="缺少认证 token，无法转发请求到云端")
+        
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/chat",
+                    json={
+                        "user_input": request.user_input,
+                        "image_base64": request.image_base64,
+                        "context": request.context,
+                        "prompt": request.prompt
+                    },
+                    headers={
+                        "Authorization": auth_header,
+                        "Content-Type": "application/json"
+                    },
+                    timeout=60.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"无法连接到云端 API: {str(e)}"
+                )
+    
+    # 非桌面版：正常处理（需要验证 token）
     try:
+        auth_header = http_request.headers.get("Authorization", "")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="缺少认证 token")
+        
+        token = auth_header.replace("Bearer ", "")
+        current_user = await verify_token(token)
+        
         # 1. 检查限流
         allowed, error_msg = await check_rate_limit(current_user.id)
         if not allowed:
@@ -337,6 +644,42 @@ async def chat(
         
         # 3. 获取对应的API客户端和模型
         client, model = await get_api_client_for_user(current_user.id, user_plan.plan)
+            import httpx
+            vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+            
+            # 获取用户的认证 token（从 HTTP 请求头）
+            auth_header = http_request.headers.get("Authorization", "")
+            
+            if not auth_header:
+                raise HTTPException(
+                    status_code=401,
+                    detail="缺少认证 token，无法转发请求到云端"
+                )
+            
+            # 转发请求到 Vercel API
+            async with httpx.AsyncClient() as http_client:
+                try:
+                    response = await http_client.post(
+                        f"{vercel_api_url}/api/chat",
+                        json={
+                            "user_input": request.user_input,
+                            "image_base64": request.image_base64,
+                            "context": request.context,
+                            "prompt": request.prompt
+                        },
+                        headers={
+                            "Authorization": auth_header,
+                            "Content-Type": "application/json"
+                        },
+                        timeout=60.0
+                    )
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPError as e:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"无法连接到云端 API: {str(e)}"
+                    )
         
         # 4. 处理请求
         if request.image_base64:

@@ -87,6 +87,39 @@ out/
 *.tsbuildinfo
 
 # ========================================
+# Desktop Build / PyInstaller
+# ========================================
+# PyInstaller 构建目录
+**/build/
+**/dist/
+backend/build/
+backend/dist/
+launcher/build/
+launcher/dist/
+
+# 桌面版打包输出
+dist-desktop/
+build-desktop/
+
+# 可执行文件
+*.exe
+*.bin
+*.app
+*.dmg
+*.pkg
+*.deb
+*.rpm
+
+# PyInstaller 临时文件
+*.spec.bak
+*.pkg
+*.pyz
+
+# 测试目录（包含打包文件）
+test-desktop/
+test-build/
+
+# ========================================
 # Temporary Files
 # ========================================
 *.tmp
@@ -98,12 +131,17 @@ out/
 *~
 .cache/
 
+# PyInstaller 临时目录（运行时解压目录）
+**/_MEI*/
+
 # ========================================
 # Logs
 # ========================================
 *.log
 logs/
 *.log.*
+backend.log
+launcher.log
 
 # ========================================
 # Vercel

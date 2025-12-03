@@ -1,17 +1,49 @@
 /**
  * API 配置
- * 所有应用统一使用 Vercel API
+ * 支持云端 API 和本地桌面版 API
  */
 import { isElectron } from '../utils/isElectron';
 
-// 默认 Vercel API URL（所有应用统一使用）
+// 默认 Vercel API URL（云端）
 const DEFAULT_VERCEL_API_URL = 'https://www.desktopai.org';
+// 本地桌面版 API URL
+const LOCAL_DESKTOP_API_URL = 'http://127.0.0.1:8000';
+
+/**
+ * 检测是否为本地桌面版模式
+ * 通过检查当前 URL 是否为 127.0.0.1:8000 来判断
+ */
+const isLocalDesktopMode = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  
+  // 如果是 127.0.0.1:8000 或 localhost:8000，认为是本地桌面版
+  if ((hostname === '127.0.0.1' || hostname === 'localhost') && port === '8000') {
+    return true;
+  }
+  
+  // 检查 URL 参数
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('mode') === 'desktop' || urlParams.get('local') === 'true') {
+    return true;
+  }
+  
+  return false;
+};
 
 export const getApiBaseUrl = (): string => {
   // 如果设置了环境变量，优先使用
   if (import.meta.env.VITE_API_URL) {
     console.log('🔧 API_BASE_URL: Using VITE_API_URL from env:', import.meta.env.VITE_API_URL);
     return import.meta.env.VITE_API_URL;
+  }
+  
+  // 检测本地桌面版模式
+  if (isLocalDesktopMode()) {
+    console.log('🔧 API_BASE_URL: Local Desktop mode detected, using:', LOCAL_DESKTOP_API_URL);
+    return LOCAL_DESKTOP_API_URL;
   }
   
   // 开发环境：可以使用本地服务器或 Vercel
@@ -50,5 +82,6 @@ console.log('🌐 Environment:', {
   isElectron: isElectron(),
   origin: typeof window !== 'undefined' ? window.location.origin : 'N/A'
 });
+
 
 
