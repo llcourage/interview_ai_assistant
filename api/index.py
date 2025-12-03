@@ -36,21 +36,23 @@ def get_app():
             from fastapi import FastAPI, Request
             error_app = FastAPI()
             
-            # Store error info in local variables to ensure proper closure
-            err_msg = error_details
-            err_tb = error_trace
+            # Use default arguments to properly capture variables in closure
+            def create_error_handler(err_msg: str, err_tb: str):
+                async def error_handler(request: Request, path: str = ""):
+                    return {
+                        "error": "Failed to load application",
+                        "details": err_msg,
+                        "traceback": err_tb,
+                        "path": str(request.url.path)
+                    }
+                return error_handler
             
-            @error_app.get("/{path:path}")
-            @error_app.post("/{path:path}")
-            @error_app.put("/{path:path}")
-            @error_app.delete("/{path:path}")
-            async def error_handler(request: Request, path: str = ""):
-                return {
-                    "error": "Failed to load application",
-                    "details": err_msg,
-                    "traceback": err_tb,
-                    "path": str(request.url.path)
-                }
+            error_handler_func = create_error_handler(error_details, error_trace)
+            
+            error_app.get("/{path:path}")(error_handler_func)
+            error_app.post("/{path:path}")(error_handler_func)
+            error_app.put("/{path:path}")(error_handler_func)
+            error_app.delete("/{path:path}")(error_handler_func)
             
             _app = error_app
     return _app
