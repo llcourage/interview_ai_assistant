@@ -381,12 +381,30 @@ const Overlay = () => {
         return updated;
       });
       
-    } catch (error) {
-      console.error('❌ 对话失败:', error);
-      setIsLoading(false);
-      setStatus(`Conversation failed: ${error}`);
-      setAiResponse(`### 出错了\n\n请求后端失败。\n\n错误信息: ${error}`);
-    }
+      } catch (error: any) {
+        console.error('❌ 对话失败:', error);
+        console.error('   - Error type:', error?.constructor?.name);
+        console.error('   - Error message:', error?.message);
+        console.error('   - API_BASE_URL:', API_BASE_URL);
+        console.error('   - Request URL:', `${API_BASE_URL}/api/chat`);
+        
+        setIsLoading(false);
+        const errorMsg = error?.message || String(error);
+        let userFriendlyError = `### 出错了\n\n请求后端失败。\n\n`;
+        
+        if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+          userFriendlyError += `**网络错误**: 无法连接到服务器。\n\n`;
+          userFriendlyError += `请检查：\n`;
+          userFriendlyError += `1. 网络连接是否正常\n`;
+          userFriendlyError += `2. API 服务器是否运行 (${API_BASE_URL})\n`;
+          userFriendlyError += `3. 浏览器控制台是否有更多错误信息\n`;
+        } else {
+          userFriendlyError += `错误信息: ${errorMsg}`;
+        }
+        
+        setStatus(`Error: ${errorMsg}`);
+        setAiResponse(userFriendlyError);
+      }
   }, [isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
   // 💬 处理文字对话请求
@@ -423,6 +441,13 @@ const Overlay = () => {
         })
         .join('\n\n');
       
+      console.log('📡 发送 API 请求:', {
+        url: `${API_BASE_URL}/api/chat`,
+        method: 'POST',
+        hasToken: !!token,
+        inputLength: currentInput.length
+      });
+      
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: {
@@ -435,8 +460,16 @@ const Overlay = () => {
         }),
       });
 
+      console.log('📡 API 响应状态:', response.status, response.statusText);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API 错误响应:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -464,11 +497,29 @@ const Overlay = () => {
         return updated;
       });
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ 对话失败:', error);
+      console.error('   - Error type:', error?.constructor?.name);
+      console.error('   - Error message:', error?.message);
+      console.error('   - API_BASE_URL:', API_BASE_URL);
+      console.error('   - Request URL:', `${API_BASE_URL}/api/chat`);
+      
       setIsLoading(false);
-      setStatus(`Conversation failed: ${error}`);
-      setAiResponse(`### 出错了\n\n请求后端失败。\n\n错误信息: ${error}`);
+      const errorMsg = error?.message || String(error);
+      let userFriendlyError = `### 出错了\n\n请求后端失败。\n\n`;
+      
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        userFriendlyError += `**网络错误**: 无法连接到服务器。\n\n`;
+        userFriendlyError += `请检查：\n`;
+        userFriendlyError += `1. 网络连接是否正常\n`;
+        userFriendlyError += `2. API 服务器是否运行 (${API_BASE_URL})\n`;
+        userFriendlyError += `3. 浏览器控制台是否有更多错误信息\n`;
+      } else {
+        userFriendlyError += `错误信息: ${errorMsg}`;
+      }
+      
+      setStatus(`Error: ${errorMsg}`);
+      setAiResponse(userFriendlyError);
       setUserInput(currentInput); // 恢复输入
     }
   }, [userInput, isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
@@ -671,8 +722,16 @@ const Overlay = () => {
           }),
         });
 
+        console.log('📡 API 响应状态:', response.status, response.statusText);
+
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error('❌ API 错误响应:', {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+          });
+          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();

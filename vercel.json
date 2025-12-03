@@ -4,23 +4,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/plan/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/api/chat",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/api/vision_query",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/api/speech_to_text",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/api/plan",
+      "source": "/api/(.*)",
       "destination": "/api/index"
     },
     {
