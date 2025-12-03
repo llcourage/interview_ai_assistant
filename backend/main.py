@@ -56,6 +56,17 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# 添加启动时的日志
+@app.on_event("startup")
+async def startup_event():
+    import os
+    is_vercel = os.getenv("VERCEL")
+    print("=" * 60)
+    print("🚀 FastAPI 应用启动")
+    print(f"   环境: {'Vercel' if is_vercel else 'Local'}")
+    print(f"   OPENAI_API_KEY 已配置: {bool(os.getenv('OPENAI_API_KEY'))}")
+    print("=" * 60)
+
 # 配置 CORS
 app.add_middleware(
     CORSMiddleware,

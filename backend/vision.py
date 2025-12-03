@@ -124,14 +124,22 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None, clien
         error_message = ""
         if "api_key" in error_msg.lower() or "invalid api key" in error_msg.lower() or "authentication" in error_msg.lower():
             error_message = "❌ API Key 错误。"
-            # 检查是否在 Vercel 环境
+            # 检查是否在 Vercel 环境（多种方式检测）
             import os
-            is_vercel = os.getenv("VERCEL")
+            is_vercel = os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("NOW_REGION")
+            
             if is_vercel:
-                error_message += " 请在 Vercel Dashboard -> Settings -> Environment Variables 中检查 OPENAI_API_KEY 是否正确配置。"
+                error_message += "\n\n请在 Vercel Dashboard 中检查："
+                error_message += "\n1. 进入 Settings -> Environment Variables"
+                error_message += "\n2. 确认 OPENAI_API_KEY 已配置"
+                error_message += "\n3. 确保 API Key 值正确（以 'sk-' 开头）"
+                error_message += "\n4. 添加后需要重新部署应用"
             else:
-                error_message += " 请检查 backend/.env 文件中的 OPENAI_API_KEY 是否正确配置。"
-            error_message += " 确保 API Key 以 'sk-' 开头且完整。"
+                error_message += "\n\n请检查："
+                error_message += "\n1. 本地环境：检查 backend/.env 文件中的 OPENAI_API_KEY"
+                error_message += "\n2. Vercel 环境：检查 Vercel Dashboard -> Settings -> Environment Variables"
+                error_message += "\n3. 确保 API Key 以 'sk-' 开头且完整"
+            error_message += "\n\n如果问题仍然存在，请查看服务器日志获取更多信息。"
         elif "rate_limit" in error_msg.lower():
             error_message = "❌ API 调用频率超限，请稍后再试"
         elif "insufficient_quota" in error_msg.lower():

@@ -74,6 +74,12 @@ class handler(BaseHTTPRequestHandler):
     def _handle_request(self):
         """处理所有 HTTP 请求 - 直接调用 FastAPI ASGI app"""
         try:
+            # 打印日志到 Vercel（使用 print，会被 Vercel 捕获）
+            print(f"🔥 Vercel Function 收到请求: {self.command} {self.path}")
+            print(f"   - User-Agent: {self.headers.get('User-Agent', 'N/A')}")
+            print(f"   - Origin: {self.headers.get('Origin', 'N/A')}")
+            print(f"   - Content-Type: {self.headers.get('Content-Type', 'N/A')}")
+            
             # 获取 FastAPI 应用
             app = get_app()
             
