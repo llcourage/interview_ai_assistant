@@ -23,8 +23,14 @@ async def get_user_plan(user_id: str) -> UserPlan:
         if response.data:
             return UserPlan(**response.data)
         else:
-            # 如果没有记录，创建默认的 starter plan
-            print(f"📝 用户 {user_id} 没有 Plan 记录，创建默认 STARTER plan")
+            # 如果没有记录，先尝试直接查询（不使用 maybe_single）
+            direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
+            
+            if direct_response.data and len(direct_response.data) > 0:
+                return UserPlan(**direct_response.data[0])
+            
+            # 如果直接查询也没有结果，创建默认的 starter plan
+            print(f"User {user_id} has no plan record, creating default STARTER plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ 获取用户Plan失败: {e}")

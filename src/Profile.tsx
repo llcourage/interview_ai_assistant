@@ -52,6 +52,7 @@ export const Profile: React.FC = () => {
 
   const loadPlanInfo = async (token: string) => {
     try {
+      setError(null);
       console.log('🔍 Loading plan info from:', `${API_BASE_URL}/api/plan`);
       const response = await fetch(`${API_BASE_URL}/api/plan`, {
         headers: {
@@ -62,15 +63,26 @@ export const Profile: React.FC = () => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ Failed to load plan info:', response.status, errorText);
-        throw new Error(`Failed to load plan info: ${response.status}`);
+        const errorMsg = `Failed to load plan info (${response.status}): ${errorText || 'Unknown error'}`;
+        setError(errorMsg);
+        setPlanInfo(null);
+        return;
       }
 
       const data = await response.json();
-      console.log('✅ Plan info loaded:', data);
+      
+      // Validate required fields
+      if (!data.plan) {
+        throw new Error('Invalid plan data: missing plan field');
+      }
+      
       setPlanInfo(data);
-    } catch (err) {
+      setError(null);
+    } catch (err: any) {
       console.error('❌ Error loading plan info:', err);
-      setError('加载Plan信息失败');
+      const errorMsg = err?.message || '加载Plan信息失败，请检查网络连接和服务器状态';
+      setError(errorMsg);
+      setPlanInfo(null);
     }
   };
 
@@ -116,16 +128,8 @@ export const Profile: React.FC = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="profile-page">
-        <Header />
-        <div className="profile-container">
-          <div className="error-message">❌ {error}</div>
-        </div>
-      </div>
-    );
-  }
+  // Don't block the entire page if only planInfo fails to load
+  // The error will be shown in the plan card section
 
   return (
     <div className="profile-page">
@@ -158,11 +162,40 @@ export const Profile: React.FC = () => {
                   <div className="info-value">{userEmail || 'N/A'}</div>
                 </div>
               </div>
+              {planInfo && (
+                <>
+                  <div className="info-item">
+                    <div className="info-icon">📋</div>
+                    <div className="info-content">
+                      <div className="info-label">Current Plan</div>
+                      <div className="info-value">{getPlanDisplayName(planInfo.plan)}</div>
+                    </div>
+                  </div>
+                  <div className="info-item">
+                    <div className="info-icon">📊</div>
+                    <div className="info-content">
+                      <div className="info-label">Usage</div>
+                      <div className="info-value">
+                        {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? '∞' : planInfo.daily_limit} daily requests
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              {!planInfo && !loading && error && (
+                <div className="info-item">
+                  <div className="info-icon">⚠️</div>
+                  <div className="info-content">
+                    <div className="info-label">Plan Status</div>
+                    <div className="info-value" style={{ color: '#ffc107' }}>Failed to load plan information</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Current Plan Card */}
-          {planInfo && (
+          {planInfo ? (
             <div className="profile-card plan-card">
               <div className="card-header">
                 <div>
@@ -287,6 +320,33 @@ export const Profile: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          ) : !loading && (
+            <div className="profile-card">
+              <div className="card-header">
+                <h2 className="card-title">Current Plan</h2>
+              </div>
+              <div className="card-body">
+                <div style={{ textAlign: 'center', padding: '2rem' }}>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', marginBottom: '1rem' }}>
+                    {error || 'Unable to load plan information'}
+                  </p>
+                  <button
+                    className="refresh-btn"
+                    onClick={async () => {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session) {
+                        setLoading(true);
+                        setError(null);
+                        await loadPlanInfo(session.access_token);
+                        setLoading(false);
+                      }
+                    }}
+                  >
+                    🔄 Retry Loading Plan
+                  </button>
+                </div>
               </div>
             </div>
           )}
