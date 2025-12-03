@@ -130,21 +130,6 @@ if ui_directory:
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
         print(f"✅ 已挂载静态资源: /assets")
-    
-    # SPA 路由支持（必须在最后定义，作为 catch-all）
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        """提供 SPA 路由支持"""
-        # 排除 API 和文档路径
-        if (full_path.startswith("api/") or 
-            full_path in ["docs", "redoc", "openapi.json"]):
-            raise HTTPException(status_code=404, detail="Not found")
-        
-        # 返回 index.html
-        index_path = ui_directory / "index.html"
-        if index_path.exists():
-            return FileResponse(str(index_path))
-        raise HTTPException(status_code=404, detail="UI not found")
 else:
     print("ℹ️  未检测到 UI 目录，仅提供 API 服务")
 
@@ -928,6 +913,24 @@ async def text_chat_legacy(
         context=request.get("context", "")
     )
     return await chat(chat_request, current_user)
+
+
+# ========== SPA 路由支持（必须在最后定义，作为 catch-all）==========
+# 只有在检测到 UI 目录时才添加 SPA 路由
+if ui_directory:
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """提供 SPA 路由支持"""
+        # 排除 API 和文档路径
+        if (full_path.startswith("api/") or 
+            full_path in ["docs", "redoc", "openapi.json"]):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # 返回 index.html
+        index_path = ui_directory / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        raise HTTPException(status_code=404, detail="UI not found")
 
 
 # ========== 启动服务 ==========
