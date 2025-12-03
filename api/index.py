@@ -25,15 +25,20 @@ def get_app():
         try:
             from main import app
             _app = app
-        except Exception as e:
+        except Exception as exc:
             # 记录详细的导入错误
             import traceback
             error_trace = traceback.format_exc()
-            print(f"⚠️ 导入 FastAPI 应用时出错: {e}")
+            error_details = str(exc)  # Capture error details in local variable
+            print(f"⚠️ 导入 FastAPI 应用时出错: {exc}")
             print(f"详细错误信息:\n{error_trace}")
             # 创建一个错误应用
             from fastapi import FastAPI, Request
             error_app = FastAPI()
+            
+            # Store error info in local variables to ensure proper closure
+            err_msg = error_details
+            err_tb = error_trace
             
             @error_app.get("/{path:path}")
             @error_app.post("/{path:path}")
@@ -42,8 +47,8 @@ def get_app():
             async def error_handler(request: Request, path: str = ""):
                 return {
                     "error": "Failed to load application",
-                    "details": str(e),
-                    "traceback": error_trace,
+                    "details": err_msg,
+                    "traceback": err_tb,
                     "path": str(request.url.path)
                 }
             
