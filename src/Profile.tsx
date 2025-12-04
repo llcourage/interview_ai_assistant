@@ -5,7 +5,6 @@ import { API_BASE_URL } from './lib/api';
 import { TopNav } from './components/Profile/TopNav';
 import { ProfileHeader } from './components/Profile/ProfileHeader';
 import { AccountInfoCard } from './components/Profile/AccountInfoCard';
-import { UsageCard } from './components/Profile/UsageCard';
 import { CurrentPlanCard } from './components/Profile/CurrentPlanCard';
 import './components/Profile/ProfileBase.css';
 import './Profile.css';
@@ -105,14 +104,6 @@ export const Profile: React.FC = () => {
     return priceMap[plan] || '$0';
   };
 
-  const handleRefresh = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      setLoading(true);
-      await loadPlanInfo(session.access_token);
-      setLoading(false);
-    }
-  };
 
   const handleManagePlan = () => {
     navigate('/plans');
@@ -148,11 +139,6 @@ export const Profile: React.FC = () => {
             <AccountInfoCard 
               email={userEmail} 
               plan={planInfo?.plan || null} 
-            />
-            <UsageCard
-              used={planInfo?.daily_requests || 0}
-              limit={planInfo?.daily_limit || 0}
-              onRefresh={handleRefresh}
             />
           </div>
 

@@ -31,7 +31,6 @@ import stripe  # 导入 stripe 用于错误处理
 
 # 导入现有模块 - 使用绝对导入（backend 作为包）
 from backend.vision import analyze_image
-from backend.speech import transcribe_audio
 from openai import AsyncOpenAI
 
 # 导入认证模块
@@ -175,14 +174,6 @@ class CheckoutRequest(BaseModel):
     plan: str
     success_url: str
     cancel_url: str
-
-
-class SpeechToTextResponse(BaseModel):
-    text: str
-    language: str = ""
-    duration: float = 0.0
-    success: bool = True
-    error: str = ""
 
 
 # ========== Helper Functions ==========
@@ -731,49 +722,6 @@ async def chat(
         
         return ChatResponse(
             answer=f"处理失败: {error_message}",
-            success=False,
-            error=error_message
-        )
-
-
-# ========== 语音转文字 API ==========
-
-@app.post("/api/speech_to_text", response_model=SpeechToTextResponse, tags=["AI功能"])
-async def speech_to_text(
-    audio: UploadFile = File(...),
-    language: str = "zh",
-    current_user: User = Depends(get_current_active_user)
-):
-    """语音转文字接口 - 使用本地Whisper模型（不计入配额）"""
-    try:
-        # 读取音频数据
-        audio_data = await audio.read()
-        
-        if len(audio_data) == 0:
-            return SpeechToTextResponse(
-                text="",
-                success=False,
-                error="音频文件为空"
-            )
-        
-        print(f"🎤 用户 {current_user.id} 语音转文字: {audio.filename}, 大小: {len(audio_data)} 字节")
-        
-        # 调用语音转文字
-        result = await transcribe_audio(audio_data, language=language)
-        
-        return SpeechToTextResponse(
-            text=result["text"],
-            language=result.get("language", ""),
-            duration=result.get("duration", 0.0),
-            success=True
-        )
-        
-    except Exception as e:
-        error_message = str(e)
-        print(f"❌ 语音转文字失败: {error_message}")
-        
-        return SpeechToTextResponse(
-            text="",
             success=False,
             error=error_message
         )

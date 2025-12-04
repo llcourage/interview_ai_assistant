@@ -211,46 +211,24 @@ const Overlay = () => {
       // 🎤 使用本地 Whisper 转文字（不发送到云端）
       let transcribedText: string;
       
-      if (window.aiShot?.speechToTextLocal) {
-        // 将 Blob 转为 ArrayBuffer，再转为 base64
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        // 在浏览器环境中，使用 btoa 而不是 Buffer
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const base64Audio = btoa(String.fromCharCode(...uint8Array));
-        
-        console.log('🎤 调用本地 Whisper 转文字...');
-        const result = await window.aiShot.speechToTextLocal(base64Audio, 'zh');
-        
-        if (result.success && result.text) {
-          transcribedText = result.text;
-          console.log('✅ 本地语音转文字完成:', transcribedText);
-        } else {
-          throw new Error(result.error || '本地语音转文字失败');
-        }
+      if (!window.aiShot?.speechToTextLocal) {
+        throw new Error('语音转文字功能仅在桌面版可用。请使用 Electron 桌面应用。');
+      }
+      
+      // 将 Blob 转为 ArrayBuffer，再转为 base64
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      // 在浏览器环境中，使用 btoa 而不是 Buffer
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const base64Audio = btoa(String.fromCharCode(...uint8Array));
+      
+      console.log('🎤 调用本地 Whisper 转文字...');
+      const result = await window.aiShot.speechToTextLocal(base64Audio, 'zh');
+      
+      if (result.success && result.text) {
+        transcribedText = result.text;
+        console.log('✅ 本地语音转文字完成:', transcribedText);
       } else {
-        // 降级方案：如果 Electron API 不可用，尝试使用云端（向后兼容）
-        console.warn('⚠️ 本地 Whisper 不可用，降级到云端处理');
-        const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.webm');
-        formData.append('language', 'zh');
-        
-        const response = await fetch(`${API_BASE_URL}/api/speech_to_text`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          body: formData,
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        if (!data.success || !data.text) {
-          throw new Error(data.error || '语音转文字失败');
-        }
-        transcribedText = data.text;
+        throw new Error(result.error || '本地语音转文字失败');
       }
       
       // 将转写的文字作为用户输入

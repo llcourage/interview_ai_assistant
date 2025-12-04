@@ -49,39 +49,37 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({
   price,
   onManagePlan
 }) => {
-  const planDisplay = plan ? plan.toUpperCase() : 'FREE';
+  const planDisplay = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Free';
   const description = getPlanDescription(plan);
   const features = getPlanFeatures(plan);
 
   return (
     <section className="card plan-card">
-      <h2 className="section-title">Current Plan</h2>
-
-      <div className="plan-main">
-        <div className="plan-left">
-          <div className="plan-badge">{planDisplay}</div>
-          <p className="plan-description">{description}</p>
-        </div>
-
-        <div className="plan-right">
-          <div className="plan-price">{price}</div>
-          <div className="plan-price-sub">Billed monthly</div>
-        </div>
+      <div className="plan-card-header">
+        <h2 className="section-title">Current Plan</h2>
+        <div className="plan-badge">{planDisplay}</div>
       </div>
 
-      <div className="plan-footer">
-        <div className="plan-feature-list">
-          {features.map((feature, index) => (
-            <div key={index} className="plan-feature-item">
-              <span className="plan-feature-icon">✓</span>
-              <span className="plan-feature-text">{feature}</span>
-            </div>
-          ))}
-        </div>
-        <button className="primary-button" onClick={onManagePlan}>
-          Manage subscription
-        </button>
+      <p className="plan-description">{description}</p>
+
+      <div className="plan-price-section">
+        <span className="plan-price">{price}</span>
+        <span className="plan-price-unit">/month</span>
       </div>
+
+      <hr className="plan-divider" />
+
+      <ul className="plan-feature-list">
+        {features.map((feature, index) => (
+          <li key={index} className="plan-feature-item">
+            ✓ {feature}
+          </li>
+        ))}
+      </ul>
+
+      <button className="plan-manage-button" onClick={onManagePlan}>
+        Manage Subscription
+      </button>
     </section>
   );
 };

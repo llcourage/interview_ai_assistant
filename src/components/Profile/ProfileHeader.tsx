@@ -17,7 +17,7 @@ const formatDate = (dateString: string): string => {
   try {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric'
     });
   } catch {
@@ -34,26 +34,23 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
   const planDisplay = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Free';
 
   return (
-    <section className="card card-lg profile-header">
-      <div className="avatar avatar-lg">
+    <section className="profile-header">
+      <div className="avatar">
         {initials}
       </div>
 
-      <div className="profile-header-text">
-        <h1 className="page-title">Account Settings</h1>
-        <p className="subtitle">{email || 'N/A'}</p>
+      <h1 className="profile-header-title">Account Settings</h1>
+      <p className="profile-header-email">{email || 'N/A'}</p>
 
-        <div className="profile-header-meta">
-          <span className="chip">
-            Active · {planDisplay}
-          </span>
-          {nextBillingDate && (
-            <span className="meta-text">
-              Next billing: {formatDate(nextBillingDate)}
-            </span>
-          )}
-        </div>
+      <div className="profile-header-badge">
+        Active · {planDisplay}
       </div>
+
+      {nextBillingDate && (
+        <p className="profile-header-billing">
+          Next billing: {formatDate(nextBillingDate)}
+        </p>
+      )}
     </section>
   );
 };
