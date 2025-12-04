@@ -1,21 +1,22 @@
-/* Profile Header - 居中、精简、品牌感 */
+/* Profile Header - 居中、精简、品牌感、聚焦 */
 .profile-header {
-  background: #111827; /* 统一卡片背景 */
+  max-width: 48rem; /* max-w-3xl */
+  margin: 0 auto 1.5rem auto; /* mx-auto */
+  background: #111827; /* bg-surface */
   border-radius: 1rem; /* rounded-2xl */
-  padding: 2rem; /* p-8 */
+  padding: 1.5rem 2rem; /* 减少高度 20-30% */
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 0.75rem; /* gap-3 */
   border: 1px solid rgba(255, 255, 255, 0.05); /* border-white/5 */
-  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.4), 0 0 40px rgba(59, 130, 246, 0.1); /* shadow-lg + subtle glow */
   position: relative;
   overflow: hidden;
-  margin-bottom: 1.5rem;
 }
 
-/* Subtle gradient background */
+/* Subtle gradient background glow */
 .profile-header::before {
   content: '';
   position: absolute;
@@ -24,6 +25,25 @@
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+}
+
+/* Background glow effect */
+.profile-header::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.08), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.profile-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .avatar {

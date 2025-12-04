@@ -6,6 +6,7 @@
   background: var(--color-bg-body);
   padding-top: 80px;
   padding-bottom: 4rem;
+  position: relative;
 }
 
 /* 主容器 */
@@ -40,11 +41,11 @@
   letter-spacing: -0.02em;
 }
 
-/* 两列布局 - 左窄右宽 */
+/* 两列布局 - 左窄右宽，增加呼吸感 */
 .two-column-layout {
   display: grid;
   grid-template-columns: 1fr 1.2fr; /* 左窄右宽 */
-  gap: 1.5rem;
+  gap: 2.5rem; /* gap-10 - 增加间距，避免挤压感 */
   margin-top: 1.5rem;
 }
 
