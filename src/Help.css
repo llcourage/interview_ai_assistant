@@ -12,7 +12,7 @@
   flex: 1;
   display: flex;
   gap: 2rem;
-  padding: 2rem;
+  padding: 2rem 3rem 3rem 3rem;
   max-width: 1400px;
   margin: 120px auto 0;
   width: 100%;
@@ -25,25 +25,28 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
-  padding: 2rem;
+  padding: 2rem 2rem 2rem 2rem; /* 统一 padding */
   height: fit-content;
-  position: sticky;
-  top: 120px;
+  top: 152px;
+  align-self: flex-start;
 }
 
 .sidebar-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 0 0 2rem 0;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: 0.875rem;              /* 从 1.5rem 降级成小号文字 */
+  font-weight: 600;                 /* 不用 700 这么重 */
+  text-transform: uppercase;        /* 全大写，像标签 */
+  letter-spacing: 0.12em;           /* 字间距拉开一点 */
+  color: var(--color-text-secondary);
+  margin: 0 0 1rem 0;               /* 间距缩小 */
+  padding: 0;                       /* 不再需要底部 padding */
+  border-bottom: none;              /* 去掉底部边线，不再像主标题 */
 }
 
 .help-nav {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  padding: 0; /* 移除额外 padding */
 }
 
 .help-nav-item {
@@ -75,7 +78,7 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
-  padding: 3rem;
+  padding: 2rem 3rem 3rem 3rem; /* 顶部 padding 与侧边栏标题的 padding-top 一致 */
   overflow-y: auto;
   max-height: calc(100vh - 200px);
   /* 自定义滚动条样式 */
@@ -114,7 +117,8 @@
   font-size: 2.5rem;
   font-weight: 800;
   color: var(--color-text-primary);
-  margin: 0 0 2rem 0;
+  margin: 0 0 2rem 0; /* 确保顶部 margin 为 0，与侧边栏标题对齐 */
+  padding-top: 0; /* 明确设置 padding-top 为 0 */
   letter-spacing: -0.02em;
 }
 
