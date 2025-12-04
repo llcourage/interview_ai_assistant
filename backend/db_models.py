@@ -59,21 +59,21 @@ class UsageQuota(BaseModel):
     updated_at: datetime
 
 
-# Plan 配额定义
+# Plan quota definitions
 PLAN_LIMITS = {
     PlanType.NORMAL: {
-        "daily_limit": 200,  # 每日200次
-        "monthly_limit": 5000,  # 每月5000次
-        "monthly_token_limit": 500_000,  # 每月500k tokens
-        "models": ["gpt-4o-mini"],  # 只能用mini
+        "daily_limit": 200,  # 200 requests per day
+        "monthly_limit": 5000,  # 5000 requests per month
+        "monthly_token_limit": 500_000,  # 500k tokens per month
+        "models": ["gpt-4o-mini"],  # Only mini model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
-        "daily_limit": -1,  # 无限制
-        "monthly_limit": -1,  # 无限制
-        "monthly_token_limit": 500_000,  # 每月500k tokens
-        "models": ["gpt-4o-mini", "gpt-4o", "o1-mini", "o1"],  # 全模型
-        "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "pdf_export", "advanced_analytics"]
+        "daily_limit": 200,  # 200 requests per day (same as Normal)
+        "monthly_limit": 5000,  # 5000 requests per month (same as Normal)
+        "monthly_token_limit": 500_000,  # 500k tokens per month (same as Normal)
+        "models": ["gpt-4o-mini", "gpt-4o"],  # Can access both mini and full gpt-4o
+        "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     }
 }
 

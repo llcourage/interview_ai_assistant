@@ -425,7 +425,7 @@ async def check_rate_limit(user_id: str) -> tuple[bool, str]:
         quota = await get_user_quota(user_id)
         limits = PLAN_LIMITS[user_plan.plan]
         
-        # High plan 请求数无限制，但 token 有限制
+        # Check daily request limit (both plans have the same limits)
         if quota.daily_limit != -1:
             # 检查每日限制
             if quota.daily_requests >= quota.daily_limit:

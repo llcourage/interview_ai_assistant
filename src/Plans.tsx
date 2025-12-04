@@ -85,8 +85,8 @@ export const Plans: React.FC = () => {
           <PlanCard
             name="Normal Plan"
             features={[
-              "Great Model",
-              "500K Tokens per Week"
+              "GPT-4o-mini Model",
+              "500K Tokens per Month"
             ]}            
             price="$19.9"
             billing="/week"
@@ -97,8 +97,9 @@ export const Plans: React.FC = () => {
           <PlanCard
             name="High Plan"
             features={[
-              "Premium Model",
-              "Advanced Features"
+              "GPT-4o Model (Full Version)",
+              "Access to gpt-4o-mini",
+              "500K Tokens per Month"
             ]}
             price="$29.9"
             billing="/week"

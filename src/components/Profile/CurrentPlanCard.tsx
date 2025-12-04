@@ -9,9 +9,9 @@ interface CurrentPlanCardProps {
 const getPlanDescription = (plan: string | null): string => {
   switch (plan) {
     case 'normal':
-      return 'Perfect for regular users who need reliable AI assistance for interviews and career development.';
+      return 'Perfect for regular users who need reliable AI assistance. Uses GPT-4o-mini model with 500K tokens per month.';
     case 'high':
-      return 'Premium plan with unlimited requests, priority support, and advanced AI models for the best experience.';
+      return 'Premium plan with GPT-4o model (full version) and access to gpt-4o-mini. 500K tokens per month.';
     default:
       return 'Get started with our free plan. Upgrade anytime to unlock more features.';
   }
@@ -21,17 +21,17 @@ const getPlanFeatures = (plan: string | null): string[] => {
   switch (plan) {
     case 'normal':
       return [
-        'High-quality AI responses',
-        'Standard support',
+        'GPT-4o-mini model',
+        '500K tokens per month',
         'All core features',
         'Image analysis'
       ];
     case 'high':
       return [
-        'Premium AI models',
-        'Priority support',
-        'Advanced features',
-        'Early access to new features'
+        'GPT-4o model (full version)',
+        'Access to gpt-4o-mini',
+        '500K tokens per month',
+        'Image analysis'
       ];
     default:
       return [

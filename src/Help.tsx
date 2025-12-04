@@ -32,10 +32,10 @@ export const Help: React.FC = () => {
           <p>Understand the differences between our plans and choose the one that fits your needs.</p>
           <h4>Available Plans:</h4>
           <ul>
-            <li><strong>Normal Plan:</strong> $19.9/week - Great model, 500K token per week</li>
-            <li><strong>High Plan:</strong> $29.9/week - Premium model with advanced features</li>
+            <li><strong>Normal Plan:</strong> $19.9/week - GPT-4o-mini model, 500K tokens per month</li>
+            <li><strong>High Plan:</strong> $29.9/week - GPT-4o model (full version), access to gpt-4o-mini, 500K tokens per month</li>
           </ul>
-          <p>Both plans include unlimited questions and priority support.</p>
+          <p>The only difference between the plans is the AI model used. Both plans have the same token limits and features.</p>
         </div>
       )
     },

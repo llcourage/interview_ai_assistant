@@ -200,11 +200,13 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
         base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     )
     
-    # 根据Plan选择模型
+    # Select model based on plan
+    # Normal Plan: uses gpt-4o-mini
+    # High Plan: uses gpt-4o (full version) by default, can also access gpt-4o-mini
     if plan == PlanType.NORMAL:
-        model = "gpt-4o-mini"  # Normal使用mini
+        model = "gpt-4o-mini"  # Normal Plan uses mini
     elif plan == PlanType.HIGH:
-        model = "gpt-4o"  # High使用完整版
+        model = "gpt-4o"  # High Plan uses full version by default
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported plan type: {plan}")
     

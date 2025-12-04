@@ -223,8 +223,9 @@ export const Settings: React.FC = () => {
               <h3>High Plan</h3>
               <p className="price">$29.9/week</p>
               <ul>
-                <li>Premium model</li>
-                <li>Advanced features</li>
+                <li>GPT-4o model (full version)</li>
+                <li>Access to gpt-4o-mini</li>
+                <li>500K tokens per month</li>
               </ul>
               <button 
                 className="upgrade-button"
