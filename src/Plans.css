@@ -51,7 +51,7 @@
   text-align: center;
   font-size: 1.25rem;
   color: var(--color-text-secondary); /* text-slate-400 - 描述再浅一点 */
-  margin: 0 0 0 0; /* 从 4rem 改为 1rem */
+  margin: 0 0 3rem 0; /* 增加底部间距，让卡片和标题之间有更多空间 */
   font-weight: 400;
   position: relative;
   z-index: 1;
