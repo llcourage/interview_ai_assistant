@@ -28,33 +28,33 @@ async def analyze_image(image_base64: str | list[str], prompt: str = None, clien
             raise ValueError("Client must be provided")
         
         api_client = client
-        # 默认提示词 - 结构化面试题版
+        # Default prompt - Structured interview question format
         if not prompt:
-            prompt = """请仔细阅读截图中的题目。
+            prompt = """Please carefully read the problem in the screenshot.
 
-请严格按照以下 5 个部分进行回复，不要包含其他多余的描述：
+Please strictly follow these 5 sections in your response, without any extra descriptions:
 
-1）问题解释（简短）
-简要概括题目要求，不要啰嗦。
+1) Problem Explanation (Brief)
+Briefly summarize the problem requirements. Be concise.
 
-2）Clarification Questions
-列出 3-5 个针对题目细节的关键澄清问题（例如：边界条件、输入规模、异常情况）。保持简短。
+2) Clarification Questions
+List 3-5 key clarifying questions about the problem details (e.g., edge cases, input constraints, exceptions). Keep them brief.
 
-3）解题思路
-分步骤说明最优解法，清晰明了。
+3) Approach
+Explain the optimal solution step by step, clearly and concisely.
 
-4）代码
+4) Code
 ```python
-# 在此提供完整的 Python 代码，包含关键注释
+# Provide complete Python code here with key comments
 ```
 
-5）解释
-对代码的关键逻辑进行简要解释，包括时间/空间复杂度分析。
+5) Explanation
+Briefly explain the key logic of the code, including time/space complexity analysis.
 
-⚠️ 禁止事项：
-- 不要写 "问题描述"、"示例"、"约束条件" 章节。
-- 不要写 "这张图片展示了..." 等废话。
-- 保持回答专业、紧凑。"""
+⚠️ Prohibited:
+- Do not write "Problem Description", "Examples", "Constraints" sections.
+- Do not write phrases like "This image shows..." or other unnecessary text.
+- Keep the response professional and concise."""
 
         # 获取模型名称（优先使用传入的模型，其次环境变量，最后默认值）
         if model is None:
@@ -194,18 +194,18 @@ async def analyze_image_with_context(
     Returns:
         dict: 包含分析结果的字典
     """
-    # 根据问题类型调整提示词
+    # Adjust prompt based on question type
     prompt_templates = {
-        "algorithm": "这是一道算法题。请分析题目要求，提供解题思路、时间复杂度分析，并给出代码实现。",
-        "system_design": "这是一道系统设计题。请分析需求，提供架构设计、技术选型，并说明设计理由。",
-        "coding": "这是一道编程题。请分析题目，提供代码实现和测试用例。",
-        "general": "请详细分析这张图片的内容。"
+        "algorithm": "This is an algorithm problem. Please analyze the problem requirements, provide the solution approach, time complexity analysis, and code implementation.",
+        "system_design": "This is a system design problem. Please analyze the requirements, provide architecture design, technology choices, and explain the design rationale.",
+        "coding": "This is a coding problem. Please analyze the problem, provide code implementation and test cases.",
+        "general": "Please analyze the content of this image in detail."
     }
     
     prompt = prompt_templates.get(question_type, prompt_templates["general"])
     
     if context:
-        prompt += f"\n\n额外信息: {context}"
+        prompt += f"\n\nAdditional information: {context}"
     
     answer, token_usage = await analyze_image(image_base64, prompt)
     
