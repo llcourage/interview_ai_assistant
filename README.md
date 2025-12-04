@@ -69,20 +69,26 @@ npm run dev
 
 ```
 Interview Assistant/
-├── backend/          # Python FastAPI 后端
+├── src/              # React 前端源代码
+│   ├── components/  # 可复用组件
+│   ├── lib/         # API 和 Supabase 客户端
+│   └── ...
+├── backend/         # Python FastAPI 后端
 │   ├── main.py      # 主服务
 │   ├── vision.py    # Vision API 集成
-│   └── requirements.txt
-├── electron/        # Electron 主进程
+│   └── ...
+├── electron/        # Electron 桌面应用
 │   ├── main.js      # 窗口管理和快捷键
 │   └── preload.js   # IPC 桥接
-├── src/             # React 前端
-│   ├── Overlay.tsx  # 悬浮窗组件
-│   ├── App.tsx      # 主应用
-│   └── types/       # TypeScript 类型定义
-├── scripts/         # 启动和构建脚本
+├── api/             # Vercel 服务器less 函数
+├── launcher/        # C# 启动器
+├── scripts/         # 构建和启动脚本
+├── docs/            # 项目文档
+├── tests/           # 测试相关
 └── resources/       # 应用资源
 ```
+
+详细结构说明请参阅 [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
 
 ## 🛠️ 开发
 
@@ -100,7 +106,7 @@ scripts/build.bat
 
 ## 📝 使用说明
 
-详细使用说明请参阅 [USAGE.md](USAGE.md)
+详细使用说明请参阅 [快速开始指南](docs/START_HERE.md) 和 [项目结构文档](docs/PROJECT_STRUCTURE.md)
 
 ## 📄 许可证
 

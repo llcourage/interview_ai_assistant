@@ -5,10 +5,9 @@ echo "🚀 启动 AI 面试助手后端服务"
 echo "======================================"
 echo ""
 
-# 获取脚本所在目录的父目录（项目根目录）
+# 获取脚本所在目录（项目根目录）
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
-cd "$PROJECT_ROOT"
+cd "$SCRIPT_DIR"
 
 echo "📂 当前工作目录: $(pwd)"
 echo ""
@@ -54,6 +53,15 @@ echo "📍 使用模块路径: backend.main:app"
 echo "📂 PYTHONPATH 已包含: $BACKEND_DIR"
 echo ""
 uvicorn backend.main:app --port 8000
+
+
+
+
+
+
+
+
+
 
 
 
