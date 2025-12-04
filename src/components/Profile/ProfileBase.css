@@ -16,6 +16,14 @@
   padding: 0 2rem;
 }
 
+/* Profile 居中包装器 */
+.profile-center-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 2rem 0;
+}
+
 /* 卡片基础样式 - 统一视觉语言 */
 .card {
   background: rgb(15, 23, 42); /* bg-slate-900 */

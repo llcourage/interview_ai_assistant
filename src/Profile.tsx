@@ -4,8 +4,6 @@ import { supabase } from './lib/supabase';
 import { API_BASE_URL } from './lib/api';
 import { TopNav } from './components/Profile/TopNav';
 import { ProfileHeader } from './components/Profile/ProfileHeader';
-import { AccountInfoCard } from './components/Profile/AccountInfoCard';
-import { CurrentPlanCard } from './components/Profile/CurrentPlanCard';
 import './components/Profile/ProfileBase.css';
 import './Profile.css';
 
@@ -95,16 +93,6 @@ export const Profile: React.FC = () => {
     }
   };
 
-  const getPlanPrice = (plan: string | null): string => {
-    if (!plan) return '$0';
-    const priceMap: { [key: string]: string } = {
-      'normal': '$19.99',
-      'high': '$49.99'
-    };
-    return priceMap[plan] || '$0';
-  };
-
-
   const handleManagePlan = () => {
     navigate('/plans');
   };
@@ -125,54 +113,13 @@ export const Profile: React.FC = () => {
       <TopNav />
 
       <div className="main-container">
-        {/* 1. 顶部 Summary Bar */}
-        <ProfileHeader
-          email={userEmail}
-          plan={planInfo?.plan || null}
-          nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
-          onManagePlan={handleManagePlan}
-        />
-
-        {/* 2. 第一行：左右两列 */}
-        <div className="two-column-layout">
-          {/* 左侧 */}
-          <div className="column">
-            <AccountInfoCard 
-              email={userEmail} 
-              plan={planInfo?.plan || null} 
-            />
-          </div>
-
-          {/* 右侧 */}
-          <div className="column">
-            <CurrentPlanCard
-              plan={planInfo?.plan || null}
-              price={getPlanPrice(planInfo?.plan || null)}
-            />
-          </div>
-        </div>
-
-        {/* 3. 第二行：占位卡片 */}
-        <div className="two-column-layout">
-          {/* 左侧 */}
-          <div className="column">
-            <section className="card">
-              <h2 className="card-title">Profile / Security</h2>
-              <p className="card-placeholder-text">
-                Profile and security settings will be available here.
-              </p>
-            </section>
-          </div>
-
-          {/* 右侧 */}
-          <div className="column">
-            <section className="card">
-              <h2 className="card-title">Billing</h2>
-              <p className="card-placeholder-text">
-                Billing history and payment methods will be available here.
-              </p>
-            </section>
-          </div>
+        <div className="profile-center-wrapper">
+          <ProfileHeader
+            email={userEmail}
+            plan={planInfo?.plan || null}
+            nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
+            onManagePlan={handleManagePlan}
+          />
         </div>
       </div>
     </div>
