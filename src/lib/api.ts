@@ -1,73 +1,35 @@
 /**
  * API 配置
- * 支持云端 API 和本地桌面版 API
+ * Desktop version: All API requests go to Vercel backend
+ * Web version: Uses current origin (Vercel) or Vercel API URL
  */
 import { isElectron } from '../utils/isElectron';
 
-// 默认 Vercel API URL（云端）
+// Vercel API URL (used by Desktop version and as fallback)
 const DEFAULT_VERCEL_API_URL = 'https://www.desktopai.org';
-// 本地桌面版 API URL
-const LOCAL_DESKTOP_API_URL = 'http://127.0.0.1:8000';
-
-/**
- * 检测是否为本地桌面版模式
- * 通过检查当前 URL 是否为 127.0.0.1:8000 来判断
- */
-const isLocalDesktopMode = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  
-  const hostname = window.location.hostname;
-  const port = window.location.port;
-  
-  // 如果是 127.0.0.1:8000 或 localhost:8000，认为是本地桌面版
-  if ((hostname === '127.0.0.1' || hostname === 'localhost') && port === '8000') {
-    return true;
-  }
-  
-  // 检查 URL 参数
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('mode') === 'desktop' || urlParams.get('local') === 'true') {
-    return true;
-  }
-  
-  return false;
-};
 
 export const getApiBaseUrl = (): string => {
-  // 如果设置了环境变量，优先使用
+  // If environment variable is set, use it (highest priority)
   if (import.meta.env.VITE_API_URL) {
     console.log('🔧 API_BASE_URL: Using VITE_API_URL from env:', import.meta.env.VITE_API_URL);
     return import.meta.env.VITE_API_URL;
   }
   
-  // 检测本地桌面版模式
-  if (isLocalDesktopMode()) {
-    console.log('🔧 API_BASE_URL: Local Desktop mode detected, using:', LOCAL_DESKTOP_API_URL);
-    return LOCAL_DESKTOP_API_URL;
-  }
-  
-  // 开发环境：可以使用本地服务器或 Vercel
-  if (import.meta.env.DEV) {
-    // 开发时可以设置环境变量切换到本地，否则默认使用 Vercel
-    console.log('🔧 API_BASE_URL: DEV mode, using Vercel:', DEFAULT_VERCEL_API_URL);
-    return DEFAULT_VERCEL_API_URL;
-  }
-  
-  // 生产环境：网页版使用当前域名，Electron 使用 Vercel URL
+  // Production mode
   if (import.meta.env.MODE === 'production') {
-    // 如果是 Electron 客户端，使用 Vercel URL
+    // Electron desktop version: always use Vercel API
     if (isElectron()) {
       console.log('🔧 API_BASE_URL: Production Electron, using Vercel:', DEFAULT_VERCEL_API_URL);
       return DEFAULT_VERCEL_API_URL;
     }
-    // 网页版使用当前域名（如果部署在 Vercel，会自动使用 Vercel 域名）
+    // Web version: use current origin (if deployed on Vercel, will use Vercel domain)
     const origin = window.location.origin;
     console.log('🔧 API_BASE_URL: Production Web, using origin:', origin);
     return origin;
   }
   
-  // 默认使用 Vercel URL
-  console.log('🔧 API_BASE_URL: Default, using Vercel:', DEFAULT_VERCEL_API_URL);
+  // Development mode: use Vercel API (can be overridden with VITE_API_URL)
+  console.log('🔧 API_BASE_URL: DEV mode, using Vercel:', DEFAULT_VERCEL_API_URL);
   return DEFAULT_VERCEL_API_URL;
 };
 

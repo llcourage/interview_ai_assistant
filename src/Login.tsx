@@ -45,22 +45,22 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       if (isRegister) {
         // Register
         await register(email, password);
-        setMessage('Registration successful! Signing in...');
-        setTimeout(() => {
-          handleLoginSuccess();
-        }, 1000);
+          setMessage('Registration successful! Signing in...');
+          setTimeout(() => {
+            handleLoginSuccess();
+          }, 1000);
       } else {
         // Login
         const token = await login(email, password);
         console.log('✅ Login successful, token saved:', !!token);
-        setMessage('Login successful!');
+          setMessage('Login successful!');
         
         // 触发自定义事件，通知其他组件认证状态已改变
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         
-        setTimeout(() => {
-          handleLoginSuccess();
-        }, 500);
+          setTimeout(() => {
+            handleLoginSuccess();
+          }, 500);
       }
     } catch (err: any) {
       console.error('Auth error:', err);

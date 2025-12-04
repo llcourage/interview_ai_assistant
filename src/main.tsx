@@ -1,8 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { AppRouter } from './AppRouter'
 import Overlay from './Overlay'
+import { isElectron } from './utils/isElectron'
 import './index.css'
 
 // 🚨 定义错误边界组件
@@ -49,14 +50,18 @@ if (type === 'overlay') {
     </React.StrictMode>
   );
 } else {
-  // 主窗口模式 - 使用 BrowserRouter 支持网页版
+  // 主窗口模式
+  // Electron 使用 HashRouter 避免 file:// 协议下的路径问题
+  // Web 使用 BrowserRouter 支持正常的 URL 路由
+  const Router = isElectron() ? HashRouter : BrowserRouter;
+  
   root.render(
     <React.StrictMode>
-      <BrowserRouter>
+      <Router>
         <ErrorBoundary>
           <AppRouter />
         </ErrorBoundary>
-      </BrowserRouter>
+      </Router>
     </React.StrictMode>,
   );
 }

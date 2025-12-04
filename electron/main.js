@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const { promisify } = require('util');
 const writeFile = promisify(fs.writeFile);
 const unlink = promisify(fs.unlink);
+const { createWriteStream } = require('fs');
 
 // 🚨 恢复 GPU 加速（有些系统禁用后反而黑屏）
 // app.disableHardwareAcceleration();
@@ -14,11 +15,51 @@ let overlayWindow = null;
 let currentScreenshot = null;
 
 const isDev = !app.isPackaged;
-// Check if running in desktop mode (backend serves static files on port 8000)
-const isDesktopMode = process.env.DESKTOP_MODE === 'true' || process.argv.includes('--desktop-mode');
 
-// API Key management removed - Desktop version forwards all requests to Vercel
-// All users use server API keys configured in Vercel
+// 📝 设置日志文件
+const logDir = path.join(app.getPath('userData'), 'logs');
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
+const logFile = path.join(logDir, `main-${new Date().toISOString().replace(/:/g, '-').split('.')[0]}.log`);
+const logStream = createWriteStream(logFile, { flags: 'a' });
+
+// 重定向 console 到文件和控制台
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+function logToFile(level, ...args) {
+  const timestamp = new Date().toISOString();
+  const message = `[${timestamp}] [${level}] ${args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')}\n`;
+  logStream.write(message);
+  // 同时输出到控制台
+  if (level === 'ERROR') {
+    originalError(...args);
+  } else if (level === 'WARN') {
+    originalWarn(...args);
+  } else {
+    originalLog(...args);
+  }
+}
+
+console.log = (...args) => logToFile('INFO', ...args);
+console.error = (...args) => logToFile('ERROR', ...args);
+console.warn = (...args) => logToFile('WARN', ...args);
+
+console.log('='.repeat(60));
+console.log('🚀 Electron 应用启动');
+console.log(`   环境: ${isDev ? 'Development' : 'Production'}`);
+console.log(`   日志文件: ${logFile}`);
+console.log(`   应用路径: ${app.getAppPath()}`);
+console.log(`   资源路径: ${process.resourcesPath || 'N/A'}`);
+console.log(`   打包状态: ${app.isPackaged ? '已打包' : '未打包'}`);
+console.log('='.repeat(60));
+
+// Desktop version architecture:
+// - UI runs locally from dist/ folder (built by Vite)
+// - All API requests go to Vercel backend (no local FastAPI)
+// - No API keys stored locally, all managed on Vercel
 
 // 🎨 创建现代化菜单
 function createMenu() {
@@ -70,38 +111,76 @@ function createMainWindow() {
     icon: path.join(__dirname, '../resources/icon.png')
   });
 
-  if (isDesktopMode) {
-    // Desktop mode: backend serves static files on port 8000
-    mainWindow.loadURL('http://127.0.0.1:8000');
-  } else if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+  if (isDev) {
+    // Development: connect to Vite dev server
+    const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
+    const devUrl = `http://localhost:${devPort}`;
+    console.log(`🔧 开发模式: 连接到 ${devUrl}`);
+    mainWindow.loadURL(devUrl);
     // mainWindow.webContents.openDevTools(); // 🚨 关闭开发者工具
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // Production: load from dist/ folder (static files built by Vite)
+    // All API requests will be forwarded to Vercel backend
+    // ✅ 关键：必须指向具体的 index.html 文件
+    const indexHtml = path.join(__dirname, '../dist/index.html');
+    console.log(`📦 生产模式: 加载文件 ${indexHtml}`);
+    console.log(`   文件是否存在: ${fs.existsSync(indexHtml)}`);
+    console.log(`   __dirname: ${__dirname}`);
+    console.log(`   完整路径: ${path.resolve(indexHtml)}`);
+    
+    // ✅ 使用 loadFile 加载具体的 HTML 文件
+    mainWindow.loadFile(indexHtml);
+    
+    // 🚨 临时启用 DevTools 以便调试
+    mainWindow.webContents.openDevTools();
   }
 
   // 🚨 添加错误监听
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     console.error('🚨 主窗口加载失败:', {
       errorCode,
       errorDescription,
-      validatedURL
+      validatedURL,
+      isMainFrame,
+      timestamp: new Date().toISOString()
     });
+    
     // 显示错误信息
+    const errorHtml = `
+      <div style="padding: 40px; font-family: Arial; text-align: center; background: #f5f7fa; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px;">
+          <h2 style="color: #e74c3c;">❌ 页面加载失败</h2>
+          <p><strong>错误代码:</strong> ${errorCode}</p>
+          <p><strong>错误描述:</strong> ${errorDescription}</p>
+          <p><strong>URL:</strong> <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">${validatedURL}</code></p>
+          <p><strong>日志文件位置:</strong></p>
+          <p><code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px; word-break: break-all;">${logFile}</code></p>
+          <p style="margin-top: 20px; color: #666;">请查看日志文件获取更多信息</p>
+        </div>
+      </div>
+    `;
     mainWindow.webContents.executeJavaScript(`
-      document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; text-align: center;">
-        <h2>❌ 页面加载失败</h2>
-        <p>错误代码: ${errorCode}</p>
-        <p>错误描述: ${errorDescription}</p>
-        <p>URL: ${validatedURL}</p>
-        <p>请检查：</p>
-        <ul style="text-align: left; display: inline-block;">
-          <li>Vite 开发服务器是否正在运行</li>
-          <li>端口是否正确（应该是 5173）</li>
-          <li>查看控制台获取更多信息</li>
-        </ul>
-      </div>';
+      document.body.innerHTML = ${JSON.stringify(errorHtml)};
     `).catch(err => console.error('显示错误信息失败:', err));
+  });
+  
+  // 监听控制台消息
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer ${level}] ${message} (${sourceId}:${line})`);
+  });
+  
+  // 监听渲染进程崩溃
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('🚨 渲染进程崩溃:', details);
+  });
+  
+  // 监听未捕获的异常
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('🚨 窗口无响应');
+  });
+  
+  mainWindow.webContents.on('responsive', () => {
+    console.log('✅ 窗口恢复响应');
   });
 
   // 🚨 加载完成后显示（避免白屏闪烁）
@@ -131,8 +210,16 @@ function createMainWindow() {
     return { action: 'allow' }; // 允许本地链接在应用内打开
   });
 
-  // 🔗 拦截导航到外部链接
+  // 🔗 拦截导航到外部链接和无效的 file:// 路径
   mainWindow.webContents.on('will-navigate', (event, url) => {
+    // 拦截无效的 file:// 路径（如 file:///D:/, file:///D:/? 等）
+    // 匹配模式：file:/// + 单个驱动器字母 + :/ + 可选查询参数
+    if (url.startsWith('file:///') && /^file:\/\/\/[A-Z]:\/\??/i.test(url)) {
+      console.warn(`🚫 拦截无效的 file:// 导航: ${url}`);
+      event.preventDefault();
+      return;
+    }
+    
     // 检查是否为外部链接
     if (url.startsWith('http://') || url.startsWith('https://')) {
       // 不是 localhost，在系统默认浏览器中打开
@@ -186,16 +273,19 @@ function createOverlayWindow() {
   // 移除 DevTools
   // overlayWindow.webContents.openDevTools({ mode: 'detach' });
 
-  if (isDesktopMode) {
-    // Desktop mode: backend serves static files on port 8000
-    overlayWindow.loadURL('http://127.0.0.1:8000/?type=overlay#/overlay');
-  } else if (isDev) {
-    // 添加 ?type=overlay 参数，确保前端能识别
-    overlayWindow.loadURL('http://localhost:5173/?type=overlay#/overlay');
+  if (isDev) {
+    // Development: connect to Vite dev server
+    const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
+    overlayWindow.loadURL(`http://localhost:${devPort}/?type=overlay#/overlay`);
   } else {
-    overlayWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+    // Production: load from dist/ folder (static files built by Vite)
+    // All API requests will be forwarded to Vercel backend
+    // ✅ 关键：必须指向具体的 index.html 文件
+    const indexHtml = path.join(__dirname, '../dist/index.html');
+    console.log(`📦 悬浮窗生产模式: 加载文件 ${indexHtml}`);
+    overlayWindow.loadFile(indexHtml, {
       hash: '/overlay',
-      search: 'type=overlay' // 生产环境也加上
+      search: 'type=overlay'
     });
   }
 
@@ -229,8 +319,16 @@ function createOverlayWindow() {
     return { action: 'allow' }; // 允许本地链接在应用内打开
   });
 
-  // 🔗 拦截导航到外部链接
+  // 🔗 拦截导航到外部链接和无效的 file:// 路径
   overlayWindow.webContents.on('will-navigate', (event, url) => {
+    // 拦截无效的 file:// 路径（如 file:///D:/, file:///D:/? 等）
+    // 匹配模式：file:/// + 单个驱动器字母 + :/ + 可选查询参数
+    if (url.startsWith('file:///') && /^file:\/\/\/[A-Z]:\/\??/i.test(url)) {
+      console.warn(`🚫 拦截无效的 file:// 导航: ${url}`);
+      event.preventDefault();
+      return;
+    }
+    
     // 检查是否为外部链接
     if (url.startsWith('http://') || url.startsWith('https://')) {
       // 不是 localhost，在系统默认浏览器中打开
@@ -728,6 +826,17 @@ ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh')
   }
 });
 
+// 全局错误处理
+process.on('uncaughtException', (error) => {
+  console.error('🚨 未捕获的异常:', error);
+  logStream.end();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 未处理的 Promise 拒绝:', reason);
+  logStream.end();
+});
+
 app.whenReady().then(() => {
   createMainWindow();
   // 🔒 不要自动创建悬浮窗，等待主窗口通知用户已登录
@@ -753,5 +862,12 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   // 注销所有快捷键
   globalShortcut.unregisterAll();
+  // 关闭日志流
+  logStream.end();
+  console.log('📝 日志已保存到:', logFile);
+});
+
+app.on('before-quit', () => {
+  console.log('🛑 应用即将退出');
 });
 

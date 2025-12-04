@@ -124,11 +124,11 @@ function App() {
         console.log('🔒 App.tsx - Auth status changed:', lastAuthStatus, '->', authenticated);
         lastAuthStatus = authenticated;
         setAuthStatus(authenticated);
-        
-        // 🔒 如果已登录，通知 Electron 创建悬浮窗
+      
+      // 🔒 如果已登录，通知 Electron 创建悬浮窗
         if (authenticated && window.aiShot?.userLoggedIn) {
           console.log('🔒 App.tsx - Calling userLoggedIn');
-          await window.aiShot.userLoggedIn();
+        await window.aiShot.userLoggedIn();
         } else if (!authenticated && window.aiShot?.userLoggedOut) {
           console.log('🔒 App.tsx - Calling userLoggedOut');
           await window.aiShot.userLoggedOut();
