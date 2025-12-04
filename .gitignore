@@ -46,6 +46,17 @@ backend/.env.local
 !backend/env.example
 
 # ========================================
+# Code Signing Certificates (重要！)
+# ========================================
+*.pfx
+*.p12
+*.cer
+*.pem
+certificates/
+*.key
+*.crt
+
+# ========================================
 # Electron
 # ========================================
 out/
@@ -87,6 +98,16 @@ out/
 *.tsbuildinfo
 
 # ========================================
+# Large Files / Downloads
+# ========================================
+public/download/*.exe
+public/download/*.dmg
+public/download/*.pkg
+*.exe
+*.dmg
+*.pkg
+
+# ========================================
 # Desktop Build / PyInstaller
 # ========================================
 # PyInstaller 构建目录
@@ -102,7 +123,6 @@ dist-desktop/
 build-desktop/
 
 # 可执行文件
-*.exe
 *.bin
 *.app
 *.dmg

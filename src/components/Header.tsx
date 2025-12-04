@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isAuthenticated, getCurrentUser, logout } from '../lib/auth';
+import { DOWNLOAD_CONFIG } from '../constants/download';
 import './Header.css';
 
 export const Header: React.FC = () => {
@@ -83,6 +84,16 @@ export const Header: React.FC = () => {
                 >
                   Sign Up
                 </button>
+                <a
+                  href={DOWNLOAD_CONFIG.windows.url}
+                  className="header-btn download-btn"
+                  download={DOWNLOAD_CONFIG.windows.filename}
+                >
+                  <svg className="download-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Free Download
+                </a>
               </>
             )}
           </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Header } from './components/Header';
+import { DOWNLOAD_CONFIG } from './constants/download';
 import './Landing.css';
 
 export const Landing: React.FC = () => {

@@ -38,7 +38,7 @@ function logToFile(level, ...args) {
     originalError(...args);
   } else if (level === 'WARN') {
     originalWarn(...args);
-  } else {
+      } else {
     originalLog(...args);
   }
 }
