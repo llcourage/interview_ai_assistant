@@ -15,7 +15,8 @@ echo ========================================
 echo.
 
 REM Ensure we're in the project root directory
-cd /d "%~dp0"
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
 
 REM Set PYTHONPATH
 set "BACKEND_DIR=%CD%\backend"

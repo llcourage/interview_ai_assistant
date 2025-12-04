@@ -1,39 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { isAuthenticated, getCurrentUser, logout } from '../lib/auth';
 import './Header.css';
 
 export const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authStatus, setAuthStatus] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // 检查认证状态
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setIsAuthenticated(!!session);
-      setUserEmail(session?.user?.email || null);
+      const authenticated = await isAuthenticated();
+      setAuthStatus(authenticated);
+      if (authenticated) {
+        const user = await getCurrentUser();
+        setUserEmail(user?.email || null);
+      } else {
+        setUserEmail(null);
+      }
       setLoading(false);
     };
 
     checkAuth();
 
-    // 监听认证状态变化
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-      setUserEmail(session?.user?.email || null);
-    });
+    // 定期检查认证状态（替代 Supabase 的实时监听）
+    const interval = setInterval(checkAuth, 5000);
 
     return () => {
-      subscription.unsubscribe();
+      clearInterval(interval);
     };
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
+    setAuthStatus(false);
+    setUserEmail(null);
     navigate('/');
   };
 
@@ -49,7 +53,7 @@ export const Header: React.FC = () => {
           <div className="header-right">
             {loading ? (
               <span style={{ color: '#666' }}>Loading...</span>
-            ) : isAuthenticated ? (
+            ) : authStatus ? (
               <>
                 <button 
                   className="header-btn"

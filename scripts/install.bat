@@ -5,6 +5,10 @@ echo 📦 AI 面试助手 - 依赖安装
 echo ======================================
 echo.
 
+REM Ensure we're in the project root directory
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
+
 echo [1/2] 安装前端依赖...
 echo.
 call npm install

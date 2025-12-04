@@ -5,6 +5,10 @@ echo 🔄 重启后端服务（应用新的提示词）
 echo ======================================
 echo.
 
+REM Ensure we're in the project root directory
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
+
 echo 正在关闭后端服务...
 taskkill /F /IM python.exe 2>nul
 timeout /t 2 /nobreak > nul

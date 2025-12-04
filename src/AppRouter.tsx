@@ -10,53 +10,65 @@ import App from './App';
 import { Login } from './Login';
 import Overlay from './Overlay';
 import { isElectron } from './utils/isElectron';
+import { isAuthenticated } from './lib/auth';
 
 // Electron 客户端默认页面组件（检测登录状态，已登录显示 App，未登录显示 Login）
 const ElectronDefaultPage: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
+  const [authStatus, setAuthStatus] = React.useState<boolean | null>(null);
   
   React.useEffect(() => {
-    let subscription: any = null;
+    let isMounted = true;
+    let lastAuthStatus: boolean | null = null;
     
     const checkAuth = async () => {
       try {
-        const { supabase } = await import('./lib/supabase');
-        const { data: { session } } = await supabase.auth.getSession();
-        setIsAuthenticated(!!session);
+        const authenticated = await isAuthenticated();
         
-        // 如果已登录，通知 Electron 创建悬浮窗
-        if (session && window.aiShot?.userLoggedIn) {
-          await window.aiShot.userLoggedIn();
-        }
+        // 只在状态变化时通知 Electron，避免重复调用
+        if (!isMounted) return;
         
-        // 监听认证状态变化
-        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-          setIsAuthenticated(!!session);
+        if (lastAuthStatus !== authenticated) {
+          console.log('🔒 AppRouter - Auth status changed:', lastAuthStatus, '->', authenticated);
+          lastAuthStatus = authenticated;
+          setAuthStatus(authenticated);
           
-          if (session && window.aiShot?.userLoggedIn) {
+          // 如果已登录，通知 Electron 创建悬浮窗
+          if (authenticated && window.aiShot?.userLoggedIn) {
+            console.log('🔒 AppRouter - Calling userLoggedIn');
             await window.aiShot.userLoggedIn();
-          } else if (!session && window.aiShot?.userLoggedOut) {
+          } else if (!authenticated && window.aiShot?.userLoggedOut) {
+            console.log('🔒 AppRouter - Calling userLoggedOut');
             await window.aiShot.userLoggedOut();
           }
-        });
-        
-        subscription = authSubscription;
+        }
       } catch (error) {
         console.error('Auth check error:', error);
-        setIsAuthenticated(false);
+        if (isMounted) {
+          setAuthStatus(false);
+        }
       }
     };
     
     checkAuth();
     
+    // 监听认证状态变化事件（登录/登出时触发）
+    const handleAuthStateChange = () => {
+      console.log('🔒 AppRouter - Auth state change event received');
+      checkAuth();
+    };
+    window.addEventListener('auth-state-changed', handleAuthStateChange);
+    
+    // 定期检查认证状态（替代 Supabase 的实时监听）
+    const interval = setInterval(checkAuth, 5000);
+    
     return () => {
-      if (subscription) {
-        subscription.unsubscribe();
-      }
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('auth-state-changed', handleAuthStateChange);
     };
   }, []);
   
-  if (isAuthenticated === null) {
+  if (authStatus === null) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -70,7 +82,7 @@ const ElectronDefaultPage: React.FC = () => {
     );
   }
   
-  if (!isAuthenticated) {
+  if (!authStatus) {
     return <Navigate to="/login" replace />;
   }
   

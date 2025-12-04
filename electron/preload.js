@@ -75,33 +75,6 @@ contextBridge.exposeInMainWorld('aiShot', {
     ipcRenderer.removeAllListeners(channel);
   },
 
-  // 🔑 API Key 相关
-  getApiKey: () => {
-    return ipcRenderer.invoke('get-api-key');
-  },
-
-  saveApiKey: (apiKey) => {
-    return ipcRenderer.invoke('save-api-key', apiKey);
-  },
-
-  deleteApiKey: () => {
-    return ipcRenderer.invoke('delete-api-key');
-  },
-
-  // 监听打开 API Key 对话框事件
-  onOpenApiKeyDialog: (callback) => {
-    ipcRenderer.on('open-api-key-dialog', (event, data) => {
-      callback(data);
-    });
-  },
-
-  // 监听 API Key 删除事件
-  onApiKeyDeleted: (callback) => {
-    ipcRenderer.on('api-key-deleted', () => {
-      callback();
-    });
-  },
-
   // 🔒 用户登录/登出事件
   userLoggedIn: () => {
     return ipcRenderer.invoke('user-logged-in');

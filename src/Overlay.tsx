@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/atom-one-dark.css';
 import './Overlay.css';
-import { supabase } from './lib/supabase';
+import { getAuthHeader } from './lib/auth';
 import { API_BASE_URL } from './lib/api';
 
 // 🚨 配置：最大保存对话轮数（防止 localStorage 过大）
@@ -28,8 +28,9 @@ const Overlay = () => {
   
   // 获取认证 token 的辅助函数
   const getAuthToken = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
+    const authHeader = getAuthHeader();
+    // 从 "Bearer token" 格式中提取 token
+    return authHeader ? authHeader.replace('Bearer ', '') : null;
   }, []);
   
   // 📦 Plan 状态

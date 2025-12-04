@@ -5,6 +5,10 @@ echo 🔑 创建 .env 配置文件
 echo ======================================
 echo.
 
+REM Ensure we're in the project root directory
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
+
 cd backend
 
 echo # OpenAI API 配置 > .env

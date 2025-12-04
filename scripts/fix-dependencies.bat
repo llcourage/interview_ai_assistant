@@ -5,6 +5,10 @@ echo 🔧 修复后端依赖问题
 echo ======================================
 echo.
 
+REM Ensure we're in the project root directory
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
+
 cd backend
 
 if exist venv\Scripts\activate.bat (

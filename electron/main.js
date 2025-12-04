@@ -17,122 +17,12 @@ const isDev = !app.isPackaged;
 // Check if running in desktop mode (backend serves static files on port 8000)
 const isDesktopMode = process.env.DESKTOP_MODE === 'true' || process.argv.includes('--desktop-mode');
 
-// 🔑 API Key 配置文件路径
-const getConfigPath = () => {
-  return path.join(app.getPath('userData'), 'config.json');
-};
-
-// 🔑 读取 API Key
-function getApiKey() {
-  try {
-    const configPath = getConfigPath();
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return config.apiKey || null;
-    }
-  } catch (error) {
-    console.error('读取 API Key 配置失败:', error);
-  }
-  return null;
-}
-
-// 🔑 保存 API Key
-function saveApiKey(apiKey) {
-  try {
-    const configPath = getConfigPath();
-    let config = {};
-    if (fs.existsSync(configPath)) {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    }
-    config.apiKey = apiKey;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-    console.log('✅ API Key 已保存到:', configPath);
-    return true;
-  } catch (error) {
-    console.error('保存 API Key 失败:', error);
-    return false;
-  }
-}
-
-// 🔑 删除 API Key
-function deleteApiKey() {
-  try {
-    const configPath = getConfigPath();
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      delete config.apiKey;
-      // 如果配置为空，删除文件；否则保留其他配置
-      if (Object.keys(config).length === 0) {
-        fs.unlinkSync(configPath);
-        console.log('✅ 配置文件已删除');
-      } else {
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-        console.log('✅ API Key 已从配置中删除');
-      }
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('删除 API Key 失败:', error);
-    return false;
-  }
-}
+// API Key management removed - Desktop version forwards all requests to Vercel
+// All users use server API keys configured in Vercel
 
 // 🎨 创建现代化菜单
 function createMenu() {
   const template = [
-    {
-      label: 'API Key',
-      submenu: [
-        {
-          label: 'Manage API Key...',
-          click: async () => {
-            const currentApiKey = getApiKey();
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('open-api-key-dialog', { action: 'view', apiKey: currentApiKey });
-            }
-          }
-        },
-        { type: 'separator' },
-        {
-          label: 'Delete API Key',
-          click: async () => {
-            const currentApiKey = getApiKey();
-            if (!currentApiKey) {
-              await dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'No API Key',
-                message: 'No API Key is currently set',
-              });
-              return;
-            }
-            
-            const result = await dialog.showMessageBox(mainWindow, {
-              type: 'warning',
-              buttons: ['Cancel', 'Delete'],
-              defaultId: 0,
-              title: 'Delete API Key',
-              message: 'Are you sure you want to delete the API Key?',
-              detail: 'You will need to set it again to use AI features.',
-            });
-
-            if (result.response === 1) {
-              const success = deleteApiKey();
-              if (success) {
-                await dialog.showMessageBox(mainWindow, {
-                  type: 'info',
-                  title: 'Success',
-                  message: 'API Key has been deleted',
-                });
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                  mainWindow.webContents.send('api-key-deleted');
-                }
-              }
-            }
-          }
-        }
-      ]
-    },
     {
       label: 'View',
       submenu: [
@@ -190,11 +80,42 @@ function createMainWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  // 🚨 添加错误监听
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('🚨 主窗口加载失败:', {
+      errorCode,
+      errorDescription,
+      validatedURL
+    });
+    // 显示错误信息
+    mainWindow.webContents.executeJavaScript(`
+      document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; text-align: center;">
+        <h2>❌ 页面加载失败</h2>
+        <p>错误代码: ${errorCode}</p>
+        <p>错误描述: ${errorDescription}</p>
+        <p>URL: ${validatedURL}</p>
+        <p>请检查：</p>
+        <ul style="text-align: left; display: inline-block;">
+          <li>Vite 开发服务器是否正在运行</li>
+          <li>端口是否正确（应该是 5173）</li>
+          <li>查看控制台获取更多信息</li>
+        </ul>
+      </div>';
+    `).catch(err => console.error('显示错误信息失败:', err));
+  });
+
   // 🚨 加载完成后显示（避免白屏闪烁）
   mainWindow.once('ready-to-show', () => {
     console.log('主窗口准备就绪，显示窗口');
     mainWindow.show();
     mainWindow.focus();
+  });
+
+  // 添加控制台消息监听（用于调试）
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    if (level === 3) { // error level
+      console.error('前端错误:', message);
+    }
   });
 
   // 🔗 拦截外部链接，在系统默认浏览器中打开
@@ -552,32 +473,6 @@ function registerShortcuts() {
   console.log('  Ctrl+Left: 向左移动');
   console.log('  Ctrl+Right: 向右移动');
 }
-
-// 🔑 IPC: 获取 API Key
-ipcMain.handle('get-api-key', () => {
-  return getApiKey();
-});
-
-// 🔑 IPC: 保存 API Key
-ipcMain.handle('save-api-key', async (event, apiKey) => {
-  if (!apiKey || apiKey.trim() === '') {
-    return { success: false, message: 'API Key 不能为空' };
-  }
-  const success = saveApiKey(apiKey.trim());
-  if (success) {
-    return { success: true, message: 'API Key 已保存' };
-  }
-  return { success: false, message: '保存失败' };
-});
-
-// 🔑 IPC: 删除 API Key
-ipcMain.handle('delete-api-key', async () => {
-  const success = deleteApiKey();
-  if (success) {
-    return { success: true, message: 'API Key 已删除' };
-  }
-  return { success: false, message: '删除失败或未设置 API Key' };
-});
 
 // 🔒 IPC: 用户登录成功，创建悬浮窗
 ipcMain.handle('user-logged-in', () => {

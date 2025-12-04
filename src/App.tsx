@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import './App.css'
-import { supabase } from './lib/supabase'
+import { isAuthenticated, getCurrentUser, logout, getAuthHeader } from './lib/auth'
 import { Login } from './Login'
 import { PlanSelector, PlanType } from './components/PlanSelector'
 import { Settings } from './components/Settings'
@@ -26,28 +26,20 @@ interface SessionData {
 declare global {
   interface Window {
     aiShot?: {
-      getApiKey: () => Promise<string | null>;
-      saveApiKey: (apiKey: string) => Promise<{ success: boolean; message: string }>;
-      deleteApiKey: () => Promise<{ success: boolean; message: string }>;
-      onOpenApiKeyDialog: (callback: (data: { action: string; apiKey: string | null }) => void) => void;
-      onApiKeyDeleted: (callback: () => void) => void;
+      userLoggedIn: () => Promise<{ success: boolean }>;
+      userLoggedOut: () => Promise<{ success: boolean }>;
     };
   }
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [authStatus, setAuthStatus] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
   // 🎨 主题状态：'dark' | 'light'
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
   });
-  // 🔑 API Key 对话框状态
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [currentApiKey, setCurrentApiKey] = useState<string | null>(null);
-  const [apiKeyStatus, setApiKeyStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
   // 📦 Plan 状态
   const [currentPlan, setCurrentPlan] = useState<PlanType>(() => {
     return (localStorage.getItem('currentPlan') as PlanType) || 'normal';
@@ -59,12 +51,12 @@ function App() {
   useEffect(() => {
     const loadPlanFromAPI = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const authHeader = getAuthHeader();
+        if (!authHeader) return;
 
         const response = await fetch(`${API_BASE_URL}/api/plan`, {
           headers: {
-            'Authorization': `Bearer ${session.access_token}`
+            'Authorization': authHeader
           }
         });
 
@@ -85,10 +77,13 @@ function App() {
     };
 
     // 登录后立即加载 plan
-    if (isAuthenticated) {
+    if (authStatus) {
       loadPlanFromAPI();
     }
+  }, [authStatus]);
 
+  // 📦 监听 Plan 变化（跨窗口和同窗口同步）
+  useEffect(() => {
     // 监听 localStorage 的 storage 事件（跨窗口同步）
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'currentPlan' && e.newValue) {
@@ -111,38 +106,52 @@ function App() {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('planChanged', handlePlanChange as EventListener);
     };
-  }, [isAuthenticated]);
+  }, []);
 
   // 🔒 检查认证状态
   useEffect(() => {
+    let isMounted = true;
+    let lastAuthStatus: boolean | null = null;
+    
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('Current session:', session);
-      setIsAuthenticated(!!session);
+      const authenticated = await isAuthenticated();
+      console.log('🔒 App.tsx - Current auth status:', authenticated);
       
-      // 🔒 如果已登录，通知 Electron 创建悬浮窗
-      if (session && window.aiShot?.userLoggedIn) {
-        await window.aiShot.userLoggedIn();
+      if (!isMounted) return;
+      
+      // 只在状态变化时通知 Electron，避免重复调用
+      if (lastAuthStatus !== authenticated) {
+        console.log('🔒 App.tsx - Auth status changed:', lastAuthStatus, '->', authenticated);
+        lastAuthStatus = authenticated;
+        setAuthStatus(authenticated);
+        
+        // 🔒 如果已登录，通知 Electron 创建悬浮窗
+        if (authenticated && window.aiShot?.userLoggedIn) {
+          console.log('🔒 App.tsx - Calling userLoggedIn');
+          await window.aiShot.userLoggedIn();
+        } else if (!authenticated && window.aiShot?.userLoggedOut) {
+          console.log('🔒 App.tsx - Calling userLoggedOut');
+          await window.aiShot.userLoggedOut();
+        }
       }
     };
     
     checkAuth();
     
-    // 监听认证状态变化
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('Auth state changed:', _event, session);
-      setIsAuthenticated(!!session);
-      
-      // 🔒 根据认证状态控制悬浮窗
-      if (session && window.aiShot?.userLoggedIn) {
-        await window.aiShot.userLoggedIn();
-      } else if (!session && window.aiShot?.userLoggedOut) {
-        await window.aiShot.userLoggedOut();
-      }
-    });
+    // 监听认证状态变化事件（登录/登出时触发）
+    const handleAuthStateChange = () => {
+      console.log('🔒 App.tsx - Auth state change event received');
+      checkAuth();
+    };
+    window.addEventListener('auth-state-changed', handleAuthStateChange);
+    
+    // 定期检查认证状态（替代 Supabase 的实时监听）
+    const interval = setInterval(checkAuth, 5000);
     
     return () => {
-      subscription.unsubscribe();
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('auth-state-changed', handleAuthStateChange);
     };
   }, []);
 
@@ -152,89 +161,6 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // 🔑 加载当前 API Key
-  useEffect(() => {
-    const loadApiKey = async () => {
-      if (window.aiShot?.getApiKey) {
-        const key = await window.aiShot.getApiKey();
-        setCurrentApiKey(key);
-      }
-    };
-    loadApiKey();
-  }, []);
-
-  // 🔑 监听打开 API Key 对话框事件
-  useEffect(() => {
-    if (window.aiShot?.onOpenApiKeyDialog) {
-      window.aiShot.onOpenApiKeyDialog((data) => {
-        const apiKey = data.apiKey || null;
-        setCurrentApiKey(apiKey);
-        setApiKeyInput(apiKey || '');
-        setShowApiKeyDialog(true);
-      });
-    }
-  }, []);
-
-  // 🔑 监听 API Key 删除事件
-  useEffect(() => {
-    if (window.aiShot?.onApiKeyDeleted) {
-      window.aiShot.onApiKeyDeleted(() => {
-        setCurrentApiKey(null);
-        setApiKeyInput('');
-        setApiKeyStatus({ type: 'success', message: 'API Key deleted' });
-        setTimeout(() => {
-          setShowApiKeyDialog(false);
-          setApiKeyStatus({ type: null, message: '' });
-        }, 1500);
-      });
-    }
-  }, []);
-
-  // 🔑 Save API Key
-  const handleSaveApiKey = async () => {
-    if (!window.aiShot?.saveApiKey) {
-      setApiKeyStatus({ type: 'error', message: 'IPC connection failed' });
-      return;
-    }
-
-    const result = await window.aiShot.saveApiKey(apiKeyInput);
-    if (result.success) {
-      setCurrentApiKey(apiKeyInput);
-      setApiKeyStatus({ type: 'success', message: result.message });
-      setTimeout(() => {
-        setShowApiKeyDialog(false);
-        setApiKeyStatus({ type: null, message: '' });
-      }, 1500);
-    } else {
-      setApiKeyStatus({ type: 'error', message: result.message });
-    }
-  };
-
-  // 🔑 Delete API Key
-  const handleDeleteApiKey = async () => {
-    if (!window.aiShot?.deleteApiKey) {
-      setApiKeyStatus({ type: 'error', message: 'IPC connection failed' });
-      return;
-    }
-
-    if (!confirm('Are you sure you want to delete the API Key? You will need to set it again to use AI features.')) {
-      return;
-    }
-
-    const result = await window.aiShot.deleteApiKey();
-    if (result.success) {
-      setCurrentApiKey(null);
-      setApiKeyInput('');
-      setApiKeyStatus({ type: 'success', message: result.message });
-      setTimeout(() => {
-        setShowApiKeyDialog(false);
-        setApiKeyStatus({ type: null, message: '' });
-      }, 1500);
-    } else {
-      setApiKeyStatus({ type: 'error', message: result.message });
-    }
-  };
-
   // 🎨 切换主题
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
@@ -243,17 +169,17 @@ function App() {
   // 🚪 退出登录
   const handleLogout = async () => {
     console.log('Logging out...');
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Logout error:', error);
-    } else {
+    try {
+      await logout();
       console.log('Logout successful');
-      setIsAuthenticated(false);
+      setAuthStatus(false);
       
       // 🔒 通知 Electron 关闭悬浮窗
       if (window.aiShot?.userLoggedOut) {
         await window.aiShot.userLoggedOut();
       }
+    } catch (error) {
+      console.error('Logout error:', error);
     }
   };
 
@@ -299,7 +225,7 @@ function App() {
   };
 
   // 🔒 Authentication check - show loading or login page
-  if (isAuthenticated === null) {
+  if (authStatus === null) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -315,7 +241,7 @@ function App() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!authStatus) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -533,76 +459,6 @@ function App() {
       <footer className="app-footer">
         <p>💡 Tip: Use <kbd>Ctrl+N</kbd> to create a new session</p>
       </footer>
-
-      {/* 🔑 API Key 管理对话框 */}
-      {showApiKeyDialog && (
-        <div className="api-key-dialog-overlay" onClick={() => setShowApiKeyDialog(false)}>
-          <div className="api-key-dialog" onClick={(e) => e.stopPropagation()}>
-            <h3>API Key 管理</h3>
-            
-            {/* 当前状态显示 */}
-            {currentApiKey ? (
-              <div className="api-key-current">
-                <div className="api-key-current-label">当前 API Key:</div>
-                <div className="api-key-current-value">
-                  {currentApiKey.substring(0, 8)}...{currentApiKey.substring(currentApiKey.length - 4)}
-                </div>
-              </div>
-            ) : (
-              <div className="api-key-current">
-                <div className="api-key-current-label">当前状态:</div>
-                <div className="api-key-current-value empty">未设置</div>
-              </div>
-            )}
-
-            <p className="api-key-hint">
-              {currentApiKey ? '编辑或删除你的 OpenAI API Key' : '请输入你的 OpenAI API Key。API Key 将保存在本地配置文件中。'}
-            </p>
-            
-            <input
-              type="password"
-              className="api-key-input"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="sk-..."
-              autoFocus
-            />
-            
-            {apiKeyStatus.type && (
-              <div className={`api-key-status ${apiKeyStatus.type}`}>
-                {apiKeyStatus.message}
-              </div>
-            )}
-            
-            <div className="api-key-dialog-actions">
-              <button 
-                className="api-key-btn api-key-btn-cancel"
-                onClick={() => {
-                  setShowApiKeyDialog(false);
-                  setApiKeyStatus({ type: null, message: '' });
-                }}
-              >
-                取消
-              </button>
-              {currentApiKey && (
-                <button 
-                  className="api-key-btn api-key-btn-delete"
-                  onClick={handleDeleteApiKey}
-                >
-                  删除
-                </button>
-              )}
-              <button 
-                className="api-key-btn api-key-btn-save"
-                onClick={handleSaveApiKey}
-                disabled={!apiKeyInput.trim()}
-              >
-                {currentApiKey ? '更新' : '保存'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

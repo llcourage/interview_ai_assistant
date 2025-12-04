@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { logout } from '../../lib/auth';
 import './TopNav.css';
 
 export const TopNav: React.FC = () => {
@@ -8,7 +8,7 @@ export const TopNav: React.FC = () => {
   const location = useLocation();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     navigate('/');
   };
 

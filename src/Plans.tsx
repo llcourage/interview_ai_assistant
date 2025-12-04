@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
+import { getAuthHeader, getToken } from './lib/auth';
+import { API_BASE_URL } from './lib/api';
 import { Header } from './components/Header';
 import { PlanCard } from './components/PlanCard';
 import './Plans.css';
@@ -14,22 +15,25 @@ export const Plans: React.FC = () => {
     
     try {
       // Check if user is logged in
-      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = getAuthHeader();
       
-      if (!session) {
+      if (!authHeader) {
         // Not logged in, redirect to login page with plan parameter
         navigate(`/login?plan=${plan}&redirect=/checkout`);
         return;
       }
 
       // Logged in, create Stripe Checkout Session
-      const token = session.access_token;
-      const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
+      const token = getToken();
+      if (!token) {
+        navigate(`/login?plan=${plan}&redirect=/checkout`);
+        return;
+      }
       
       const response = await fetch(`${API_BASE_URL}/api/plan/checkout`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': getAuthHeader() || '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

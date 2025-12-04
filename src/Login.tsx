@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
+import { register, login } from './lib/auth';
 import { isElectron } from './utils/isElectron';
 import './Login.css';
 
@@ -44,44 +44,23 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       if (isRegister) {
         // Register
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/login`
-          }
-        });
-        
-        if (error) throw error;
-        
-        if (data.session) {
-          // Auto login after registration
-          setMessage('Registration successful! Signing in...');
-          setTimeout(() => {
-            handleLoginSuccess();
-          }, 1000);
-        } else if (data.user && !data.session) {
-          // Email verification required
-          setMessage('Registration successful! Please check your email to verify (if email verification is enabled)');
-          setTimeout(() => {
-            setIsRegister(false);
-          }, 3000);
-        }
+        await register(email, password);
+        setMessage('Registration successful! Signing in...');
+        setTimeout(() => {
+          handleLoginSuccess();
+        }, 1000);
       } else {
         // Login
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const token = await login(email, password);
+        console.log('✅ Login successful, token saved:', !!token);
+        setMessage('Login successful!');
         
-        if (error) throw error;
+        // 触发自定义事件，通知其他组件认证状态已改变
+        window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         
-        if (data.session) {
-          setMessage('Login successful!');
-          setTimeout(() => {
-            handleLoginSuccess();
-          }, 500);
-        }
+        setTimeout(() => {
+          handleLoginSuccess();
+        }, 500);
       }
     } catch (err: any) {
       console.error('Auth error:', err);

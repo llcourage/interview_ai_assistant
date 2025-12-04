@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
+import { getAuthHeader, getCurrentUser } from './lib/auth';
 import { API_BASE_URL } from './lib/api';
 import { TopNav } from './components/Profile/TopNav';
 import { ProfileHeader } from './components/Profile/ProfileHeader';
@@ -35,15 +35,16 @@ export const Profile: React.FC = () => {
 
   const checkAuthAndLoadData = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = getAuthHeader();
       
-      if (!session) {
+      if (!authHeader) {
         navigate('/login');
         return;
       }
 
-      setUserEmail(session.user.email || null);
-      await loadPlanInfo(session.access_token);
+      const user = await getCurrentUser();
+      setUserEmail(user?.email || null);
+      await loadPlanInfo();
     } catch (err) {
       console.error('Auth check error:', err);
       setError('加载用户信息失败');
@@ -52,13 +53,16 @@ export const Profile: React.FC = () => {
     }
   };
 
-  const loadPlanInfo = async (token: string) => {
+  const loadPlanInfo = async () => {
     try {
       setError(null);
+      const authHeader = getAuthHeader();
+      if (!authHeader) return;
+      
       console.log('🔍 Loading plan info from:', `${API_BASE_URL}/api/plan`);
       const response = await fetch(`${API_BASE_URL}/api/plan`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': authHeader
         }
       });
 

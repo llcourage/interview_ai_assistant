@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
+import { getAuthHeader, getToken } from './lib/auth';
+import { API_BASE_URL } from './lib/api';
 import './Checkout.css';
 
 export const Checkout: React.FC = () => {
@@ -18,16 +19,19 @@ export const Checkout: React.FC = () => {
 
     // Check if user is logged in
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = getAuthHeader();
       
-      if (!session) {
+      if (!authHeader) {
         // Not logged in, redirect to login page
         navigate(`/login?plan=${plan}&redirect=/checkout?plan=${plan}`);
         return;
       }
 
       // Logged in, create Stripe Checkout
-      handleCheckout(session.access_token);
+      const token = getToken();
+      if (token) {
+        handleCheckout(token.access_token);
+      }
     };
 
     checkAuth();
@@ -43,8 +47,6 @@ export const Checkout: React.FC = () => {
     setError(null);
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
-      
       // 调试信息
       console.log('🔍 Checkout Debug Info:');
       console.log('  - API_BASE_URL:', API_BASE_URL);
@@ -55,7 +57,7 @@ export const Checkout: React.FC = () => {
       const response = await fetch(`${API_BASE_URL}/api/plan/checkout`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': getAuthHeader() || '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

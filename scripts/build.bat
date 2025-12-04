@@ -5,6 +5,10 @@ echo 📦 AI 面试助手 - 打包构建
 echo ======================================
 echo.
 
+REM Ensure we're in the project root directory
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
+
 echo [1/2] 构建前端...
 echo.
 call npm run build

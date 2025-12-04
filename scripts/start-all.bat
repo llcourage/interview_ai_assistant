@@ -4,11 +4,16 @@ echo ======================================
 echo 🔥 AI 面试助手 - 完整启动（Electron 客户端）
 echo ======================================
 echo.
+
+REM Ensure we're in the project root directory
+REM %~dp0 is the script directory (scripts/), so go up one level to project root
+cd /d "%~dp0\.."
+
 echo 正在启动后端和前端服务...
 echo.
 
-REM 在新窗口启动后端
-start "AI 面试助手 - 后端" cmd /k start-backend.bat
+REM 在新窗口启动后端（从项目根目录调用脚本）
+start "AI 面试助手 - 后端" cmd /k scripts\start-backend.bat
 
 REM 等待 3 秒
 timeout /t 3 /nobreak > nul

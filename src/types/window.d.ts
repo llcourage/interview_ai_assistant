@@ -79,15 +79,6 @@ export interface AiShotAPI {
   removeListener: (channel: string) => void;
 
   /**
-   * API Key 相关
-   */
-  getApiKey: () => Promise<string | null>;
-  saveApiKey: (apiKey: string) => Promise<{ success: boolean; message: string }>;
-  deleteApiKey: () => Promise<{ success: boolean; message: string }>;
-  onOpenApiKeyDialog: (callback: (data: { action: string; apiKey: string | null }) => void) => void;
-  onApiKeyDeleted: (callback: () => void) => void;
-
-  /**
    * 用户登录/登出
    */
   userLoggedIn: () => Promise<{ success: boolean }>;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { getAuthHeader } from '../lib/auth';
 import { API_BASE_URL } from '../lib/api';
 import './Settings.css';
 
@@ -18,36 +18,23 @@ interface PlanInfo {
   };
 }
 
-interface ApiKeyInfo {
-  has_key: boolean;
-  masked_key: string | null;
-}
-
 export const Settings: React.FC = () => {
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
-  const [apiKeyInfo, setApiKeyInfo] = useState<ApiKeyInfo | null>(null);
-  const [newApiKey, setNewApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
     loadPlanInfo();
-    loadApiKeyInfo();
   }, []);
-
-  const getAuthToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
 
   const loadPlanInfo = async () => {
     try {
-      const token = await getAuthToken();
-      if (!token) return;
+      const authHeader = getAuthHeader();
+      if (!authHeader) return;
 
       const response = await fetch(`${API_BASE_URL}/api/plan`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': authHeader
         }
       });
 
@@ -58,100 +45,6 @@ export const Settings: React.FC = () => {
     } catch (error) {
       console.error('Error loading plan info:', error);
       setMessage({ type: 'error', text: 'Failed to load plan information' });
-    }
-  };
-
-  const loadApiKeyInfo = async () => {
-    try {
-      const token = await getAuthToken();
-      if (!token) return;
-
-      const response = await fetch(`${API_BASE_URL}/api/apikey`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to load API key info');
-
-      const data = await response.json();
-      setApiKeyInfo(data);
-    } catch (error) {
-      console.error('Error loading API key info:', error);
-    }
-  };
-
-  const handleSaveApiKey = async () => {
-    if (!newApiKey.trim()) {
-      setMessage({ type: 'error', text: 'Please enter API Key' });
-      return;
-    }
-
-    if (!newApiKey.startsWith('sk-')) {
-      setMessage({ type: 'error', text: 'OpenAI API Key should start with sk-' });
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const token = await getAuthToken();
-      if (!token) throw new Error('Not logged in');
-
-      const response = await fetch(`${API_BASE_URL}/api/apikey`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          api_key: newApiKey,
-          provider: 'openai'
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to save API key');
-
-      setMessage({ type: 'success', text: 'API Key saved successfully' });
-      setNewApiKey('');
-      await loadApiKeyInfo();
-    } catch (error) {
-      console.error('Error saving API key:', error);
-      setMessage({ type: 'error', text: 'Failed to save API Key' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteApiKey = async () => {
-    if (!confirm('Are you sure you want to delete the API Key? You will not be able to use AI features until you set it again.')) {
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const token = await getAuthToken();
-      if (!token) throw new Error('Not logged in');
-
-      const response = await fetch(`${API_BASE_URL}/api/apikey`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to delete API key');
-
-      setMessage({ type: 'success', text: 'API Key deleted' });
-      await loadApiKeyInfo();
-    } catch (error) {
-      console.error('Error deleting API key:', error);
-      setMessage({ type: 'error', text: 'Failed to delete API Key' });
-    } finally {
-      setLoading(false);
     }
   };
 
