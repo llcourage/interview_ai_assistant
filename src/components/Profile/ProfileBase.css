@@ -18,7 +18,7 @@
 
 /* 卡片基础样式 - 统一视觉语言 */
 .card {
-  background: #111827; /* bg-[#111827] */
+  background: rgb(15, 23, 42); /* bg-slate-900 */
   border-radius: 1rem; /* rounded-2xl */
   border: 1px solid rgba(255, 255, 255, 0.05); /* border-white/5 */
   padding: 1.5rem; /* p-6 */
@@ -32,13 +32,13 @@
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Section 标题 - 统一字体层级 */
-.section-title {
-  font-size: 1.125rem; /* text-lg */
+/* 卡片标题 - 统一字体层级 */
+.card-title {
+  font-size: 0.875rem; /* text-sm */
   font-weight: 600; /* font-semibold */
-  color: var(--color-text-primary);
+  color: rgb(241, 245, 249); /* text-slate-100 */
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 /* 两列布局 - 左窄右宽，增加呼吸感 */
@@ -52,7 +52,15 @@
 .column {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
+}
+
+/* 占位文本样式 */
+.card-placeholder-text {
+  font-size: 0.75rem; /* text-xs */
+  color: rgb(148, 163, 184); /* text-slate-400 */
+  margin: 0.5rem 0 0 0;
+  line-height: 1.5;
 }
 
 /* 响应式 */

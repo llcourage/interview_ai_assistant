@@ -4,7 +4,6 @@ import './CurrentPlanCard.css';
 interface CurrentPlanCardProps {
   plan: string | null;
   price: string;
-  onManagePlan: () => void;
 }
 
 const getPlanDescription = (plan: string | null): string => {
@@ -23,14 +22,13 @@ const getPlanFeatures = (plan: string | null): string[] => {
     case 'normal':
       return [
         'High-quality AI responses',
-        '200 daily requests',
         'Standard support',
-        'All core features'
+        'All core features',
+        'Image analysis'
       ];
     case 'high':
       return [
         'Premium AI models',
-        'Unlimited requests',
         'Priority support',
         'Advanced features',
         'Early access to new features'
@@ -38,16 +36,15 @@ const getPlanFeatures = (plan: string | null): string[] => {
     default:
       return [
         'Basic AI responses',
-        'Limited daily requests',
-        'Community support'
+        'Community support',
+        'Core features'
       ];
   }
 };
 
 export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({
   plan,
-  price,
-  onManagePlan
+  price
 }) => {
   const planDisplay = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Free';
   const description = getPlanDescription(plan);
@@ -56,7 +53,7 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({
   return (
     <section className="card plan-card">
       <div className="plan-card-header">
-        <h2 className="section-title">Current Plan</h2>
+        <h2 className="card-title">Current Plan</h2>
         <div className="plan-badge">{planDisplay}</div>
       </div>
 
@@ -76,10 +73,6 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({
           </li>
         ))}
       </ul>
-
-      <button className="plan-manage-button" onClick={onManagePlan}>
-        Manage Subscription
-      </button>
     </section>
   );
 };

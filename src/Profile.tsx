@@ -125,14 +125,15 @@ export const Profile: React.FC = () => {
       <TopNav />
 
       <div className="main-container">
-        {/* 1. 顶部 Profile 头部卡片 */}
+        {/* 1. 顶部 Summary Bar */}
         <ProfileHeader
           email={userEmail}
           plan={planInfo?.plan || null}
           nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
+          onManagePlan={handleManagePlan}
         />
 
-        {/* 2. 内容区：左右两列 */}
+        {/* 2. 第一行：左右两列 */}
         <div className="two-column-layout">
           {/* 左侧 */}
           <div className="column">
@@ -147,8 +148,30 @@ export const Profile: React.FC = () => {
             <CurrentPlanCard
               plan={planInfo?.plan || null}
               price={getPlanPrice(planInfo?.plan || null)}
-              onManagePlan={handleManagePlan}
             />
+          </div>
+        </div>
+
+        {/* 3. 第二行：占位卡片 */}
+        <div className="two-column-layout">
+          {/* 左侧 */}
+          <div className="column">
+            <section className="card">
+              <h2 className="card-title">Profile / Security</h2>
+              <p className="card-placeholder-text">
+                Profile and security settings will be available here.
+              </p>
+            </section>
+          </div>
+
+          {/* 右侧 */}
+          <div className="column">
+            <section className="card">
+              <h2 className="card-title">Billing</h2>
+              <p className="card-placeholder-text">
+                Billing history and payment methods will be available here.
+              </p>
+            </section>
           </div>
         </div>
       </div>

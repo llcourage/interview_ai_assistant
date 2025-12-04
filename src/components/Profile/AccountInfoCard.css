@@ -7,44 +7,20 @@
 
 .info-row {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: #111827; /* 统一背景色 */
-  border-radius: 0.75rem; /* rounded-xl */
-  border: 1px solid rgba(255, 255, 255, 0.05); /* border-white/5 - 统一边框 */
-  transition: all 0.2s ease;
-}
-
-.info-row:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.info-icon {
-  font-size: 1.25rem;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(59, 130, 246, 0.12);
-  border-radius: 0.5rem;
-  flex-shrink: 0;
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.info-content {
-  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .info-label {
   font-size: 0.75rem; /* text-xs */
-  color: rgba(148, 163, 184, 1); /* text-slate-400 */
-  margin-bottom: 0.25rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em; /* tracking-wide */
+  color: rgb(148, 163, 184); /* text-slate-400 */
+  font-weight: 400;
+}
+
+.info-value {
+  font-size: 0.875rem; /* text-sm */
+  color: rgb(203, 213, 225); /* text-slate-300 */
+  font-weight: 400;
 }
 
 .info-value-row {
@@ -53,18 +29,12 @@
   gap: 0.5rem;
 }
 
-.info-value {
-  font-size: 0.875rem; /* text-sm */
-  color: rgba(203, 213, 225, 1); /* text-slate-300 */
-  font-weight: 500;
-}
-
-.info-pill {
+.info-tag {
   padding: 0.125rem 0.5rem;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 0.25rem;
   font-size: 0.75rem;
-  color: rgba(148, 163, 184, 1);
-  font-weight: 500;
+  color: rgb(148, 163, 184); /* text-slate-400 */
+  font-weight: 400;
 }
 

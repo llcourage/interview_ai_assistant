@@ -14,44 +14,22 @@ export const AccountInfoCard: React.FC<AccountInfoCardProps> = ({
 
   return (
     <section className="card">
-      <h2 className="section-title">Account Information</h2>
+      <h2 className="card-title">Account Information</h2>
 
       <div className="info-list">
-        <InfoRow
-          label="Email Address"
-          value={email || 'N/A'}
-          icon="📧"
-        />
-        <InfoRow
-          label="Current Plan"
-          value={planDisplay}
-          pill="billed monthly"
-          icon="📋"
-        />
-      </div>
-    </section>
-  );
-};
-
-interface InfoRowProps {
-  label: string;
-  value: string;
-  icon: string;
-  pill?: string;
-}
-
-const InfoRow: React.FC<InfoRowProps> = ({ label, value, icon, pill }) => {
-  return (
-    <div className="info-row">
-      <div className="info-icon">{icon}</div>
-      <div className="info-content">
-        <div className="info-label">{label}</div>
-        <div className="info-value-row">
-          <span className="info-value">{value}</span>
-          {pill && <span className="info-pill">{pill}</span>}
+        <div className="info-row">
+          <div className="info-label">Email Address</div>
+          <div className="info-value">{email || 'N/A'}</div>
+        </div>
+        <div className="info-row">
+          <div className="info-label">Current Plan</div>
+          <div className="info-value-row">
+            <span className="info-value">{planDisplay}</span>
+            <span className="info-tag">billed monthly</span>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
