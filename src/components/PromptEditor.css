@@ -1,0 +1,147 @@
+.prompt-editor {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.prompt-editor-collapsed {
+  margin-bottom: 0.5rem;
+}
+
+.prompt-editor-toggle {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: rgba(235, 235, 235, 0.8);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+
+.prompt-editor-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.prompt-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.prompt-editor-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(235, 235, 235, 0.9);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.prompt-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.prompt-editor-btn {
+  padding: 0.35rem 0.6rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(235, 235, 235, 0.9);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.prompt-editor-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.prompt-editor-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prompt-editor-btn-save {
+  background: rgba(100, 150, 255, 0.2);
+  border-color: rgba(100, 150, 255, 0.4);
+  color: rgba(150, 200, 255, 1);
+}
+
+.prompt-editor-btn-save:hover:not(:disabled) {
+  background: rgba(100, 150, 255, 0.3);
+  border-color: rgba(100, 150, 255, 0.5);
+}
+
+.prompt-editor-btn-collapse {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.7rem;
+}
+
+.prompt-editor-content {
+  margin-bottom: 0.5rem;
+}
+
+.prompt-editor-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(235, 235, 235, 0.9);
+  font-size: 0.85rem;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.prompt-editor-textarea:focus {
+  border-color: rgba(100, 150, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.1);
+}
+
+.prompt-editor-display {
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: rgba(235, 235, 235, 0.8);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 80px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.prompt-editor-empty {
+  color: rgba(235, 235, 235, 0.4);
+  font-style: italic;
+}
+
+.prompt-editor-hint {
+  padding: 0.5rem;
+  background: rgba(100, 150, 255, 0.1);
+  border-left: 3px solid rgba(100, 150, 255, 0.4);
+  border-radius: 4px;
+  color: rgba(150, 200, 255, 0.9);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+

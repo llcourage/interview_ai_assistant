@@ -100,6 +100,41 @@ export interface AiShotAPI {
     duration: number;
     error?: string;
   }>;
+
+  /**
+   * 获取所有场景
+   * @returns Promise，返回所有场景（内置、通用、自定义）
+   */
+  getAllScenes?: () => Promise<{
+    builtIn: any[];
+    general: any;
+    custom: any[];
+  }>;
+
+  /**
+   * 选择场景
+   * @param sceneId 场景 ID
+   * @param presetId 预设 ID
+   * @returns Promise
+   */
+  selectScenario?: (sceneId: string, presetId: string) => Promise<{ success: boolean; prompt: string }>;
+
+  /**
+   * 通知场景已更新（刷新菜单）
+   */
+  notifyScenarioUpdated?: () => void;
+
+  /**
+   * 监听场景选择事件
+   * @param callback 回调函数
+   */
+  onScenarioSelected?: (callback: (data: { sceneId: string; presetId: string; prompt: string }) => void) => void;
+
+  /**
+   * 监听打开场景编辑器事件
+   * @param callback 回调函数
+   */
+  onOpenScenarioEditor?: (callback: (data: { mode: 'create' | 'edit'; scenario?: any }) => void) => void;
 }
 
 declare global {

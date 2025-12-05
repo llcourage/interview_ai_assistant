@@ -9,6 +9,9 @@ import { Login } from './Login'
 import { PlanSelector, PlanType } from './components/PlanSelector'
 import { Settings } from './components/Settings'
 import { API_BASE_URL } from './lib/api'
+import { ScenarioEditDialog } from './components/ScenarioEditDialog'
+import { ScenarioSelector } from './components/ScenarioSelector'
+import { getCurrentSceneName, getSceneConfig } from './lib/sceneStorage'
 
 // Session 类型定义
 interface SessionData {
@@ -28,6 +31,9 @@ declare global {
     aiShot?: {
       userLoggedIn: () => Promise<{ success: boolean }>;
       userLoggedOut: () => Promise<{ success: boolean }>;
+      onScenarioSelected: (callback: (data: { sceneId: string; presetId: string; prompt: string }) => void) => void;
+      onOpenScenarioEditor: (callback: (data: { mode: 'create' | 'edit'; scenario?: any }) => void) => void;
+      notifyScenarioUpdated: () => void;
     };
   }
 }
@@ -46,6 +52,11 @@ function App() {
   });
   const [showPlanSelector, setShowPlanSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showScenarioEditor, setShowScenarioEditor] = useState(false);
+  const [scenarioEditorMode, setScenarioEditorMode] = useState<'create' | 'edit'>('create');
+  const [editingScenario, setEditingScenario] = useState<any>(null);
+  const [currentSceneName, setCurrentSceneName] = useState<string>(getCurrentSceneName());
+  const [showScenarioSelector, setShowScenarioSelector] = useState(false);
 
   // 📦 从后端 API 加载 Plan 信息（与网页端同步）
   useEffect(() => {
@@ -166,6 +177,61 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
+  // 🎯 监听场景选择事件（从菜单）
+  useEffect(() => {
+    if (window.aiShot?.onScenarioSelected) {
+      const handleScenarioSelected = (data: { sceneId: string; presetId: string; prompt: string }) => {
+        console.log('Scenario selected from menu:', data);
+        // 更新场景配置
+        const { setCurrentScene } = require('./lib/sceneStorage');
+        setCurrentScene(data.sceneId, data.presetId);
+        // 更新当前场景名称显示
+        setCurrentSceneName(getCurrentSceneName());
+        // 触发自定义事件通知其他组件
+        window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
+      };
+      
+      window.aiShot.onScenarioSelected(handleScenarioSelected);
+      
+      return () => {
+        // Cleanup if needed
+      };
+    }
+  }, []);
+
+  // 🎯 监听场景配置变化（更新场景名称显示）
+  useEffect(() => {
+    const handleSceneConfigChange = () => {
+      setCurrentSceneName(getCurrentSceneName());
+    };
+    
+    window.addEventListener('sceneConfigChanged', handleSceneConfigChange);
+    window.addEventListener('storage', handleSceneConfigChange);
+    
+    return () => {
+      window.removeEventListener('sceneConfigChanged', handleSceneConfigChange);
+      window.removeEventListener('storage', handleSceneConfigChange);
+    };
+  }, []);
+
+  // 🎯 监听打开场景编辑器事件（从菜单）
+  useEffect(() => {
+    if (window.aiShot?.onOpenScenarioEditor) {
+      const handleOpenScenarioEditor = (data: { mode: 'create' | 'edit'; scenario?: any }) => {
+        console.log('Open scenario editor from menu:', data);
+        setScenarioEditorMode(data.mode);
+        setEditingScenario(data.scenario || null);
+        setShowScenarioEditor(true);
+      };
+      
+      window.aiShot.onOpenScenarioEditor(handleOpenScenarioEditor);
+      
+      return () => {
+        // Cleanup if needed
+      };
+    }
+  }, []);
+
   // 🚪 退出登录
   const handleLogout = async () => {
     console.log('Logging out...');
@@ -263,6 +329,18 @@ function App() {
   }
 
   // 🔐 Already logged in, show main app interface
+  // Show scenario selector page if requested
+  if (showScenarioSelector) {
+    return (
+      <ScenarioSelector
+        onBack={() => setShowScenarioSelector(false)}
+        onScenarioSelected={() => {
+          setCurrentSceneName(getCurrentSceneName());
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -270,40 +348,53 @@ function App() {
           <h1>🔥 AI Interview Assistant</h1>
           <p className="subtitle">Session History</p>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <button 
-            className="theme-toggle" 
-            onClick={() => setShowSettings(!showSettings)}
-            title="Settings"
-            style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
-          >
-            ⚙️ Settings
-          </button>
-          <button 
-            className="theme-toggle" 
-            onClick={() => setShowPlanSelector(!showPlanSelector)}
-            title="Select Plan"
-            style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
-          >
-            📦 {currentPlan === 'normal' ? 'Normal' : 'High'} Plan
-          </button>
-          <button 
-            className="theme-toggle" 
-            onClick={handleLogout}
-            title="Logout"
-            style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
-          >
-            🚪 Logout
-          </button>
-          <button 
-            className="theme-toggle" 
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button 
+              className="theme-toggle" 
+              onClick={() => setShowSettings(!showSettings)}
+              title="Settings"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              ⚙️ Settings
+            </button>
+            <button 
+              className="theme-toggle" 
+              onClick={() => setShowPlanSelector(!showPlanSelector)}
+              title="Select Plan"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              📦 {currentPlan === 'normal' ? 'Normal' : 'High'} Plan
+            </button>
+            <button 
+              className="theme-toggle" 
+              onClick={() => setShowScenarioSelector(true)}
+              title={`Current Application Scenario: ${currentSceneName}. Click to change.`}
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              🎯 Application Scenario: {currentSceneName}
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button 
+              className="theme-toggle" 
+              onClick={handleLogout}
+              title="Logout"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              🚪 Logout
+            </button>
+            <button 
+              className="theme-toggle" 
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </div>
         </div>
       </header>
+
 
       {/* Settings Modal */}
       {showSettings && (
@@ -459,6 +550,28 @@ function App() {
       <footer className="app-footer">
         <p>💡 Tip: Use <kbd>Ctrl+N</kbd> to create a new session</p>
       </footer>
+
+      {/* 场景编辑对话框 */}
+      {showScenarioEditor && (
+        <ScenarioEditDialog
+          mode={scenarioEditorMode}
+          scenario={editingScenario}
+          onClose={() => {
+            setShowScenarioEditor(false);
+            setEditingScenario(null);
+          }}
+          onSave={() => {
+            setShowScenarioEditor(false);
+            setEditingScenario(null);
+            // 通知 Electron 更新菜单
+            if (window.aiShot?.notifyScenarioUpdated) {
+              window.aiShot.notifyScenarioUpdated();
+            }
+            // 触发场景配置更新事件
+            window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
+          }}
+        />
+      )}
     </div>
   );
 }

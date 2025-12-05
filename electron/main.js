@@ -61,8 +61,167 @@ console.log('='.repeat(60));
 // - All API requests go to Vercel backend (no local FastAPI)
 // - No API keys stored locally, all managed on Vercel
 
+// 🎯 获取场景配置（从渲染进程）
+async function getSceneConfig() {
+  if (!mainWindow) return null;
+  try {
+    const config = await mainWindow.webContents.executeJavaScript(`
+      (() => {
+        try {
+          const stored = localStorage.getItem('ai_assistant_scenes');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            return parsed.scenes || [];
+          }
+        } catch (e) {
+          console.error('Error reading scene config:', e);
+        }
+        return [];
+      })()
+    `);
+    return config;
+  } catch (error) {
+    console.error('Error getting scene config:', error);
+    return [];
+  }
+}
+
+// 🎯 获取所有场景（包括内置和自定义）
+async function getAllScenes() {
+  const customScenes = await getSceneConfig();
+  
+  // 内置场景
+  const builtInScenes = [
+    {
+      id: 'coding',
+      name: 'Coding Interview',
+      isBuiltIn: true,
+      presets: [
+        {
+          id: 'default',
+          name: 'Default',
+          prompt: 'You are a coding interview assistant. Help the user practice coding interview questions. Provide clear explanations, code examples, and best practices.'
+        }
+      ]
+    },
+    {
+      id: 'behavioral',
+      name: 'Behavioral Interview',
+      isBuiltIn: true,
+      presets: [
+        {
+          id: 'default',
+          name: 'Default',
+          prompt: 'You are a behavioral interview coach. Help the user prepare for behavioral questions using the STAR method (Situation, Task, Action, Result). Provide feedback on their answers.'
+        }
+      ]
+    }
+  ];
+  
+  const generalScene = {
+    id: 'general',
+    name: 'General Chat',
+    isBuiltIn: true,
+    presets: [
+      {
+        id: 'default',
+        name: 'Default',
+        prompt: 'You are a friendly and helpful conversation partner. Engage in natural, professional conversation to help the user practice their communication skills.'
+      }
+    ]
+  };
+  
+  return {
+    builtIn: builtInScenes,
+    general: generalScene,
+    custom: customScenes
+  };
+}
+
+// 🎯 创建 Application Scenario 菜单
+async function createApplicationScenarioMenu() {
+  const scenes = await getAllScenes();
+  
+  const interviewSubmenu = scenes.builtIn.map(scene => ({
+    label: scene.name,
+    click: async () => {
+      if (mainWindow) {
+        const preset = scene.presets[0];
+        mainWindow.webContents.send('scenario-selected', {
+          sceneId: scene.id,
+          presetId: preset.id,
+          prompt: preset.prompt
+        });
+      }
+    }
+  }));
+  
+  const customSubmenu = [
+    ...scenes.custom.map(scene => ({
+      label: scene.name,
+      click: async () => {
+        if (mainWindow) {
+          const preset = scene.presets[0];
+          mainWindow.webContents.send('scenario-selected', {
+            sceneId: scene.id,
+            presetId: preset.id,
+            prompt: preset.prompt
+          });
+        }
+      }
+    })),
+    { type: 'separator' },
+    {
+      label: 'Create New Custom Scenario...',
+      click: async () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('open-scenario-editor', { mode: 'create' });
+        }
+      }
+    }
+  ];
+  
+  return {
+    label: 'Application Scenario',
+    submenu: [
+      {
+        label: 'Interview',
+        submenu: interviewSubmenu
+      },
+      {
+        label: 'General',
+        click: async () => {
+          if (mainWindow) {
+            const preset = scenes.general.presets[0];
+            mainWindow.webContents.send('scenario-selected', {
+              sceneId: scenes.general.id,
+              presetId: preset.id,
+              prompt: preset.prompt
+            });
+          }
+        }
+      },
+      {
+        label: 'Custom',
+        submenu: customSubmenu.length > 1 ? customSubmenu : [
+          {
+            label: 'Create New Custom Scenario...',
+            click: async () => {
+              if (mainWindow) {
+                mainWindow.webContents.send('open-scenario-editor', { mode: 'create' });
+              }
+            }
+          }
+        ]
+      }
+    ]
+  };
+}
+
 // 🎨 创建现代化菜单
-function createMenu() {
+async function createMenu() {
+  const applicationScenarioMenu = await createApplicationScenarioMenu();
+  
   const template = [
     {
       label: 'View',
@@ -73,6 +232,7 @@ function createMenu() {
         { role: 'togglefullscreen' }
       ]
     },
+    applicationScenarioMenu,
     {
       label: 'Help',
       submenu: [
@@ -93,6 +253,22 @@ function createMenu() {
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
+}
+
+// 🎯 更新 Application Scenario 菜单（当自定义场景变化时）
+async function updateApplicationScenarioMenu() {
+  const applicationScenarioMenu = await createApplicationScenarioMenu();
+  const menu = Menu.getApplicationMenu();
+  if (menu) {
+    const template = menu.items.map(item => {
+      if (item.label === 'Application Scenario') {
+        return applicationScenarioMenu;
+      }
+      return item;
+    });
+    const newMenu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(newMenu);
+  }
 }
 
 function createMainWindow() {
@@ -593,6 +769,49 @@ ipcMain.handle('user-logged-out', () => {
   return { success: true };
 });
 
+// 🎯 IPC 处理器：场景相关
+ipcMain.handle('get-all-scenes', async () => {
+  return await getAllScenes();
+});
+
+ipcMain.handle('select-scenario', async (event, { sceneId, presetId }) => {
+  const scenes = await getAllScenes();
+  let selectedPrompt = '';
+  
+  // 查找场景
+  const allScenes = [...scenes.builtIn, scenes.general, ...scenes.custom];
+  const scene = allScenes.find(s => s.id === sceneId);
+  if (scene) {
+    const preset = scene.presets.find(p => p.id === presetId);
+    if (preset) {
+      selectedPrompt = preset.prompt;
+    }
+  }
+  
+  // 通知所有窗口场景已选择
+  if (mainWindow) {
+    mainWindow.webContents.send('scenario-selected', {
+      sceneId,
+      presetId,
+      prompt: selectedPrompt
+    });
+  }
+  if (overlayWindow) {
+    overlayWindow.webContents.send('scenario-selected', {
+      sceneId,
+      presetId,
+      prompt: selectedPrompt
+    });
+  }
+  
+  return { success: true, prompt: selectedPrompt };
+});
+
+ipcMain.on('scenario-updated', async () => {
+  // 当场景更新时，刷新菜单
+  await updateApplicationScenarioMenu();
+});
+
 // IPC 事件处理
 ipcMain.handle('capture-screen', async () => {
   return await captureScreen();
@@ -837,11 +1056,11 @@ process.on('unhandledRejection', (reason, promise) => {
   logStream.end();
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createMainWindow();
   // 🔒 不要自动创建悬浮窗，等待主窗口通知用户已登录
   // createOverlayWindow();
-  createMenu(); // 🔑 创建菜单
+  await createMenu(); // 🔑 创建菜单
   registerShortcuts();
 
   app.on('activate', () => {

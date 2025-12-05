@@ -440,3 +440,62 @@ section h2 {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* ========== 场景和 Prompt 管理区域样式 ========== */
+.scene-prompt-section {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.scene-prompt-container {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  max-width: 1400px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+.scene-selector-wrapper {
+  flex: 1;
+  min-width: 250px;
+}
+
+.scene-selector-header {
+  margin-bottom: 0.5rem;
+}
+
+.scene-manager-button {
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scene-manager-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.prompt-editor-wrapper {
+  flex: 2;
+  min-width: 400px;
+}
+
+@media (max-width: 768px) {
+  .scene-prompt-container {
+    flex-direction: column;
+  }
+  
+  .scene-selector-wrapper,
+  .prompt-editor-wrapper {
+    width: 100%;
+    min-width: unset;
+  }
+}
+

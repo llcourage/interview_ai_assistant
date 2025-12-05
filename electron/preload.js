@@ -87,6 +87,33 @@ contextBridge.exposeInMainWorld('aiShot', {
   // 🎤 本地语音转文字（使用本地 Whisper）
   speechToTextLocal: (audioData, language = 'zh') => {
     return ipcRenderer.invoke('speech-to-text-local', audioData, language);
+  },
+
+  // 🎯 场景相关 IPC
+  getAllScenes: () => {
+    return ipcRenderer.invoke('get-all-scenes');
+  },
+
+  selectScenario: (sceneId, presetId) => {
+    return ipcRenderer.invoke('select-scenario', { sceneId, presetId });
+  },
+
+  notifyScenarioUpdated: () => {
+    ipcRenderer.send('scenario-updated');
+  },
+
+  // 监听场景选择事件
+  onScenarioSelected: (callback) => {
+    ipcRenderer.on('scenario-selected', (event, data) => {
+      callback(data);
+    });
+  },
+
+  // 监听打开场景编辑器事件
+  onOpenScenarioEditor: (callback) => {
+    ipcRenderer.on('open-scenario-editor', (event, data) => {
+      callback(data);
+    });
   }
 });
 

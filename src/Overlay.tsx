@@ -6,6 +6,7 @@ import 'highlight.js/styles/atom-one-dark.css';
 import './Overlay.css';
 import { getAuthHeader } from './lib/auth';
 import { API_BASE_URL } from './lib/api';
+import { getCurrentPrompt } from './lib/sceneStorage';
 
 // 🚨 配置：最大保存对话轮数（防止 localStorage 过大）
 const MAX_CONVERSATIONS_TO_SAVE = 50;
@@ -409,6 +410,12 @@ const Overlay = () => {
         throw new Error('未登录，请先登录');
       }
       
+      // 🚨 获取当前 Prompt 模板并组合用户输入
+      const promptTemplate = getCurrentPrompt();
+      const combinedInput = promptTemplate 
+        ? `${promptTemplate}\n\nUser: ${currentInput}`
+        : currentInput;
+      
       // 🚨 构建完整上下文：包含图片分析和文字对话
       const context = conversationHistory
         .map(conv => {
@@ -426,6 +433,8 @@ const Overlay = () => {
         method: 'POST',
         hasToken: !!token,
         inputLength: currentInput.length,
+        promptTemplateLength: promptTemplate.length,
+        combinedInputLength: combinedInput.length,
         API_BASE_URL: API_BASE_URL,
         contextLength: context.length
       });
@@ -439,7 +448,7 @@ const Overlay = () => {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ 
-            user_input: currentInput,
+            user_input: combinedInput,  // 使用组合后的输入（包含 Prompt 模板）
             context: context  // 传递完整上下文
           }),
         });
@@ -711,6 +720,9 @@ const Overlay = () => {
         // 如果只有一张图，发送字符串；多张图发送数组
         const imageData = base64DataList.length === 1 ? base64DataList[0] : base64DataList;
         
+        // 🚨 获取当前 Prompt 模板（用于图片分析）
+        const promptTemplate = getCurrentPrompt();
+        
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: 'POST',
           headers: {
@@ -718,7 +730,8 @@ const Overlay = () => {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ 
-            image_base64: imageData
+            image_base64: imageData,
+            prompt: promptTemplate || undefined  // 如果有 Prompt 模板，传递给后端
           }),
         });
 
@@ -793,6 +806,26 @@ const Overlay = () => {
       setStatus('IPC connection failed (preload not loaded)');
     }
   }, [screenshots, isLoading, saveCurrentSession]);
+
+  // 🎯 监听场景选择事件（从菜单）
+  useEffect(() => {
+    if (window.aiShot?.onScenarioSelected) {
+      const handleScenarioSelected = (data: { sceneId: string; presetId: string; prompt: string }) => {
+        console.log('Scenario selected from menu in Overlay:', data);
+        // 更新场景配置
+        const { setCurrentScene } = require('./lib/sceneStorage');
+        setCurrentScene(data.sceneId, data.presetId);
+        // 触发自定义事件通知其他组件
+        window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
+      };
+      
+      window.aiShot.onScenarioSelected(handleScenarioSelected);
+      
+      return () => {
+        // Cleanup if needed
+      };
+    }
+  }, []);
 
 
   // 监听键盘事件（Ctrl+Left/Right 移动窗口，Ctrl+D 删除截图）
