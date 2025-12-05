@@ -59,7 +59,7 @@ namespace DesktopAI.Launcher
                 }
 
                 Console.WriteLine("========================================");
-                Console.WriteLine("DesktopAI Interview Assistant");
+                Console.WriteLine("Desktop AI");
                 Console.WriteLine("========================================");
                 Console.WriteLine($"Backend path: {backendPath}");
                 Console.WriteLine("Starting backend service...");

@@ -30,10 +30,10 @@ chmod +x scripts/build-desktop.sh
 
 ### 3. 获取打包文件
 
-打包完成后，在 `dist-desktop/AI-Interview-Assistant-Desktop/` 目录下：
+打包完成后，在 `dist-desktop/Desktop-AI/` 目录下：
 
 ```
-AI-Interview-Assistant-Desktop/
+Desktop-AI/
 ├── Launcher.exe      # 启动器（用户双击这个）
 ├── backend.exe       # 后端服务（已编译）
 ├── ui/               # 前端静态文件
@@ -44,7 +44,7 @@ AI-Interview-Assistant-Desktop/
 
 ### 4. 测试
 
-1. 进入 `dist-desktop/AI-Interview-Assistant-Desktop/` 目录
+1. 进入 `dist-desktop/Desktop-AI/` 目录
 2. 双击 `Launcher.exe`
 3. 等待后端启动（约 3-5 秒）
 4. 浏览器会自动打开 http://127.0.0.1:8000

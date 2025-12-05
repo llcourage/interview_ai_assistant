@@ -97,7 +97,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1>🔥 AI Interview Assistant</h1>
+        <h1>🔥 Desktop AI</h1>
         <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
         
         {error && <div className="error-message">❌ {error}</div>}

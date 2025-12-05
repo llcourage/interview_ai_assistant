@@ -220,55 +220,16 @@ async function createApplicationScenarioMenu() {
 
 // 🎨 创建现代化菜单
 async function createMenu() {
-  const applicationScenarioMenu = await createApplicationScenarioMenu();
-  
-  const template = [
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
-      ]
-    },
-    applicationScenarioMenu,
-    {
-      label: 'Help',
-      submenu: [
-        {
-          label: 'About',
-          click: async () => {
-            await dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'About',
-              message: 'AI Interview Assistant',
-              detail: 'Version 1.0.0\n\nAn intelligent interview preparation tool'
-            });
-          }
-        }
-      ]
-    }
-  ];
+  // 菜单已全部删除，使用空菜单
+  const template = [];
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
 
-// 🎯 更新 Application Scenario 菜单（当自定义场景变化时）
+// 🎯 更新 Application Scenario 菜单（已删除，不再需要）
 async function updateApplicationScenarioMenu() {
-  const applicationScenarioMenu = await createApplicationScenarioMenu();
-  const menu = Menu.getApplicationMenu();
-  if (menu) {
-    const template = menu.items.map(item => {
-      if (item.label === 'Application Scenario') {
-        return applicationScenarioMenu;
-      }
-      return item;
-    });
-    const newMenu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(newMenu);
-  }
+  // 菜单已简化，不再需要更新场景菜单
 }
 
 function createMainWindow() {

@@ -8,13 +8,13 @@ const STORAGE_KEY = 'ai_assistant_scenes';
 const DEFAULT_SCENES: Scene[] = [
   {
     id: 'interview-assistant',
-    name: 'Interview Assistant',
+    name: 'Daily Assistant',
     isBuiltIn: true,
     presets: [
       {
         id: 'default',
         name: 'Default',
-        prompt: 'You are a helpful interview assistant. Help the user prepare for their interview by providing thoughtful feedback and suggestions.'
+        prompt: 'You are a helpful AI assistant for daily usage. Help the user with their daily tasks, questions, and productivity needs. Provide thoughtful assistance and suggestions.'
       }
     ]
   },

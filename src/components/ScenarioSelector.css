@@ -1,7 +1,36 @@
+/* Theme Variables for Scenario Selector */
+[data-theme="dark"] {
+  --scenario-bg-start: #1e1e2e;
+  --scenario-bg-end: #2d2d44;
+  --scenario-text: #fff;
+  --scenario-text-secondary: rgba(255, 255, 255, 0.7);
+  --scenario-border: rgba(255, 255, 255, 0.1);
+  --scenario-card-bg: rgba(255, 255, 255, 0.05);
+  --scenario-card-border: rgba(255, 255, 255, 0.1);
+  --scenario-button-bg: rgba(255, 255, 255, 0.1);
+  --scenario-button-text: rgba(255, 255, 255, 0.9);
+  --scenario-empty-bg: rgba(255, 255, 255, 0.03);
+  --scenario-empty-text: rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="light"] {
+  --scenario-bg-start: #f5f5f5;
+  --scenario-bg-end: #e8e8e8;
+  --scenario-text: #000000;
+  --scenario-text-secondary: #333333;
+  --scenario-border: #e0e0e0;
+  --scenario-card-bg: #ffffff;
+  --scenario-card-border: #e0e0e0;
+  --scenario-button-bg: rgba(0, 0, 0, 0.05);
+  --scenario-button-text: #000000;
+  --scenario-empty-bg: #f8f8f8;
+  --scenario-empty-text: #666666;
+}
+
 .scenario-selector-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--scenario-bg-start) 0%, var(--scenario-bg-end) 100%);
+  color: var(--scenario-text);
   padding: 2rem;
 }
 
@@ -16,18 +45,18 @@
 
 .scenario-selector-back-btn {
   padding: 0.6rem 1.2rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--scenario-button-bg);
+  border: 1px solid var(--scenario-border);
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--scenario-button-text);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .scenario-selector-back-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--scenario-card-bg);
+  border-color: var(--scenario-card-border);
 }
 
 .scenario-selector-header h1 {
@@ -41,12 +70,12 @@
 }
 
 .scenario-selector-current {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--scenario-text-secondary);
   font-size: 0.9rem;
 }
 
 .scenario-selector-current strong {
-  color: rgba(150, 200, 255, 1);
+  color: #667eea;
   font-weight: 600;
 }
 
@@ -85,7 +114,7 @@
   gap: 0.4rem;
   margin: 0 0 0.5rem 0;
   font-size: 0.9rem;
-  color: #fff;
+  color: var(--scenario-text);
 }
 
 .scenario-section-icon {
@@ -118,8 +147,8 @@
 }
 
 .scenario-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--scenario-card-bg);
+  border: 1px solid var(--scenario-card-border);
   border-radius: 4px;
   padding: 0.5rem;
   cursor: pointer;
@@ -132,10 +161,10 @@
 }
 
 .scenario-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--scenario-button-bg);
+  border-color: var(--scenario-border);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .scenario-card.active {
@@ -155,7 +184,7 @@
 .scenario-card-header h3 {
   margin: 0;
   font-size: 0.8rem;
-  color: #fff;
+  color: var(--scenario-text);
   flex: 1;
 }
 
@@ -172,22 +201,22 @@
 .scenario-edit-btn {
   padding: 0.3rem 0.6rem;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--scenario-border);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--scenario-text-secondary);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .scenario-edit-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 1);
+  background: var(--scenario-button-bg);
+  border-color: var(--scenario-card-border);
+  color: var(--scenario-text);
 }
 
 .scenario-card-description {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--scenario-text-secondary);
   font-size: 0.7rem;
   line-height: 1.4;
   margin: 0.2rem 0 0 0;
@@ -209,10 +238,10 @@
 .scenario-preset-select {
   width: 100%;
   padding: 0.25rem 0.35rem;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--scenario-button-bg);
+  border: 1px solid var(--scenario-border);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--scenario-button-text);
   font-size: 0.65rem;
   cursor: pointer;
   outline: none;
@@ -244,10 +273,10 @@
 .scenario-empty {
   text-align: center;
   padding: 0.75rem 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  background: var(--scenario-empty-bg);
+  border: 1px dashed var(--scenario-border);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--scenario-empty-text);
   width: 100%;
   min-height: 150px;
   display: flex;
@@ -259,6 +288,7 @@
 .scenario-empty p {
   margin: 0 0 0.4rem 0;
   font-size: 0.7rem;
+  color: var(--scenario-empty-text);
 }
 
 .scenario-create-btn-inline {

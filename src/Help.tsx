@@ -12,8 +12,8 @@ export const Help: React.FC = () => {
       title: 'Getting Started',
       content: (
         <div>
-          <h3>Welcome to AI Interview Assistant</h3>
-          <p>Learn how to use AI Interview Assistant to solve interview questions quickly and efficiently.</p>
+          <h3>Welcome to Desktop AI</h3>
+          <p>Your AI assistant for daily usage, interviews, and productivity. Learn how to use Desktop AI to help with your daily tasks, interviews, and more.</p>
           <h4>Quick Start Guide:</h4>
           <ol>
             <li>Sign up for an account or log in</li>
@@ -45,8 +45,8 @@ export const Help: React.FC = () => {
         <div>
           <h3>Common Questions</h3>
           <div className="faq-item">
-            <h4>How does AI Interview Assistant work?</h4>
-            <p>Simply take a screenshot of your interview question, and our AI will analyze it and provide detailed solutions.</p>
+            <h4>How does Desktop AI work?</h4>
+            <p>Simply take a screenshot or ask a question, and our AI will help you with daily tasks, interviews, coding problems, and more. Desktop AI analyzes your content and provides intelligent assistance.</p>
           </div>
           <div className="faq-item">
             <h4>What payment methods do you accept?</h4>
@@ -72,7 +72,7 @@ export const Help: React.FC = () => {
           <div className="contact-info">
             <div className="contact-item">
               <h4>Email Support</h4>
-              <p>support@aiinterviewassistant.com</p>
+              <p>support@desktopai.app</p>
             </div>
             <div className="contact-item">
               <h4>Response Time</h4>

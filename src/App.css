@@ -1,20 +1,73 @@
+/* Theme Variables */
+[data-theme="dark"] {
+  --app-bg-start: #1e1e2e;
+  --app-bg-end: #2d2d44;
+  --app-text: #fff;
+  --app-text-secondary: #aaa;
+  --app-border: #444;
+  --app-section-bg: rgba(255, 255, 255, 0.05);
+  --app-section-border: rgba(255, 255, 255, 0.1);
+  --app-header-border: #444;
+  --app-shortcut-bg: rgba(0, 0, 0, 0.2);
+  --app-shortcut-text: #ccc;
+  --app-code-bg: rgba(255, 255, 255, 0.1);
+  --app-pre-bg: #1e1e2e;
+  --app-pre-border: rgba(255, 255, 255, 0.1);
+  --app-pre-text: #e0e0e0;
+  --app-strong-text: #fff;
+  --app-em-text: #ccc;
+  --app-info-text: #ddd;
+  --app-button-bg: rgba(255, 255, 255, 0.1);
+  --app-button-border: rgba(255, 255, 255, 0.2);
+  --app-button-text: rgba(255, 255, 255, 0.9);
+  --app-button-hover-bg: rgba(255, 255, 255, 0.15);
+  --app-button-shadow: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] {
+  --app-bg-start: #f5f5f5;
+  --app-bg-end: #e8e8e8;
+  --app-text: #000000;
+  --app-text-secondary: #333333;
+  --app-border: #cccccc;
+  --app-section-bg: #ffffff;
+  --app-section-border: #e0e0e0;
+  --app-header-border: #cccccc;
+  --app-shortcut-bg: rgba(0, 0, 0, 0.05);
+  --app-shortcut-text: #000000;
+  --app-code-bg: rgba(0, 0, 0, 0.08);
+  --app-pre-bg: #f8f8f8;
+  --app-pre-border: rgba(0, 0, 0, 0.1);
+  --app-pre-text: #000000;
+  --app-strong-text: #000000;
+  --app-em-text: #333333;
+  --app-info-text: #333333;
+  --app-button-bg: #ffffff;
+  --app-button-border: #d0d0d0;
+  --app-button-text: #000000;
+  --app-button-hover-bg: #f5f5f5;
+  --app-button-shadow: rgba(0, 0, 0, 0.08);
+}
+
 .app {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-  color: #fff;
-  padding: 2rem;
+  background: linear-gradient(135deg, var(--app-bg-start) 0%, var(--app-bg-end) 100%);
+  color: var(--app-text);
+  padding: 1rem 2rem 2rem 2rem;
 }
 
 .app-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
+  margin-top: -0.5rem;
   padding-bottom: 1rem;
-  border-bottom: 2px solid #444;
+  border-bottom: 2px solid var(--app-header-border);
 }
 
 .app-header h1 {
   font-size: 2.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
+  margin-top: 0;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -22,28 +75,35 @@
 }
 
 .subtitle {
-  color: #aaa;
+  color: var(--app-text-secondary);
   font-size: 1rem;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.header-content {
+  margin-bottom: 1.5rem;
 }
 
 .app-main {
-  max-width: 900px;
-  margin: 0 auto;
+  width: 85%;
+  max-width: 1400px;
+  margin: 2rem auto 0 auto;
 }
 
 section {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--app-section-bg);
   border-radius: 12px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--app-section-border);
 }
 
 section h2 {
   font-size: 1.3rem;
   margin-bottom: 1rem;
-  color: #fff;
+  color: var(--app-text);
 }
 
 .shortcuts {
@@ -57,13 +117,13 @@ section h2 {
   align-items: center;
   gap: 0.5rem;
   padding: 0.8rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--app-shortcut-bg);
   border-radius: 8px;
 }
 
 .shortcut-item span {
   margin-left: 1rem;
-  color: #ccc;
+  color: var(--app-shortcut-text);
 }
 
 .status-indicator {
@@ -119,16 +179,17 @@ section h2 {
 }
 
 .ai-response {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--app-shortcut-bg);
   padding: 1rem;
   border-radius: 8px;
   border-left: 4px solid #667eea;
   line-height: 1.6;
+  color: var(--app-text);
 }
 
 /* Markdown 内容样式 */
 .markdown-content {
-  color: #fff;
+  color: var(--app-text);
 }
 
 .markdown-content h2 {
@@ -160,37 +221,38 @@ section h2 {
 }
 
 .markdown-content code {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--app-code-bg);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.9em;
+  color: var(--app-text);
 }
 
 .markdown-content pre {
-  background: #1e1e2e !important;
+  background: var(--app-pre-bg) !important;
   padding: 1rem !important;
   border-radius: 8px;
   overflow-x: auto;
   margin: 1rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--app-pre-border);
 }
 
 .markdown-content pre code {
   background: transparent;
   padding: 0;
-  color: #e0e0e0;
+  color: var(--app-pre-text);
   font-size: 0.95em;
   line-height: 1.5;
 }
 
 .markdown-content strong {
-  color: #fff;
+  color: var(--app-strong-text);
   font-weight: 600;
 }
 
 .markdown-content em {
-  color: #ccc;
+  color: var(--app-em-text);
   font-style: italic;
 }
 
@@ -201,14 +263,39 @@ section h2 {
 .info-section li {
   margin-bottom: 0.8rem;
   line-height: 1.6;
-  color: #ddd;
+  color: var(--app-info-text);
 }
 
 .app-footer {
   text-align: center;
   padding: 2rem;
-  color: #888;
+  color: var(--app-text-secondary);
   font-size: 0.9rem;
+}
+
+/* Theme Toggle Button Styles */
+.theme-toggle {
+  background: var(--app-button-bg);
+  border: 1px solid var(--app-button-border);
+  color: var(--app-button-text);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px var(--app-button-shadow);
+}
+
+.theme-toggle:hover {
+  background: var(--app-button-hover-bg);
+  border-color: var(--app-button-border);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--app-button-shadow);
+}
+
+.theme-toggle:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px var(--app-button-shadow);
 }
 
 @media (max-width: 768px) {
@@ -225,20 +312,20 @@ section h2 {
 
 .sessions-layout {
   display: grid;
-  grid-template-columns: 350px 1fr;
+  grid-template-columns: 25% 75%;
   gap: 1.5rem;
-  max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
 }
 
 .sessions-list {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--app-section-bg);
   border-radius: 12px;
   padding: 1.5rem;
   max-height: 80vh;
   overflow-y: auto;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--app-section-border);
 }
 
 .session-items {
@@ -248,16 +335,16 @@ section h2 {
 }
 
 .session-item {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--app-shortcut-bg);
   border-radius: 8px;
   padding: 1rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--app-section-border);
 }
 
 .session-item:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--app-section-bg);
   transform: translateX(5px);
 }
 
@@ -275,7 +362,7 @@ section h2 {
 
 .session-time {
   font-size: 0.9rem;
-  color: #aaa;
+  color: var(--app-text-secondary);
 }
 
 .delete-btn {
@@ -295,45 +382,47 @@ section h2 {
   display: flex;
   gap: 1rem;
   font-size: 0.85rem;
-  color: #888;
+  color: var(--app-text-secondary);
 }
 
 .conversation-count,
 .screenshot-count {
   padding: 0.2rem 0.5rem;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--app-shortcut-bg);
   border-radius: 4px;
+  color: var(--app-text);
 }
 
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;
-  color: #888;
+  color: var(--app-text-secondary);
 }
 
 .empty-state .hint {
   font-size: 0.9rem;
   margin-top: 0.5rem;
-  color: #666;
+  color: var(--app-text-secondary);
+  opacity: 0.7;
 }
 
 .session-detail {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--app-section-bg);
   border-radius: 12px;
   padding: 1.5rem;
   max-height: 80vh;
   overflow-y: auto;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--app-section-border);
 }
 
 .session-meta {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--app-shortcut-bg);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
-  color: #aaa;
+  color: var(--app-text-secondary);
 }
 
 .session-meta p {
@@ -347,10 +436,10 @@ section h2 {
 }
 
 .conversation-item {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--app-shortcut-bg);
   padding: 1.5rem;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--app-section-border);
 }
 
 .conversation-item h3 {
@@ -360,7 +449,7 @@ section h2 {
 }
 
 .conversation-item h4 {
-  color: #888;
+  color: var(--app-text-secondary);
   margin: 1rem 0 0.5rem 0;
   font-size: 0.95rem;
 }
@@ -375,8 +464,8 @@ section h2 {
 .screenshot-item-detail {
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--app-section-border);
+  background: var(--app-shortcut-bg);
 }
 
 .screenshot-item-detail img {
@@ -388,10 +477,11 @@ section h2 {
 }
 
 .ai-response-detail {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--app-shortcut-bg);
   padding: 1rem;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--app-section-border);
+  color: var(--app-text);
 }
 
 .empty-detail {
@@ -400,17 +490,26 @@ section h2 {
   justify-content: center;
   height: 60vh;
   font-size: 1.2rem;
-  color: #666;
+  color: var(--app-text-secondary);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
   .sessions-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
   }
   
   .sessions-list,
   .session-detail {
     max-height: none;
+  }
+  
+  .sessions-list {
+    order: 1;
+  }
+  
+  .session-detail {
+    order: 2;
   }
 }
 

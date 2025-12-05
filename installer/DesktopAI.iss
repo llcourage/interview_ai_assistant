@@ -1,10 +1,10 @@
 ; ========================================
-; DesktopAI Interview Assistant
+; Desktop AI
 ; Inno Setup Installer Script
 ; ========================================
 
 [Setup]
-AppName=DesktopAI Interview Assistant
+AppName=Desktop AI
 AppVersion=1.0.0
 AppPublisher=DesktopAI
 AppPublisherURL=https://www.desktopai.org
@@ -44,13 +44,13 @@ Source: "release_root\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion
 Source: "release_root\ui\*"; DestDir: "{app}\ui"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{src}\release_root\ui'))
 
 [Icons]
-Name: "{group}\DesktopAI Interview Assistant"; Filename: "{app}\Launcher.exe"
-Name: "{group}\{cm:UninstallProgram,DesktopAI Interview Assistant}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\DesktopAI Interview Assistant"; Filename: "{app}\Launcher.exe"; Tasks: desktopicon
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\DesktopAI Interview Assistant"; Filename: "{app}\Launcher.exe"; Tasks: quicklaunchicon
+Name: "{group}\Desktop AI"; Filename: "{app}\Launcher.exe"
+Name: "{group}\{cm:UninstallProgram,Desktop AI}"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\Desktop AI"; Filename: "{app}\Launcher.exe"; Tasks: desktopicon
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\Desktop AI"; Filename: "{app}\Launcher.exe"; Tasks: quicklaunchicon
 
 [Run]
-Filename: "{app}\Launcher.exe"; Description: "{cm:LaunchProgram,DesktopAI Interview Assistant}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Launcher.exe"; Description: "{cm:LaunchProgram,Desktop AI}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 function DirExists(DirName: String): Boolean;

@@ -53,8 +53,8 @@ from backend.payment_stripe import (
 # ========== FastAPI App ==========
 
 app = FastAPI(
-    title="AI Interview Assistant API",
-    description="AI 面试助手后端服务 - 支持多Plan订阅、限流、使用统计",
+    title="Desktop AI API",
+    description="Desktop AI 后端服务 - Your AI assistant for daily usage, interviews, and productivity",
     version="2.0.0"
 )
 
@@ -234,7 +234,7 @@ async def root():
         # 否则返回 API 信息
         return {
             "status": "running",
-            "message": "AI Interview Assistant API v2.0",
+            "message": "Desktop AI API v2.0",
             "version": "2.0.0"
         }
 
@@ -903,7 +903,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     
     print("=" * 60)
-    print("AI Interview Assistant Backend Service v2.0")
+    print("Desktop AI Backend Service v2.0")
     print("=" * 60)
     print(f"Service URL: http://{host}:{port}")
     print(f"API Docs: http://{host}:{port}/docs")

@@ -1,6 +1,6 @@
-# Interview Assistant
+# Desktop AI
 
-一个基于 Electron + React + FastAPI 的智能面试助手应用，支持截图分析和对话交互。
+Your AI assistant for daily usage, interviews, and productivity. A desktop application built with Electron + React + FastAPI, supporting screenshot analysis and conversational AI interactions.
 
 ## ✨ 功能特性
 
@@ -68,7 +68,7 @@ npm run dev
 ## 📁 项目结构
 
 ```
-Interview Assistant/
+Desktop AI/
 ├── src/              # React 前端源代码
 │   ├── components/  # 可复用组件
 │   ├── lib/         # API 和 Supabase 客户端

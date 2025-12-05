@@ -6,7 +6,7 @@ REM ========================================
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo AI Interview Assistant - 桌面版打包
+echo Desktop AI - 桌面版打包
 echo ========================================
 echo.
 
@@ -72,7 +72,7 @@ if errorlevel 1 (
 
 echo [5/5] 整理文件...
 REM 创建最终分发目录
-set FINAL_DIR=%DIST_DIR%\AI-Interview-Assistant-Desktop
+set FINAL_DIR=%DIST_DIR%\Desktop-AI
 if exist "%FINAL_DIR%" rmdir /s /q "%FINAL_DIR%"
 mkdir "%FINAL_DIR%"
 
@@ -101,7 +101,7 @@ if exist "%PROJECT_ROOT%\dist" (
 
 REM 创建 README
 (
-echo AI Interview Assistant - 桌面版
+echo Desktop AI - 桌面版
 echo ========================================
 echo.
 echo 使用说明:

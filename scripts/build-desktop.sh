@@ -6,7 +6,7 @@
 set -e
 
 echo "========================================"
-echo "AI Interview Assistant - 桌面版打包"
+echo "Desktop AI - 桌面版打包"
 echo "========================================"
 echo ""
 
@@ -59,7 +59,7 @@ fi
 
 echo "[5/5] 整理文件..."
 # 创建最终分发目录
-FINAL_DIR="$DIST_DIR/AI-Interview-Assistant-Desktop"
+FINAL_DIR="$DIST_DIR/Desktop-AI"
 rm -rf "$FINAL_DIR"
 mkdir -p "$FINAL_DIR"
 
@@ -80,7 +80,7 @@ fi
 
 # 创建 README
 cat > "$FINAL_DIR/README.txt" << 'EOF'
-AI Interview Assistant - 桌面版
+Desktop AI - 桌面版
 ========================================
 
 使用说明:

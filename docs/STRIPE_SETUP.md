@@ -132,7 +132,7 @@
 3. 配置：
    - **Endpoint URL**: `https://www.desktopai.org/api/stripe_webhook`
      > ⚠️ 注意：将 `www.desktopai.org` 替换为您的实际域名（Vercel 部署的域名）
-   - **Description**（可选）: "AI Interview Assistant Webhook"
+   - **Description**（可选）: "Desktop AI Webhook"
    - **Events to send**: 选择以下事件：
      - ✅ `checkout.session.completed` - 支付成功（必需）
      - ✅ `customer.subscription.created` - 订阅创建（可选，但推荐）

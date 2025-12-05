@@ -7,7 +7,6 @@ import './App.css'
 import { isAuthenticated, getCurrentUser, logout, getAuthHeader } from './lib/auth'
 import { Login } from './Login'
 import { PlanSelector, PlanType } from './components/PlanSelector'
-import { Settings } from './components/Settings'
 import { API_BASE_URL } from './lib/api'
 import { ScenarioEditDialog } from './components/ScenarioEditDialog'
 import { ScenarioSelector } from './components/ScenarioSelector'
@@ -51,7 +50,6 @@ function App() {
     return (localStorage.getItem('currentPlan') as PlanType) || 'normal';
   });
   const [showPlanSelector, setShowPlanSelector] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showScenarioEditor, setShowScenarioEditor] = useState(false);
   const [scenarioEditorMode, setScenarioEditorMode] = useState<'create' | 'edit'>('create');
   const [editingScenario, setEditingScenario] = useState<any>(null);
@@ -345,19 +343,11 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
-          <h1>🔥 AI Interview Assistant</h1>
-          <p className="subtitle">Session History</p>
+          <h1>🔥 Desktop AI</h1>
+          <p className="subtitle">Your AI assistant for daily usage, interviews, and productivity</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <button 
-              className="theme-toggle" 
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
-              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
-            >
-              ⚙️ Settings
-            </button>
             <button 
               className="theme-toggle" 
               onClick={() => setShowPlanSelector(!showPlanSelector)}
@@ -396,29 +386,6 @@ function App() {
       </header>
 
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1000px', width: '90%' }}>
-            <button 
-              onClick={() => setShowSettings(false)}
-              style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                background: 'transparent',
-                border: 'none',
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)'
-              }}
-            >
-              ✕
-            </button>
-            <Settings />
-          </div>
-        </div>
-      )}
 
       {/* Plan Selector Modal */}
       {showPlanSelector && (

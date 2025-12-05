@@ -1,7 +1,7 @@
 {
-  "name": "ai-interview-assistant",
+  "name": "desktop-ai",
   "version": "1.0.0",
-  "description": "AI 面试助手 - Web + Desktop 版",
+  "description": "Desktop AI - Your AI assistant for daily usage, interviews, and productivity",
   "main": "electron/main.js",
   "scripts": {
     "start": "concurrently \"npm run start:react\" \"npm run start:electron\"",
@@ -45,8 +45,8 @@
     "remark-gfm": "^4.0.0"
   },
   "build": {
-    "appId": "com.aiinterview.assistant",
-    "productName": "AI Interview Assistant",
+    "appId": "com.desktopai.app",
+    "productName": "Desktop AI",
     "directories": {
       "output": "dist-electron"
     },

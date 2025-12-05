@@ -1,6 +1,6 @@
 # 桌面版打包指南
 
-本指南说明如何将 AI Interview Assistant 打包成桌面版应用程序。
+本指南说明如何将 Desktop AI 打包成桌面版应用程序。
 
 ## 架构说明
 
@@ -68,14 +68,14 @@ chmod +x scripts/build-desktop.sh
 ./scripts/build-desktop.sh
 ```
 
-脚本会自动完成所有步骤，最终在 `dist-desktop/AI-Interview-Assistant-Desktop/` 目录生成可分发文件。
+脚本会自动完成所有步骤，最终在 `dist-desktop/Desktop-AI/` 目录生成可分发文件。
 
 ## 文件结构
 
 打包后的目录结构：
 
 ```
-AI-Interview-Assistant-Desktop/
+Desktop-AI/
 ├── Launcher.exe          # 启动器（双击运行）
 ├── backend.exe           # 后端服务（已编译）
 ├── ui/                   # 前端静态文件

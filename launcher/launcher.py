@@ -107,7 +107,7 @@ def main():
         signal.signal(signal.SIGTERM, signal_handler)
     
     print("=" * 60)
-    print("🚀 AI Interview Assistant - 桌面版启动器")
+    print("🚀 Desktop AI - 桌面版启动器")
     print("=" * 60)
     
     # 检查 backend.exe 是否存在

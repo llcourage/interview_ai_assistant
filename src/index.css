@@ -38,14 +38,30 @@ body {
   overflow: hidden; /* 🚨 禁止 root 滚动 */
 }
 
+/* Theme Variables for kbd */
+[data-theme="dark"] {
+  --kbd-bg: #2d2d2d;
+  --kbd-border: #444;
+  --kbd-text: #e0e0e0;
+  --kbd-shadow: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] {
+  --kbd-bg: #e8e8e8;
+  --kbd-border: #cccccc;
+  --kbd-text: #000000;
+  --kbd-shadow: rgba(0, 0, 0, 0.1);
+}
+
 kbd {
-  background-color: #2d2d2d;
-  border: 1px solid #444;
+  background-color: var(--kbd-bg);
+  border: 1px solid var(--kbd-border);
   border-radius: 4px;
   padding: 2px 8px;
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 0.9em;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: var(--kbd-text);
+  box-shadow: 0 2px 4px var(--kbd-shadow);
 }
 
 button {

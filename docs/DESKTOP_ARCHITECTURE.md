@@ -72,7 +72,7 @@ The desktop version (Electron) follows a **UI Shell + Cloud Backend** architectu
 {
   "build": {
     "appId": "com.aiinterview.assistant",
-    "productName": "AI Interview Assistant",
+    "productName": "Desktop AI",
     "files": [
       "electron/**/*",
       "dist/**/*"

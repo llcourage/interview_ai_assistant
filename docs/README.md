@@ -1,6 +1,6 @@
 # 文档目录
 
-本目录包含 AI Interview Assistant 项目的所有文档。
+本目录包含 Desktop AI 项目的所有文档。
 
 ## 📚 文档列表
 

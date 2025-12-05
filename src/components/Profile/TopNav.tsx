@@ -16,7 +16,7 @@ export const TopNav: React.FC = () => {
     <header className="top-nav">
       <div className="nav-left">
         <h1 className="logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-          🔥 AI Interview Assistant
+          🔥 Desktop AI
         </h1>
         <span className="nav-badge">Profile</span>
       </div>

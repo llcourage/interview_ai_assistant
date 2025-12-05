@@ -10,7 +10,7 @@ def generate_encryption_key():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🔐 AI Interview Assistant - 加密密钥生成器")
+    print("🔐 Desktop AI - 加密密钥生成器")
     print("=" * 60)
     print()
     

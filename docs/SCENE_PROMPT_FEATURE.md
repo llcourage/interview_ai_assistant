@@ -8,7 +8,7 @@
 
 ### 1. 场景管理
 - **内置场景**（不可删除）：
-  - Interview Assistant
+  - Daily Assistant
   - Coding Interview（包含 Algorithm、System Design 等预设）
   - Behavioral (BQ)（包含 Leadership 等预设）
   - General Talking
