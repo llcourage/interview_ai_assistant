@@ -811,15 +811,19 @@ function handleOAuthCallback(url, resolve, reject) {
       }
       
       if (code) {
+        const state = urlObj.searchParams.get('state');
         console.log('🔐 获取到 OAuth code:', code.substring(0, 20) + '...');
+        if (state) {
+          console.log('🔐 获取到 OAuth state:', state.substring(0, 20) + '...');
+        }
         
         // 关闭 OAuth 窗口
         if (oauthWindow && !oauthWindow.isDestroyed()) {
           oauthWindow.close();
         }
         
-        // 返回 code 给前端
-        resolve({ code, success: true });
+        // 返回 code 和 state 给前端
+        resolve({ code, state: state || undefined, success: true });
       }
     }
   } catch (error) {
@@ -839,7 +843,10 @@ ipcMain.handle('oauth-google', async () => {
       const API_BASE_URL = process.env.LOCAL_API_URL 
         || process.env.VERCEL_API_URL 
         || 'https://www.desktopai.org';
-      const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=http://localhost`;
+      // 对于 Electron 桌面应用，使用应用网站的 callback URL
+      // 这样 Supabase 可以正确验证 OAuth flow state
+      const redirectTo = 'https://www.desktopai.org/auth/callback';
+      const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${encodeURIComponent(redirectTo)}`;
       console.log('🔐 请求 OAuth URL:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
       

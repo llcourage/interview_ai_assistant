@@ -209,8 +209,8 @@ export const loginWithGoogle = async (): Promise<void> => {
       // Electron 环境：使用 Electron OAuth 窗口
       const result = await (window as any).aiShot.loginWithGoogle();
       if (result.success && result.code) {
-        // 使用 code 交换 token
-        const token = await handleOAuthCallback(result.code);
+        // 使用 code 和 state 交换 token
+        const token = await handleOAuthCallback(result.code, result.state);
         // 触发认证状态变化事件
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         // 重定向到主页面
