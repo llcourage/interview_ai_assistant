@@ -221,14 +221,13 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
             callback_url = f"{redirect_to}/auth/callback"
         
         # 获取 Google OAuth URL
-        # 注意：Supabase Python SDK 默认使用 PKCE，但我们需要确保在交换 code 时能够正确处理
-        # 如果遇到 PKCE 问题，可以尝试禁用 PKCE（但不太安全）
+        # 注意：Supabase Python SDK 默认使用 PKCE
+        # 由于回调会在前端处理（使用 Supabase JS SDK），PKCE 会被正确处理
+        # 前端会从浏览器存储中获取 code_verifier
         response = supabase.auth.sign_in_with_oauth({
             "provider": "google",
             "options": {
-                "redirect_to": callback_url,
-                # 尝试禁用 PKCE 看看是否能解决问题
-                # "skip_http_redirect": False
+                "redirect_to": callback_url
             }
         })
         

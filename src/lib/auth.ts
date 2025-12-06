@@ -221,7 +221,8 @@ export const loginWithGoogle = async (): Promise<void> => {
       }
     } else {
       // Web 环境：跳转到 Google 授权页面
-      const redirectTo = window.location.origin;
+      // redirectTo 指向前端路由，这样回调会在前端处理（使用 Supabase JS SDK 的 exchangeCodeForSession）
+      const redirectTo = `${window.location.origin}/auth/callback`;
       const authUrl = await getGoogleOAuthUrl(redirectTo);
       // 跳转到 Google 授权页面
       window.location.href = authUrl;
@@ -234,21 +235,36 @@ export const loginWithGoogle = async (): Promise<void> => {
 
 /**
  * 处理 OAuth 回调
+ * 使用前端 Supabase 客户端直接处理，避免 PKCE code_verifier 问题
  */
 export const handleOAuthCallback = async (code: string, state?: string): Promise<AuthToken> => {
-  const params = new URLSearchParams({ code });
-  if (state) {
-    params.append('state', state);
+  // 导入 Supabase 客户端（动态导入避免循环依赖）
+  const { supabase } = await import('./supabase');
+  
+  // 使用 Supabase JS SDK 的 exchangeCodeForSession
+  // 这样可以从浏览器存储中自动获取 code_verifier
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  
+  if (error) {
+    console.error('Supabase exchangeCodeForSession error:', error);
+    throw new Error(error.message || 'OAuth callback failed');
   }
   
-  const response = await fetch(`${API_BASE_URL}/api/auth/callback?${params.toString()}`);
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'OAuth callback failed' }));
-    throw new Error(error.detail || 'OAuth callback failed');
+  if (!data.session || !data.user) {
+    throw new Error('OAuth callback failed: No session or user data received');
   }
   
-  const token: AuthToken = await response.json();
+  // 转换为我们的 AuthToken 格式
+  const token: AuthToken = {
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    token_type: 'bearer',
+    user: {
+      id: data.user.id,
+      email: data.user.email || ''
+    }
+  };
+  
   saveToken(token);
   return token;
 };
