@@ -9,7 +9,7 @@
 }
 
 .plans-container {
-  max-width: 1400px; /* 增加最大宽度以容纳4个卡片 */
+  max-width: 1200px; /* 缩小容器宽度，让卡片更紧凑 */
   width: 100%;
   margin: 0 auto;
   flex: 1;
@@ -93,7 +93,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem; /* 减小间距 */
-  max-width: 1400px;
+  max-width: 1100px; /* 缩小grid最大宽度，让卡片整体更紧凑 */
   margin: 0 auto 0;
   position: relative;
   z-index: 1;
