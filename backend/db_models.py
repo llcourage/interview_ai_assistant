@@ -48,12 +48,7 @@ class UsageQuota(BaseModel):
     """用户配额管理"""
     user_id: str
     plan: PlanType
-    daily_requests: int = 0  # 今日已用请求数
-    monthly_requests: int = 0  # 本月已用请求数
     monthly_tokens_used: int = 0  # 本月已用 tokens
-    daily_limit: int = 100  # 每日限制
-    monthly_limit: int = 3000  # 每月限制
-    last_request_at: Optional[datetime] = None
     quota_reset_date: datetime  # 配额重置日期
     created_at: datetime
     updated_at: datetime
@@ -62,15 +57,11 @@ class UsageQuota(BaseModel):
 # Plan quota definitions
 PLAN_LIMITS = {
     PlanType.NORMAL: {
-        "daily_limit": 200,  # 200 requests per day
-        "monthly_limit": 5000,  # 5000 requests per month
         "monthly_token_limit": 500_000,  # 500k tokens per month
         "models": ["gpt-4o-mini"],  # Only mini model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
-        "daily_limit": 200,  # 200 requests per day (same as Normal)
-        "monthly_limit": 5000,  # 5000 requests per month (same as Normal)
         "monthly_token_limit": 500_000,  # 500k tokens per month (same as Normal)
         "models": ["gpt-4o-mini", "gpt-4o"],  # Can access both mini and full gpt-4o
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]

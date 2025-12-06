@@ -9,10 +9,8 @@ import './Profile.css';
 
 interface PlanInfo {
   plan: string;
-  daily_requests: number;
-  monthly_requests: number;
-  daily_limit: number;
-  monthly_limit: number;
+  monthly_token_limit?: number;
+  monthly_tokens_used?: number;
   features: string[];
   subscription_info?: {
     subscription_id: string;

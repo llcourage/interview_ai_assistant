@@ -148,6 +148,13 @@ export interface AiShotAPI {
    * @returns Promise，返回包含 canceled 和 path 的对象
    */
   selectFolder?: (options?: { title?: string; defaultPath?: string }) => Promise<{ canceled: boolean; path: string | null; error?: string }>;
+
+  /**
+   * 显示 Token 使用率警告（Electron 专用）
+   * @param message 警告消息
+   * @param usagePercentage 使用百分比
+   */
+  showTokenWarning?: (message: string, usagePercentage: string) => void;
 }
 
 declare global {

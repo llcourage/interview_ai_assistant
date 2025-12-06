@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { getAuthHeader } from '../lib/auth';
+import { getAuthHeader, getCurrentUser } from '../lib/auth';
 import { API_BASE_URL } from '../lib/api';
 import './Settings.css';
 
+const getAuthToken = async () => {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const authHeader = getAuthHeader();
+  return authHeader ? authHeader.replace('Bearer ', '') : null;
+};
+
 interface PlanInfo {
   plan: string;
-  daily_requests: number;
-  monthly_requests: number;
-  daily_limit: number;
-  monthly_limit: number;
+  monthly_token_limit?: number;
+  monthly_tokens_used?: number;
   features: string[];
   subscription_info?: {
     subscription_id: string;
@@ -158,39 +163,46 @@ export const Settings: React.FC = () => {
               <span className="plan-badge">Current Plan</span>
             </div>
 
-            <div className="plan-usage">
-              <div className="usage-item">
-                <label>Daily Usage:</label>
-                <div className="usage-bar">
-                  <div 
-                    className="usage-progress" 
-                    style={{ 
-                      width: planInfo.daily_limit === -1 ? '0%' : 
-                        `${(planInfo.daily_requests / planInfo.daily_limit) * 100}%` 
-                    }}
-                  />
+            {planInfo.monthly_token_limit !== undefined && planInfo.monthly_token_limit > 0 && (
+              <div className="plan-usage">
+                <div className="usage-item">
+                  <div className="usage-header">
+                    <label>月度 Token 配额使用情况</label>
+                    <span className="usage-percentage">
+                      {(((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="usage-bar-container">
+                    <div 
+                      className={`usage-bar ${((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 ? 'usage-bar-warning' : ''}`}
+                    >
+                      <div 
+                        className={`usage-progress ${((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.9 ? 'usage-progress-danger' : ((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 ? 'usage-progress-warning' : ''}`}
+                        style={{ 
+                          width: `${Math.min(((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) * 100, 100)}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="usage-details">
+                    <span className="usage-text">
+                      <strong>已使用:</strong> {(planInfo.monthly_tokens_used || 0).toLocaleString()} tokens
+                    </span>
+                    <span className="usage-remaining">
+                      <strong>剩余:</strong> {Math.max(0, planInfo.monthly_token_limit - (planInfo.monthly_tokens_used || 0)).toLocaleString()} tokens
+                    </span>
+                    <span className="usage-total">
+                      <strong>总额:</strong> {planInfo.monthly_token_limit.toLocaleString()} tokens
+                    </span>
+                  </div>
+                  {((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 && (
+                    <div className="usage-warning-banner">
+                      ⚠️ 您的配额使用率已超过 80%，剩余配额有限。配额将在每月重置。
+                    </div>
+                  )}
                 </div>
-                <span className="usage-text">
-                  {planInfo.daily_requests} / {planInfo.daily_limit === -1 ? 'Unlimited' : planInfo.daily_limit}
-                </span>
               </div>
-
-              <div className="usage-item">
-                <label>Monthly Usage:</label>
-                <div className="usage-bar">
-                  <div 
-                    className="usage-progress" 
-                    style={{ 
-                      width: planInfo.monthly_limit === -1 ? '0%' : 
-                        `${(planInfo.monthly_requests / planInfo.monthly_limit) * 100}%` 
-                    }}
-                  />
-                </div>
-                <span className="usage-text">
-                  {planInfo.monthly_requests} / {planInfo.monthly_limit === -1 ? 'Unlimited' : planInfo.monthly_limit}
-                </span>
-              </div>
-            </div>
+            )}
 
             <div className="plan-features">
               <h4>Features:</h4>

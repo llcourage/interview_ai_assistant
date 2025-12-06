@@ -31,6 +31,7 @@ import stripe  # 导入 stripe 用于错误处理
 
 # 导入现有模块 - 使用绝对导入（backend 作为包）
 from backend.vision import analyze_image
+from backend.token_estimator import estimate_tokens_for_request
 from openai import AsyncOpenAI
 
 # 导入认证模块
@@ -153,10 +154,6 @@ class ChatResponse(BaseModel):
 class PlanResponse(BaseModel):
     """用户Plan信息"""
     plan: str
-    daily_requests: int
-    monthly_requests: int
-    daily_limit: int
-    monthly_limit: int
     monthly_token_limit: Optional[int] = None
     monthly_tokens_used: Optional[int] = None
     features: list[str]
@@ -517,10 +514,6 @@ async def get_plan(http_request: Request):
     
     return PlanResponse(
         plan=user_plan.plan.value,
-        daily_requests=quota.daily_requests,
-        monthly_requests=quota.monthly_requests,
-        daily_limit=limits["daily_limit"],
-        monthly_limit=limits["monthly_limit"],
         monthly_token_limit=monthly_token_limit,
         monthly_tokens_used=monthly_tokens_used,
         features=limits["features"],
@@ -715,18 +708,27 @@ async def chat(
         token = auth_header.replace("Bearer ", "")
         current_user = await verify_token(token)
         
-        # 1. 检查限流
-        allowed, error_msg = await check_rate_limit(current_user.id)
+        # 1. 获取用户Plan
+        user_plan = await get_user_plan(current_user.id)
+        
+        # 2. 估算本次请求将使用的 tokens
+        estimated_tokens = estimate_tokens_for_request(
+            user_input=request.user_input,
+            context=request.context,
+            prompt=request.prompt,
+            images=request.image_base64 if isinstance(request.image_base64, list) else [request.image_base64] if request.image_base64 else None,
+            max_output_tokens=3000 if request.image_base64 else 2000
+        )
+        
+        # 3. 检查限流（包括 token 配额）
+        allowed, error_msg = await check_rate_limit(current_user.id, estimated_tokens=estimated_tokens)
         if not allowed:
             raise HTTPException(status_code=429, detail=error_msg)
         
-        # 2. 获取用户Plan
-        user_plan = await get_user_plan(current_user.id)
-        
-        # 3. 获取对应的API客户端和模型
+        # 4. 获取对应的API客户端和模型
         client, model = await get_api_client_for_user(current_user.id, user_plan.plan)
         
-        # 4. 处理请求
+        # 5. 处理请求
         if request.image_base64:
             # 图片分析
             print(f"🖼️ 用户 {current_user.id} ({user_plan.plan.value}) 请求图片分析")
@@ -793,13 +795,26 @@ async def chat(
                 detail="请提供 user_input（文字）或 image_base64（图片）"
             )
         
-        # 5. 计算总 token 使用量
+        # 6. 计算总 token 使用量（使用 OpenAI 返回的实际值）
         total_tokens = estimated_input_tokens + estimated_output_tokens
         
-        # 6. 增加配额计数（包括 token 使用量）
-        await increment_user_quota(current_user.id, tokens_used=total_tokens)
+        # 7. 增加配额计数（允许轻微超额，clamp 到上限）
+        # 一旦 OpenAI 返回成功，必须返回结果给用户并扣 token
+        limits = PLAN_LIMITS[user_plan.plan]
+        monthly_token_limit = limits.get("monthly_token_limit")
         
-        # 7. 记录使用日志
+        # 获取当前配额，计算 billable tokens（clamp 到剩余配额）
+        quota_before = await get_user_quota(current_user.id)
+        current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
+        
+        if monthly_token_limit is not None and monthly_token_limit > 0:
+            remaining_quota = monthly_token_limit - current_tokens_used
+            # Clamp: 如果超过剩余配额，只扣剩余配额的部分
+            billable_tokens = min(total_tokens, max(0, remaining_quota))
+        else:
+            billable_tokens = total_tokens
+        
+        # 8. 记录使用日志（使用实际 tokens，success=True）
         await log_usage(
             user_id=current_user.id,
             plan=user_plan.plan,
@@ -810,6 +825,10 @@ async def chat(
             success=True
         )
         
+        # 9. 增加配额计数（使用 billable tokens）
+        await increment_user_quota(current_user.id, tokens_used=billable_tokens)
+        
+        # 10. 永远返回结果给用户（即使轻微超额）
         return ChatResponse(
             answer=answer,
             success=True,

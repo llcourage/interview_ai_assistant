@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, globalShortcut, desktopCapturer, ipcMain, Menu, dialog, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -1224,6 +1224,46 @@ ipcMain.handle('select-folder', async (event, options = {}) => {
   } catch (error) {
     console.error('❌ 选择文件夹失败:', error);
     return { canceled: true, path: null, error: error.message };
+  }
+});
+
+// ⚠️ IPC: 显示 Token 使用率警告
+ipcMain.on('show-token-warning', (event, message, usagePercentage) => {
+  try {
+    // 使用 Electron 原生通知
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: '⚠️ Token 使用率警告',
+        body: `您已使用 ${usagePercentage}% 的 Token 配额，剩余配额有限。请合理使用。`,
+        icon: path.join(__dirname, '../resources/icon.png'),
+        urgency: 'normal',
+        timeoutType: 'never' // 不自动消失，让用户手动关闭
+      });
+
+      notification.show();
+
+      // 可选：点击通知时聚焦主窗口
+      notification.on('click', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.focus();
+        }
+      });
+    } else {
+      // 降级到对话框
+      const win = BrowserWindow.fromWebContents(event.sender);
+      dialog.showMessageBox(win || mainWindow, {
+        type: 'warning',
+        title: '⚠️ Token 使用率警告',
+        message: `您已使用 ${usagePercentage}% 的 Token 配额`,
+        detail: message,
+        buttons: ['知道了'],
+        defaultId: 0
+      });
+    }
+    
+    console.warn('⚠️ Token 使用率警告:', message);
+  } catch (error) {
+    console.error('❌ 显示 Token 警告失败:', error);
   }
 });
 

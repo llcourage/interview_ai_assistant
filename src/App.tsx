@@ -11,6 +11,7 @@ import { ScenarioEditDialog } from './components/ScenarioEditDialog'
 import { ScenarioSelector } from './components/ScenarioSelector'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
+import { QuotaCard } from './components/QuotaCard'
 import { getCurrentSceneName } from './lib/sceneStorage'
 
 // Session 类型定义
@@ -69,6 +70,41 @@ function App() {
             localStorage.setItem('currentPlan', newPlan);
             // Trigger custom event to notify other windows (e.g., overlay) to update plan
             window.dispatchEvent(new CustomEvent('planChanged', { detail: newPlan }));
+            
+            // 检查 Token 使用率警告（仅在 Electron 环境下）
+            if (window.aiShot && planData.monthly_token_limit && planData.monthly_token_limit > 0) {
+              const usagePercentage = ((planData.monthly_tokens_used || 0) / planData.monthly_token_limit * 100);
+              if (usagePercentage >= 80) {
+                const usagePercentageStr = usagePercentage.toFixed(1);
+                const message = `⚠️ Token 使用率警告\n\n您本月已使用 ${usagePercentageStr}% 的 Token 配额 (${(planData.monthly_tokens_used || 0).toLocaleString()} / ${planData.monthly_token_limit.toLocaleString()})\n\n剩余配额有限，请合理使用。配额将在每月重置。`;
+                
+                // 使用 Electron 原生通知
+                if (window.aiShot.showTokenWarning) {
+                  window.aiShot.showTokenWarning(message, usagePercentageStr);
+                } else {
+                  // 降级到浏览器通知
+                  if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('Token 使用率警告', {
+                      body: `您已使用 ${usagePercentageStr}% 的 Token 配额，剩余配额有限。`,
+                      icon: '/favicon.ico',
+                      tag: 'token-warning'
+                    });
+                  } else if ('Notification' in window && Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(permission => {
+                      if (permission === 'granted') {
+                        new Notification('Token 使用率警告', {
+                          body: `您已使用 ${usagePercentageStr}% 的 Token 配额，剩余配额有限。`,
+                          icon: '/favicon.ico',
+                          tag: 'token-warning'
+                        });
+                      }
+                    });
+                  }
+                }
+                
+                console.warn('⚠️ Token 使用率警告:', message);
+              }
+            }
           }
         }
       } catch (error) {
@@ -423,7 +459,10 @@ function App() {
         </div>
       </header>
 
-
+      {/* Quota Card - Display quota usage in main app */}
+      <div className="app-main" style={{ marginTop: '1rem' }}>
+        <QuotaCard />
+      </div>
 
       {/* Plan Selector Modal */}
       {showPlanSelector && (

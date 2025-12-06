@@ -264,11 +264,41 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 except Exception as update_error:
                     print(f"⚠️ 更新 quota plan 失败: {update_error}")
             
-            # 检查是否需要重置配额
+            # 检查是否需要重置配额（按自然月重置）
             now = datetime.now()
-            if quota.quota_reset_date < now:
-                # 重置配额
-                quota = await reset_user_quota(user_id)
+            should_reset_monthly = False
+            
+            if quota.quota_reset_date:
+                reset_date = quota.quota_reset_date
+                if isinstance(reset_date, str):
+                    reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+                
+                # quota_reset_date 是"上次重置时间"，如果当前年月 ≠ 上次重置的年月，则需要重置
+                reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
+                should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
+            else:
+                # 如果没有重置日期，视为需要重置
+                should_reset_monthly = True
+            
+            if should_reset_monthly:
+                # 直接在这里重置，避免调用 reset_user_quota 造成递归
+                update_data = {
+                    "monthly_tokens_used": 0,
+                    "quota_reset_date": now.isoformat(),  # 设置为当前时间（上次重置时间）
+                    "updated_at": now.isoformat()
+                }
+                
+                supabase = get_supabase()
+                response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
+                
+                if response.data:
+                    quota_data = normalize_plan_data(response.data[0])
+                    quota = UsageQuota(**quota_data)
+                    print(f"📅 重置用户 {user_id} 的月度 token 配额（自然月重置）")
+                else:
+                    # 如果更新失败，至少更新内存中的对象
+                    quota.monthly_tokens_used = 0
+                    quota.quota_reset_date = now
             
             return quota
         else:
@@ -284,34 +314,29 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             user_plan = await get_user_plan(user_id)
             limits = PLAN_LIMITS[user_plan.plan]
             
+            now = datetime.now()
+            # quota_reset_date 是"上次重置时间"，设置为当前时间
             return UsageQuota(
                 user_id=user_id,
                 plan=user_plan.plan,
-                daily_requests=0,
-                monthly_requests=0,
                 monthly_tokens_used=0,
-                daily_limit=limits["daily_limit"],
-                monthly_limit=limits["monthly_limit"],
-                quota_reset_date=datetime.now() + timedelta(days=1),
-                created_at=datetime.now(),
-                updated_at=datetime.now()
+                quota_reset_date=now,  # 上次重置时间 = 当前时间
+                created_at=now,
+                updated_at=now
             )
         except Exception as fallback_error:
             print(f"❌ 创建默认配额也失败: {fallback_error}")
             # 最后返回一个基本的配额对象
             # Fallback to NORMAL plan limits
-            limits = PLAN_LIMITS[PlanType.NORMAL]
+            now = datetime.now()
+            # quota_reset_date 是"上次重置时间"，设置为当前时间
             return UsageQuota(
                 user_id=user_id,
                 plan=PlanType.NORMAL,
-                daily_requests=0,
-                monthly_requests=0,
                 monthly_tokens_used=0,
-                daily_limit=limits["daily_limit"],
-                monthly_limit=limits["monthly_limit"],
-                quota_reset_date=datetime.now() + timedelta(days=1),
-                created_at=datetime.now(),
-                updated_at=datetime.now()
+                quota_reset_date=now,  # 上次重置时间 = 当前时间
+                created_at=now,
+                updated_at=now
             )
 
 
@@ -321,19 +346,14 @@ async def create_user_quota(user_id: str) -> UsageQuota:
         supabase = get_supabase()
         
         user_plan = await get_user_plan(user_id)
-        limits = PLAN_LIMITS[user_plan.plan]
         
         now = datetime.now()
-        next_reset = now + timedelta(days=1)
-        
+        # quota_reset_date 是"上次重置时间"，设置为当前时间
         quota_data = {
             "user_id": user_id,
             "plan": user_plan.plan.value,
-            "daily_requests": 0,
-            "monthly_requests": 0,
-            "daily_limit": limits["daily_limit"],
-            "monthly_limit": limits["monthly_limit"],
-            "quota_reset_date": next_reset.isoformat(),
+            "monthly_tokens_used": 0,
+            "quota_reset_date": now.isoformat(),  # 上次重置时间 = 当前时间
             "created_at": now.isoformat(),
             "updated_at": now.isoformat()
         }
@@ -351,11 +371,11 @@ async def create_user_quota(user_id: str) -> UsageQuota:
 
 
 async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota:
-    """增加用户配额使用次数和 token 使用量
+    """增加用户 token 使用量
     
     Args:
         user_id: 用户ID
-        tokens_used: 本次使用的 token 数量（可选，默认为0）
+        tokens_used: 本次使用的 token 数量（必须提供，默认为0）
     """
     try:
         quota = await get_user_quota(user_id)
@@ -363,13 +383,10 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
         supabase = get_supabase()
         
         update_data = {
-            "daily_requests": quota.daily_requests + 1,
-            "monthly_requests": quota.monthly_requests + 1,
-            "last_request_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
         
-        # 如果有 token 使用量，添加到 monthly_tokens_used
+        # 添加 token 使用量到 monthly_tokens_used
         if tokens_used > 0:
             current_tokens = getattr(quota, 'monthly_tokens_used', 0)
             update_data["monthly_tokens_used"] = current_tokens + tokens_used
@@ -389,23 +406,71 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
 
 
 async def reset_user_quota(user_id: str) -> UsageQuota:
-    """重置用户配额（每日重置）"""
+    """重置用户配额（按自然月重置 monthly_tokens_used）
+    
+    注意：quota_reset_date 定义为"上次重置时间"（last_reset_at），不是"下次重置时间"
+    是否重置的判断：当前年月 ≠ quota_reset_date 的年月 → 重置
+    """
     try:
         supabase = get_supabase()
         
+        # 直接查询数据库，避免调用 get_user_quota 造成递归
+        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
+        
         now = datetime.now()
-        next_reset = now + timedelta(days=1)
+        
+        if not response or not response.data:
+            # 没有记录就创建一条
+            user_plan = await get_user_plan(user_id)
+            quota_data = {
+                "user_id": user_id,
+                "plan": user_plan.plan.value,
+                "monthly_tokens_used": 0,
+                "quota_reset_date": now.isoformat(),  # 上次重置时间 = 当前时间
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            
+            insert_response = supabase.table("usage_quotas").insert(quota_data).execute()
+            if insert_response.data:
+                quota_data = normalize_plan_data(insert_response.data[0])
+                return UsageQuota(**quota_data)
+            else:
+                raise Exception("创建配额失败")
+        
+        # 解析现有配额
+        quota_raw = normalize_plan_data(response.data[0])
+        quota = UsageQuota(**quota_raw)
+        
+        # 检查是否需要每月重置：只按自然月重置
+        # quota_reset_date 是"上次重置时间"，如果当前年月 ≠ 上次重置的年月，则需要重置
+        should_reset_monthly = False
+        
+        if quota.quota_reset_date:
+            reset_date = quota.quota_reset_date
+            if isinstance(reset_date, str):
+                reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+            
+            reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
+            should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
+        else:
+            # 如果没有重置日期，视为需要重置
+            should_reset_monthly = True
         
         update_data = {
-            "daily_requests": 0,
-            "quota_reset_date": next_reset.isoformat(),
             "updated_at": now.isoformat()
         }
         
-        response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
+        # 如果需要重置月度配额
+        if should_reset_monthly:
+            update_data["monthly_tokens_used"] = 0
+            update_data["quota_reset_date"] = now.isoformat()  # 更新为当前时间（上次重置时间）
+            print(f"📅 重置用户 {user_id} 的月度 token 配额（自然月重置）")
         
-        if response.data:
-            quota_data = normalize_plan_data(response.data[0])
+        update_response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
+        
+        if update_response.data:
+            quota_data = normalize_plan_data(update_response.data[0])
             return UsageQuota(**quota_data)
         else:
             raise Exception("重置配额失败")
@@ -414,8 +479,12 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         raise
 
 
-async def check_rate_limit(user_id: str) -> tuple[bool, str]:
-    """检查用户是否超过限流
+async def check_rate_limit(user_id: str, estimated_tokens: int = 0) -> tuple[bool, str]:
+    """检查用户是否超过 token 配额限制
+    
+    Args:
+        user_id: 用户ID
+        estimated_tokens: 预估的本次请求将使用的 tokens 数量（可选，用于提前检查）
     
     Returns:
         (bool, str): (是否允许, 错误信息)
@@ -425,23 +494,17 @@ async def check_rate_limit(user_id: str) -> tuple[bool, str]:
         quota = await get_user_quota(user_id)
         limits = PLAN_LIMITS[user_plan.plan]
         
-        # Check daily request limit (both plans have the same limits)
-        if quota.daily_limit != -1:
-            # 检查每日限制
-            if quota.daily_requests >= quota.daily_limit:
-                return False, f"已达到每日请求限制 ({quota.daily_limit} 次)。请明天再试或升级Plan。"
-        
-        if quota.monthly_limit != -1:
-            # 检查每月请求限制
-            if quota.monthly_requests >= quota.monthly_limit:
-                return False, f"已达到每月请求限制 ({quota.monthly_limit} 次)。请下月再试或升级Plan。"
-        
-        # 检查每月 token 限制
+        # 检查每月 token 限制（考虑预估的 tokens）
         monthly_token_limit = limits.get("monthly_token_limit")
         if monthly_token_limit is not None:
             monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
-            if monthly_tokens_used >= monthly_token_limit:
-                return False, f"本月 tokens 已用完：{monthly_tokens_used:,}/{monthly_token_limit:,}。请下月再试或升级Plan。"
+            # 检查当前已使用的 tokens 加上预估的 tokens 是否会超过限制
+            if monthly_tokens_used + estimated_tokens > monthly_token_limit:
+                remaining = monthly_token_limit - monthly_tokens_used
+                if remaining <= 0:
+                    return False, f"本月 tokens 已用完：{monthly_tokens_used:,}/{monthly_token_limit:,}。请下月再试或升级Plan。"
+                else:
+                    return False, f"本月 tokens 配额不足：已使用 {monthly_tokens_used:,}/{monthly_token_limit:,}，剩余 {remaining:,}，但预估需要 {estimated_tokens:,}。请下月再试或升级Plan。"
         
         return True, ""
     except Exception as e:

@@ -124,6 +124,11 @@ contextBridge.exposeInMainWorld('aiShot', {
   // 📁 选择文件夹
   selectFolder: (options) => {
     return ipcRenderer.invoke('select-folder', options);
+  },
+
+  // ⚠️ 显示 Token 使用率警告
+  showTokenWarning: (message, usagePercentage) => {
+    ipcRenderer.send('show-token-warning', message, usagePercentage);
   }
 });
 
