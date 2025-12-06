@@ -847,7 +847,7 @@ async def chat(
         
         # 获取当前配额，计算 billable tokens（clamp 到剩余配额）
         quota_before = await get_user_quota(current_user.id)
-            current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
+        current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
         
         if monthly_token_limit is not None and monthly_token_limit > 0:
             remaining_quota = monthly_token_limit - current_tokens_used
