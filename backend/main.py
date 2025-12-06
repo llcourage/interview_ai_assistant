@@ -388,9 +388,26 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
     
     # 非桌面版：正常处理
     try:
-        supabase = get_supabase()
-        # 使用 code 交换 session - Python SDK 需要字典参数，而不是字符串
-        # 根据 Supabase Python SDK 文档，应该使用 {"auth_code": code} 格式
+        # 对于 OAuth 回调，我们需要使用与生成 OAuth URL 时相同的 Supabase 客户端配置
+        # 使用 ANON_KEY 而不是 SERVICE_ROLE_KEY，因为 OAuth 是用户认证流程，且需要 PKCE 支持
+        import os
+        from supabase import create_client
+        
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+        
+        if not supabase_url or not supabase_anon_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supabase 配置缺失: SUPABASE_URL 或 SUPABASE_ANON_KEY 未设置"
+            )
+        
+        # 创建使用 ANON_KEY 的 Supabase 客户端（与生成 OAuth URL 时相同）
+        # 这确保 PKCE 流程能够正常工作
+        supabase = create_client(supabase_url, supabase_anon_key)
+        
+        # 使用 code 交换 session
+        # Supabase Python SDK 会自动处理 PKCE（如果 OAuth URL 使用了 PKCE）
         print(f"🔍 准备交换 code: {code[:20]}...")
         response = supabase.auth.exchange_code_for_session({"auth_code": code})
         
