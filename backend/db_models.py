@@ -50,7 +50,7 @@ class UsageQuota(BaseModel):
     """用户配额管理"""
     user_id: str
     plan: PlanType
-    monthly_tokens_used: int = 0  # 本月已用 tokens
+    weekly_tokens_used: int = 0  # 本周已用 tokens
     quota_reset_date: datetime  # 配额重置日期
     created_at: datetime
     updated_at: datetime
@@ -65,20 +65,20 @@ PLAN_LIMITS = {
         "features": ["basic_chat", "image_analysis"]
     },
     PlanType.NORMAL: {
-        "monthly_token_limit": 1_000_000,  # 1M tokens per month
-        "is_lifetime": False,
+        "weekly_token_limit": 1_000_000,  # 1M tokens per week
+        "is_lifetime": False,  # 周度配额，每周重置
         "models": ["gpt-4o-mini"],  # Great Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
-        "monthly_token_limit": 1_000_000,  # 1M tokens per month
-        "is_lifetime": False,
+        "weekly_token_limit": 1_000_000,  # 1M tokens per week
+        "is_lifetime": False,  # 周度配额，每周重置
         "models": ["gpt-5-mini"],  # Exceptional Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.ULTRA: {
-        "monthly_token_limit": 1_000_000,  # 1M tokens per month
-        "is_lifetime": False,
+        "weekly_token_limit": 1_000_000,  # 1M tokens per week
+        "is_lifetime": False,  # 周度配额，每周重置
         "models": ["gpt-4o"],  # State of the Art Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "advanced_reasoning"]
     }

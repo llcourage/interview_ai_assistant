@@ -154,8 +154,8 @@ class ChatResponse(BaseModel):
 class PlanResponse(BaseModel):
     """用户Plan信息"""
     plan: str
-    monthly_token_limit: Optional[int] = None
-    monthly_tokens_used: Optional[int] = None
+    weekly_token_limit: Optional[int] = None
+    weekly_tokens_used: Optional[int] = None
     features: list[str]
     subscription_info: Optional[dict] = None
 
@@ -542,21 +542,21 @@ async def get_plan(http_request: Request):
     if user_plan.plan != PlanType.START:
         subscription_info = await get_subscription_info(current_user.id)
     
-    # 支持月度配额和终身配额
-    monthly_token_limit = limits.get("monthly_token_limit")
+    # 支持周度配额和终身配额
+    weekly_token_limit = limits.get("weekly_token_limit")
     lifetime_token_limit = limits.get("lifetime_token_limit")
     is_lifetime = limits.get("is_lifetime", False)
     
     # 对于 start plan，使用 lifetime_token_limit 作为 token_limit
     if is_lifetime and lifetime_token_limit is not None:
-        monthly_token_limit = lifetime_token_limit
+        weekly_token_limit = lifetime_token_limit
     
-    monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
+    weekly_tokens_used = getattr(quota, 'weekly_tokens_used', 0)
     
     return PlanResponse(
         plan=user_plan.plan.value,
-        monthly_token_limit=monthly_token_limit,
-        monthly_tokens_used=monthly_tokens_used,
+        weekly_token_limit=weekly_token_limit,
+        weekly_tokens_used=weekly_tokens_used,
         features=limits["features"],
         subscription_info=subscription_info
     )
@@ -854,20 +854,20 @@ async def chat(
         # 7. 增加配额计数（允许轻微超额，clamp 到上限）
         # 一旦 OpenAI 返回成功，必须返回结果给用户并扣 token
         limits = PLAN_LIMITS[user_plan.plan]
-        monthly_token_limit = limits.get("monthly_token_limit")
+        weekly_token_limit = limits.get("weekly_token_limit")
         lifetime_token_limit = limits.get("lifetime_token_limit")
         is_lifetime = limits.get("is_lifetime", False)
         
         # 对于终身配额，使用 lifetime_token_limit
         if is_lifetime and lifetime_token_limit is not None:
-            monthly_token_limit = lifetime_token_limit
+            weekly_token_limit = lifetime_token_limit
         
         # 获取当前配额，计算 billable tokens（clamp 到剩余配额）
         quota_before = await get_user_quota(current_user.id)
-        current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
+        current_tokens_used = getattr(quota_before, 'weekly_tokens_used', 0)
         
-        if monthly_token_limit is not None and monthly_token_limit > 0:
-            remaining_quota = monthly_token_limit - current_tokens_used
+        if weekly_token_limit is not None and weekly_token_limit > 0:
+            remaining_quota = weekly_token_limit - current_tokens_used
             # Clamp: 如果超过剩余配额，只扣剩余配额的部分
             billable_tokens = min(total_tokens, max(0, remaining_quota))
         else:

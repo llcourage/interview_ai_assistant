@@ -10,8 +10,8 @@ import './Profile.css';
 
 interface PlanInfo {
   plan: string;
-  monthly_token_limit?: number;
-  monthly_tokens_used?: number;
+  weekly_token_limit?: number;
+  weekly_tokens_used?: number;
   features: string[];
   subscription_info?: {
     subscription_id: string;
@@ -125,8 +125,8 @@ export const Profile: React.FC = () => {
             onManagePlan={handleManagePlan}
           />
             <QuotaUsageCard
-              monthlyTokenLimit={planInfo?.monthly_token_limit}
-              monthlyTokensUsed={planInfo?.monthly_tokens_used}
+              monthlyTokenLimit={planInfo?.weekly_token_limit}
+              monthlyTokensUsed={planInfo?.weekly_tokens_used}
               plan={planInfo?.plan}
             />
           </div>

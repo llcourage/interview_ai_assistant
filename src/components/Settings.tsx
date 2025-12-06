@@ -12,8 +12,8 @@ const getAuthToken = async () => {
 
 interface PlanInfo {
   plan: string;
-  monthly_token_limit?: number;
-  monthly_tokens_used?: number;
+  weekly_token_limit?: number;
+  weekly_tokens_used?: number;
   features: string[];
   subscription_info?: {
     subscription_id: string;
@@ -163,39 +163,39 @@ export const Settings: React.FC = () => {
               <span className="plan-badge">Current Plan</span>
             </div>
 
-            {planInfo.monthly_token_limit !== undefined && planInfo.monthly_token_limit > 0 && (
+            {planInfo.weekly_token_limit !== undefined && planInfo.weekly_token_limit > 0 && (
             <div className="plan-usage">
               <div className="usage-item">
                   <div className="usage-header">
-                    <label>Monthly Token Quota Usage</label>
+                    <label>Weekly Token Quota Usage</label>
                     <span className="usage-percentage">
-                      {(((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) * 100).toFixed(1)}%
+                      {(((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) * 100).toFixed(1)}%
                     </span>
                   </div>
                   <div className="usage-bar-container">
                   <div 
-                      className={`usage-bar ${((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 ? 'usage-bar-warning' : ''}`}
+                      className={`usage-bar ${((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) >= 0.8 ? 'usage-bar-warning' : ''}`}
                     >
                       <div 
-                        className={`usage-progress ${((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.9 ? 'usage-progress-danger' : ((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 ? 'usage-progress-warning' : ''}`}
+                        className={`usage-progress ${((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) >= 0.9 ? 'usage-progress-danger' : ((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) >= 0.8 ? 'usage-progress-warning' : ''}`}
                     style={{ 
-                          width: `${Math.min(((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) * 100, 100)}%` 
+                          width: `${Math.min(((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) * 100, 100)}%` 
                     }}
                   />
                 </div>
                   </div>
                   <div className="usage-details">
                 <span className="usage-text">
-                      <strong>Used:</strong> {(planInfo.monthly_tokens_used || 0).toLocaleString()} tokens
+                      <strong>Used:</strong> {(planInfo.weekly_tokens_used || 0).toLocaleString()} tokens
                     </span>
                     <span className="usage-remaining">
-                      <strong>Remaining:</strong> {Math.max(0, planInfo.monthly_token_limit - (planInfo.monthly_tokens_used || 0)).toLocaleString()} tokens
+                      <strong>Remaining:</strong> {Math.max(0, planInfo.weekly_token_limit - (planInfo.weekly_tokens_used || 0)).toLocaleString()} tokens
                     </span>
                     <span className="usage-total">
-                      <strong>Total:</strong> {planInfo.monthly_token_limit.toLocaleString()} tokens
+                      <strong>Total:</strong> {planInfo.weekly_token_limit.toLocaleString()} tokens
                 </span>
               </div>
-                  {((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 && (
+                  {((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) >= 0.8 && (
                     <div className="usage-warning-banner">
                       ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited. Quota will reset monthly.
                     </div>

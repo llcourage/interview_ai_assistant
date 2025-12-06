@@ -71,11 +71,11 @@ function App() {
             window.dispatchEvent(new CustomEvent('planChanged', { detail: newPlan }));
             
             // 检查 Token 使用率警告（仅在 Electron 环境下）
-            if (window.aiShot && planData.monthly_token_limit && planData.monthly_token_limit > 0) {
-              const usagePercentage = ((planData.monthly_tokens_used || 0) / planData.monthly_token_limit * 100);
+            if (window.aiShot && planData.weekly_token_limit && planData.weekly_token_limit > 0) {
+              const usagePercentage = ((planData.weekly_tokens_used || 0) / planData.weekly_token_limit * 100);
               if (usagePercentage >= 80) {
                 const usagePercentageStr = usagePercentage.toFixed(1);
-                const message = `⚠️ Token 使用率警告\n\n您本月已使用 ${usagePercentageStr}% 的 Token 配额 (${(planData.monthly_tokens_used || 0).toLocaleString()} / ${planData.monthly_token_limit.toLocaleString()})\n\n剩余配额有限，请合理使用。配额将在每月重置。`;
+                const message = `⚠️ Token 使用率警告\n\n您本周已使用 ${usagePercentageStr}% 的 Token 配额 (${(planData.weekly_tokens_used || 0).toLocaleString()} / ${planData.weekly_token_limit.toLocaleString()})\n\n剩余配额有限，请合理使用。配额将在每周重置。`;
                 
                 // 使用 Electron 原生通知
                 if (window.aiShot.showTokenWarning) {
