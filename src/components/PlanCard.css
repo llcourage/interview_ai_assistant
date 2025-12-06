@@ -1,9 +1,9 @@
 /* Plan Card 基础样式 - Linear/Vercel 风格 */
 .plan-card {
   background: var(--gradient-card); /* 卡片光泽 - subtle inner glow */
-  border-radius: 20px;
+  border-radius: 14px;
   border: 1px solid var(--color-border-subtle);
-  padding: 1.25rem 1.5rem; /* 减少内边距，让卡片更紧凑 */
+  padding: 0.75rem 1rem; /* 减少30%内边距 */
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
@@ -11,7 +11,7 @@
   position: relative;
   overflow: visible; /* 改为 visible，让标签可以超出边界 */
   height: auto; /* 确保高度自适应 */
-  min-height: 320px; /* 设置最小高度，保持一致性 */
+  min-height: 260px; /* 减小最小高度 */
 }
 
 .plan-card:hover {
@@ -23,11 +23,11 @@
 /* 顶部：标题 + 推荐标签 */
 .plan-card-header {
   position: relative;
-  margin-bottom: 0.75rem; /* 减少间距 */
+  margin-bottom: 0.4rem; /* 减少间距 */
 }
 
 .plan-name {
-  font-size: 1.5rem; /* 减小字体 */
+  font-size: 1.1rem; /* 减小30%字体 */
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
@@ -37,13 +37,13 @@
 /* 推荐标签 - 移到右上角 */
 .plan-tag {
   position: absolute;
-  top: -12px; /* -top-3 */
-  right: -12px; /* -right-3 */
-  padding: 0.5rem 0.75rem; /* px-3 py-1 */
+  top: -10px; /* 调整位置 */
+  right: -10px; /* 调整位置 */
+  padding: 0.4rem 0.6rem; /* 减小标签内边距 */
   background: var(--gradient-primary); /* 使用统一渐变 */
   border: none;
   border-radius: 9999px; /* rounded-full */
-  font-size: 0.75rem; /* text-xs */
+  font-size: 0.7rem; /* 减小标签字体 */
   font-weight: 600; /* font-semibold */
   color: var(--color-text-primary);
   text-transform: uppercase;
@@ -55,13 +55,13 @@
 
 /* 中部：特性描述 */
 .plan-features {
-  margin-bottom: 1rem; /* 减少间距 */
+  margin-bottom: 0.6rem; /* 减少间距 */
 }
 
 .plan-features-text {
-  font-size: 0.95rem;
+  font-size: 0.8rem; /* 减小特性字体 */
   color: var(--color-text-secondary);
-  line-height: 1.6;
+  line-height: 1.4;
   margin: 0;
 }
 
@@ -69,21 +69,21 @@
 .plan-price-row {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem; /* 减少间距 */
-  padding-bottom: 1rem; /* 减少内边距 */
+  gap: 0.4rem;
+  margin-bottom: 0.75rem; /* 减少间距 */
+  padding-bottom: 0.6rem; /* 减少内边距 */
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .plan-price {
-  font-size: 2rem; /* 减小价格字体 */
+  font-size: 1.5rem; /* 减小价格字体 */
   font-weight: 600; /* font-semibold - 更粗 */
   color: var(--color-text-primary);
   line-height: 1;
 }
 
 .plan-billing {
-  font-size: 1rem;
+  font-size: 0.85rem; /* 减小billing字体 */
   color: var(--color-text-muted);
   font-weight: 400;
 }
@@ -95,12 +95,12 @@
 
 .plan-button {
   width: 100%;
-  padding: 1rem 2rem;
+  padding: 0.6rem 1rem; /* 减小按钮内边距 */
   background: var(--gradient-primary);
   color: var(--color-text-primary);
   border: none;
-  border-radius: 12px;
-  font-size: 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem; /* 减小按钮字体 */
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
