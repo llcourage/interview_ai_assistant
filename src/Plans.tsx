@@ -87,7 +87,7 @@ export const Plans: React.FC = () => {
             features={[
               "Great Model",
               "100K Tokens Lifetime",
-              "No Monthly Reset"
+              "No Weekly Reset"
             ]}
             price="Free"
             billing=""
@@ -99,7 +99,7 @@ export const Plans: React.FC = () => {
             name="Normal Plan"
             features={[
               "Great Model",
-              "1M Tokens per Month"
+              "1M Tokens per week"
             ]}            
             price="$19.9"
             billing="/week"
@@ -111,7 +111,7 @@ export const Plans: React.FC = () => {
             name="High Plan"
             features={[
               "Exceptional Model",
-              "1M Tokens per Month"
+              "1M Tokens per week"
             ]}
             price="$39.9"
             billing="/week"
@@ -124,7 +124,7 @@ export const Plans: React.FC = () => {
             recommended
             features={[
               "State of the Art Model",
-              "1M Tokens per Month",
+              "1M Tokens per week",
               "Priority Support"
             ]}
             price="$69.9"
