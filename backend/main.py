@@ -379,16 +379,27 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
     # 非桌面版：正常处理
     try:
         supabase = get_supabase()
-        # 使用 code 交换 session
+        # 使用 code 交换 session - 使用与 login_user 相同的方式
         response = supabase.auth.exchange_code_for_session(code)
         
-        if not response.session or not response.user:
+        # 调试日志
+        print(f"🔍 OAuth 回调响应类型: {type(response)}")
+        
+        if not response.user:
+            print(f"❌ OAuth 回调失败：response.user 为空")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OAuth 回调失败：无法获取用户会话"
+                detail="OAuth 回调失败：无法获取用户信息"
             )
         
-        # 返回 token 信息
+        if not response.session:
+            print(f"❌ OAuth 回调失败：response.session 为空")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth 回调失败：无法获取会话信息"
+            )
+        
+        # 返回 token 信息 - 使用与 login_user 相同的方式
         token = Token(
             access_token=response.session.access_token,
             refresh_token=response.session.refresh_token,
@@ -399,7 +410,23 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
         )
         
         return token
+    except HTTPException:
+        raise
+    except AttributeError as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ OAuth 回调属性错误: {e}")
+        print(f"错误堆栈:\n{error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"OAuth 回调处理失败：响应格式不正确 - {str(e)}"
+        )
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ OAuth 回调处理错误: {e}")
+        print(f"错误类型: {type(e)}")
+        print(f"错误堆栈:\n{error_trace}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"OAuth 回调处理失败: {str(e)}"
