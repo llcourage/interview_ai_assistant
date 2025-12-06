@@ -3,7 +3,7 @@
   background: var(--gradient-card); /* 卡片光泽 - subtle inner glow */
   border-radius: 14px;
   border: 1px solid var(--color-border-subtle);
-  padding: 1rem 0.6rem; /* 进一步减少左右内边距，缩小卡片宽度 */
+  padding: 1.5rem 1rem; /* 减少左右内边距约1/3（从1.5rem减少到1rem） */
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
@@ -11,7 +11,7 @@
   position: relative;
   overflow: visible; /* 改为 visible，让标签可以超出边界 */
   height: auto; /* 确保高度自适应 */
-  min-height: 260px; /* 减小最小高度 */
+  min-height: 320px;
   max-width: 100%; /* 确保不超过容器 */
 }
 
@@ -24,11 +24,11 @@
 /* 顶部：标题 + 推荐标签 */
 .plan-card-header {
   position: relative;
-  margin-bottom: 0.4rem; /* 减少间距 */
+  margin-bottom: 0.75rem; /* 保持原间距 */
 }
 
 .plan-name {
-  font-size: 1.25rem; /* 恢复原字体大小 */
+  font-size: 1.5rem; /* 保持原字体大小 */
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
@@ -56,13 +56,13 @@
 
 /* 中部：特性描述 */
 .plan-features {
-  margin-bottom: 0.6rem; /* 减少间距 */
+  margin-bottom: 1rem; /* 保持原间距 */
 }
 
 .plan-features-text {
-  font-size: 1rem; /* 放大特性字体，比原来更大 */
+  font-size: 0.95rem; /* 保持原字体大小 */
   color: var(--color-text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
   margin: 0;
 }
 
@@ -70,21 +70,21 @@
 .plan-price-row {
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
-  margin-bottom: 0.75rem; /* 减少间距 */
-  padding-bottom: 0.6rem; /* 减少内边距 */
+  gap: 0.5rem;
+  margin-bottom: 1.25rem; /* 保持原间距 */
+  padding-bottom: 1rem; /* 保持原内边距 */
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .plan-price {
-  font-size: 1.75rem; /* 恢复价格字体 */
+  font-size: 2.5rem; /* 保持原字体大小 */
   font-weight: 600; /* font-semibold - 更粗 */
   color: var(--color-text-primary);
   line-height: 1;
 }
 
 .plan-billing {
-  font-size: 0.9rem; /* 恢复billing字体 */
+  font-size: 1rem; /* 保持原字体大小 */
   color: var(--color-text-muted);
   font-weight: 400;
 }
@@ -95,15 +95,13 @@
 }
 
 .plan-button {
-  width: auto; /* 改为自动宽度 */
-  max-width: 70%; /* 进一步限制最大宽度为70%，让按钮更窄 */
-  margin: 0 auto; /* 居中 */
-  padding: 0.75rem 1rem; /* 减少左右内边距，让按钮更窄 */
+  width: 100%; /* 恢复按钮全宽 */
+  padding: 1rem 2rem; /* 保持原按钮内边距 */
   background: var(--gradient-primary);
   color: var(--color-text-primary);
   border: none;
-  border-radius: 8px;
-  font-size: 0.9rem; /* 恢复按钮字体 */
+  border-radius: 12px;
+  font-size: 1rem; /* 保持原字体大小 */
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
