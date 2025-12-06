@@ -65,21 +65,21 @@ PLAN_LIMITS = {
         "features": ["basic_chat", "image_analysis"]
     },
     PlanType.NORMAL: {
-        "monthly_token_limit": 500_000,  # 500k tokens per month
+        "monthly_token_limit": 1_000_000,  # 1M tokens per month
         "is_lifetime": False,
-        "models": ["gpt-4o-mini"],  # Only mini model
+        "models": ["gpt-4o-mini"],  # Great Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
-        "monthly_token_limit": 500_000,  # 500k tokens per month
+        "monthly_token_limit": 1_000_000,  # 1M tokens per month
         "is_lifetime": False,
-        "models": ["gpt-5-mini"],  # High Plan uses gpt-5-mini
+        "models": ["gpt-5-mini"],  # Exceptional Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.ULTRA: {
         "monthly_token_limit": 1_000_000,  # 1M tokens per month
         "is_lifetime": False,
-        "models": ["gpt-4o"],  # Ultra Plan uses gpt-4o
+        "models": ["gpt-4o"],  # State of the Art Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "advanced_reasoning"]
     }
 }

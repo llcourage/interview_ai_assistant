@@ -3,7 +3,7 @@
   background: var(--gradient-card); /* 卡片光泽 - subtle inner glow */
   border-radius: 20px;
   border: 1px solid var(--color-border-subtle);
-  padding: 1.5rem 2rem; /* 减少内边距 */
+  padding: 1.25rem 1.5rem; /* 减少内边距，让卡片更紧凑 */
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
@@ -11,6 +11,7 @@
   position: relative;
   overflow: visible; /* 改为 visible，让标签可以超出边界 */
   height: auto; /* 确保高度自适应 */
+  min-height: 320px; /* 设置最小高度，保持一致性 */
 }
 
 .plan-card:hover {
@@ -26,7 +27,7 @@
 }
 
 .plan-name {
-  font-size: 1.75rem;
+  font-size: 1.5rem; /* 减小字体 */
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
@@ -75,7 +76,7 @@
 }
 
 .plan-price {
-  font-size: 2.5rem;
+  font-size: 2rem; /* 减小价格字体 */
   font-weight: 600; /* font-semibold - 更粗 */
   color: var(--color-text-primary);
   line-height: 1;

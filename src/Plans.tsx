@@ -99,8 +99,8 @@ export const Plans: React.FC = () => {
           <PlanCard
             name="Normal Plan"
             features={[
-              "GPT-4o-mini Model",
-              "500K Tokens per Month"
+              "Great Model",
+              "1M Tokens per Month"
             ]}            
             price="$19.9"
             billing="/week"
@@ -111,10 +111,10 @@ export const Plans: React.FC = () => {
           <PlanCard
             name="High Plan"
             features={[
-              "GPT-5-mini Model",
-              "500K Tokens per Month"
+              "Exceptional Model",
+              "1M Tokens per Month"
             ]}
-            price="$39"
+            price="$39.9"
             billing="/week"
             loading={loading === 'high'}
             onSelect={() => handlePlanSelect('high')}
@@ -125,11 +125,11 @@ export const Plans: React.FC = () => {
             recommended
             subtitle="Premium AI"
             features={[
-              "GPT-4o Model",
+              "State of the Art Model",
               "1M Tokens per Month",
               "Priority Support"
             ]}
-            price="$69"
+            price="$69.9"
             billing="/week"
             loading={loading === 'ultra'}
             onSelect={() => handlePlanSelect('ultra')}

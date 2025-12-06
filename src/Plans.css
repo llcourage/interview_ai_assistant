@@ -91,15 +91,22 @@
 
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 2.5rem;
-  max-width: 900px;
-  margin: 0 auto 0; /* mt-2 (0.5rem) - 很小的顶部间距 */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto 0;
   position: relative;
   z-index: 1;
 }
 
 /* Responsive */
+@media (max-width: 1200px) {
+  .plans-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 900px;
+  }
+}
+
 @media (max-width: 768px) {
   .plans-title {
     font-size: 2rem;
@@ -107,6 +114,7 @@
 
   .plans-grid {
     grid-template-columns: 1fr;
+    max-width: 100%;
   }
 }
 
