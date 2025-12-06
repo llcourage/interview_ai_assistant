@@ -119,18 +119,18 @@ export const logout = async (): Promise<void> => {
 export const getCurrentUser = async (): Promise<User | null> => {
   const token = getToken();
   if (!token) {
-    console.log('🔒 getCurrentUser: No token');
+    // No token found
     return null;
   }
 
   try {
     const authHeader = getAuthHeader();
     if (!authHeader) {
-      console.log('🔒 getCurrentUser: No auth header');
+      // No auth header
       return null;
     }
 
-    console.log('🔒 getCurrentUser: Calling API:', `${API_BASE_URL}/api/me`);
+    // Calling API to get current user
     const response = await fetch(`${API_BASE_URL}/api/me`, {
       headers: {
         'Authorization': authHeader,
@@ -141,14 +141,14 @@ export const getCurrentUser = async (): Promise<User | null> => {
       console.error('🔒 getCurrentUser: API error', response.status, response.statusText);
       // Token 可能已过期
       if (response.status === 401) {
-        console.log('🔒 getCurrentUser: 401 Unauthorized, clearing token');
+        // 401 Unauthorized, clearing token
         clearToken();
       }
       return null;
     }
 
     const user: User = await response.json();
-    console.log('🔒 getCurrentUser: Success', user.email);
+    // User authenticated successfully
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     return user;
   } catch (error) {
@@ -163,7 +163,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
 export const isAuthenticated = async (): Promise<boolean> => {
   const token = getToken();
   if (!token) {
-    console.log('🔒 isAuthenticated: No token found');
+    // No token found
     return false;
   }
 
@@ -171,7 +171,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
   try {
     const user = await getCurrentUser();
     const authenticated = user !== null;
-    console.log('🔒 isAuthenticated:', authenticated, user ? `User: ${user.email}` : 'No user');
+    // Authentication check completed
     return authenticated;
   } catch (error) {
     console.error('🔒 isAuthenticated error:', error);

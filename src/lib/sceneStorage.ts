@@ -332,9 +332,24 @@ export function setCurrentScene(sceneId: string, presetId?: string): void {
 }
 
 /**
- * 获取当前 Prompt 模板
+ * Get custom default prompt from settings (if set)
+ */
+export function getCustomDefaultPrompt(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('customDefaultPrompt') || '';
+}
+
+/**
+ * 获取当前 Prompt 模板（包含自定义默认 prompt）
  */
 export function getCurrentPrompt(): string {
+  // Check if custom default prompt is set
+  const customPrompt = getCustomDefaultPrompt();
+  if (customPrompt) {
+    return customPrompt;
+  }
+  
+  // Otherwise use scene-specific prompt
   const config = getSceneConfig();
   const scene = config.scenes.find(s => s.id === config.currentSceneId);
   if (scene) {

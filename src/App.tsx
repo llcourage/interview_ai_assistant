@@ -10,6 +10,7 @@ import { PlanSelector, PlanType } from './components/PlanSelector'
 import { API_BASE_URL } from './lib/api'
 import { ScenarioEditDialog } from './components/ScenarioEditDialog'
 import { ScenarioSelector } from './components/ScenarioSelector'
+import { SettingsDialog } from './components/SettingsDialog'
 import { getCurrentSceneName, getSceneConfig } from './lib/sceneStorage'
 
 // Session 类型定义
@@ -55,6 +56,7 @@ function App() {
   const [editingScenario, setEditingScenario] = useState<any>(null);
   const [currentSceneName, setCurrentSceneName] = useState<string>(getCurrentSceneName());
   const [showScenarioSelector, setShowScenarioSelector] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // 📦 Load Plan info from backend API (sync with web)
   useEffect(() => {
@@ -122,40 +124,36 @@ function App() {
     let isMounted = true;
     let lastAuthStatus: boolean | null = null;
     
-    const checkAuth = async () => {
-      const authenticated = await isAuthenticated();
-      console.log('🔒 App.tsx - Current auth status:', authenticated);
-      
-      if (!isMounted) return;
-      
-      // Only notify Electron when status changes to avoid duplicate calls
-      if (lastAuthStatus !== authenticated) {
-        console.log('🔒 App.tsx - Auth status changed:', lastAuthStatus, '->', authenticated);
-        lastAuthStatus = authenticated;
-        setAuthStatus(authenticated);
-      
-      // 🔒 If logged in, notify Electron to create overlay window
-        if (authenticated && window.aiShot?.userLoggedIn) {
-          console.log('🔒 App.tsx - Calling userLoggedIn');
-        await window.aiShot.userLoggedIn();
-        } else if (!authenticated && window.aiShot?.userLoggedOut) {
-          console.log('🔒 App.tsx - Calling userLoggedOut');
-          await window.aiShot.userLoggedOut();
+      const checkAuth = async () => {
+        const authenticated = await isAuthenticated();
+        
+        if (!isMounted) return;
+        
+        // Only notify Electron when status changes to avoid duplicate calls
+        if (lastAuthStatus !== authenticated) {
+          console.log('🔒 Auth status changed:', lastAuthStatus, '->', authenticated);
+          lastAuthStatus = authenticated;
+          setAuthStatus(authenticated);
+        
+        // 🔒 If logged in, notify Electron to create overlay window
+          if (authenticated && window.aiShot?.userLoggedIn) {
+            await window.aiShot.userLoggedIn();
+          } else if (!authenticated && window.aiShot?.userLoggedOut) {
+            await window.aiShot.userLoggedOut();
+          }
         }
-      }
-    };
+      };
     
     checkAuth();
     
     // Listen to authentication state change events (triggered on login/logout)
     const handleAuthStateChange = () => {
-      console.log('🔒 App.tsx - Auth state change event received');
       checkAuth();
     };
     window.addEventListener('auth-state-changed', handleAuthStateChange);
     
-    // Periodically check authentication status (replacement for Supabase real-time listening)
-    const interval = setInterval(checkAuth, 5000);
+    // Periodically check authentication status (every 30 seconds to reduce log spam)
+    const interval = setInterval(checkAuth, 30000);
     
     return () => {
       isMounted = false;
@@ -247,24 +245,25 @@ function App() {
     }
   };
 
-  // 从 localStorage 加载所有 Session
+  // Load all Sessions from localStorage
   useEffect(() => {
     const loadSessions = () => {
       try {
         const sessionsData = localStorage.getItem('sessions');
+        
         if (sessionsData) {
           const parsed: SessionData[] = JSON.parse(sessionsData);
+          
           // Filter out empty sessions (no conversation records)
           const validSessions = parsed.filter(s => 
             s.conversations && s.conversations.length > 0
           );
+          
           // Sort by timestamp descending (newest first)
           validSessions.sort((a, b) => b.timestamp - a.timestamp);
           setSessions(validSessions);
-          console.log('📚 Loaded Session List:', validSessions.length, 'sessions');
         } else {
           setSessions([]);
-          console.log('📚 Session List: No session data in localStorage');
         }
       } catch (error) {
         console.error('❌ Failed to load Session List:', error);
@@ -278,7 +277,6 @@ function App() {
     // Listen to localStorage storage events (cross-window sync)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'sessions') {
-        console.log('📚 Session List: Detected localStorage change, reloading');
         loadSessions();
       }
     };
@@ -286,13 +284,12 @@ function App() {
     
     // Listen to custom events (same-window sync)
     const handleSessionsUpdate = () => {
-      console.log('📚 Session List: Received update event, reloading');
       loadSessions();
     };
     window.addEventListener('sessionsUpdated', handleSessionsUpdate as EventListener);
     
-    // Refresh every second to show new sessions in real-time (as fallback)
-    const interval = setInterval(loadSessions, 1000);
+    // Refresh every 3 seconds to show new sessions in real-time (as fallback)
+    const interval = setInterval(loadSessions, 3000);
     
     return () => {
       clearInterval(interval);
@@ -403,6 +400,14 @@ function App() {
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button 
               className="theme-toggle" 
+              onClick={() => setShowSettings(true)}
+              title="Settings"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              ⚙️ Settings
+            </button>
+            <button 
+              className="theme-toggle" 
               onClick={handleLogout}
               title="Logout"
               style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
@@ -446,7 +451,6 @@ function App() {
             {sessions.length === 0 ? (
               <div className="empty-state">
                 <p>No session records yet</p>
-                <p className="hint">Use the overlay window to start your first conversation!</p>
               </div>
             ) : (
               <div className="session-items">
@@ -553,7 +557,7 @@ function App() {
         <p>💡 Tip: Use <kbd>Ctrl+N</kbd> to create a new session</p>
       </footer>
 
-      {/* 场景编辑对话框 */}
+      {/* Scenario Editor Dialog */}
       {showScenarioEditor && (
         <ScenarioEditDialog
           mode={scenarioEditorMode}
@@ -572,6 +576,14 @@ function App() {
             // Trigger scene configuration update event
             window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
           }}
+        />
+      )}
+
+      {/* Settings Dialog */}
+      {showSettings && (
+        <SettingsDialog
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>

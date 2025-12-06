@@ -119,6 +119,11 @@ contextBridge.exposeInMainWorld('aiShot', {
     ipcRenderer.on('open-scenario-editor', (event, data) => {
       callback(data);
     });
+  },
+
+  // 📁 选择文件夹
+  selectFolder: (options) => {
+    return ipcRenderer.invoke('select-folder', options);
   }
 });
 

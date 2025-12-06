@@ -1206,6 +1206,27 @@ ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh')
   }
 });
 
+// 📁 IPC: 选择文件夹
+ipcMain.handle('select-folder', async (event, options = {}) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win || mainWindow, {
+      properties: ['openDirectory'],
+      title: options.title || 'Select Folder',
+      defaultPath: options.defaultPath || app.getPath('documents')
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: null };
+    }
+
+    return { canceled: false, path: result.filePaths[0] };
+  } catch (error) {
+    console.error('❌ 选择文件夹失败:', error);
+    return { canceled: true, path: null, error: error.message };
+  }
+});
+
 // 全局错误处理
 process.on('uncaughtException', (error) => {
   console.error('🚨 未捕获的异常:', error);
