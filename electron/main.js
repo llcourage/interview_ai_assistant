@@ -6,12 +6,15 @@ const { promisify } = require('util');
 const writeFile = promisify(fs.writeFile);
 const unlink = promisify(fs.unlink);
 const { createWriteStream } = require('fs');
+const https = require('https');
+const http = require('http');
 
 // 🚨 恢复 GPU 加速（有些系统禁用后反而黑屏）
 // app.disableHardwareAcceleration();
 
 let mainWindow = null;
 let overlayWindow = null;
+let oauthWindow = null;
 let currentScreenshot = null;
 
 const isDev = !app.isPackaged;
@@ -728,6 +731,195 @@ ipcMain.handle('user-logged-out', () => {
     overlayWindow = null;
   }
   return { success: true };
+});
+
+// 辅助函数：在 Node.js 中发送 HTTP 请求
+function httpRequest(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const isHttps = urlObj.protocol === 'https:';
+    const httpModule = isHttps ? https : http;
+    
+    const requestOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (isHttps ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    };
+    
+    console.log('🔐 发送 HTTP 请求:', requestOptions.method, requestOptions.hostname + requestOptions.path);
+    
+    const req = httpModule.request(requestOptions, (res) => {
+      let data = '';
+      
+      console.log('🔐 收到响应:', res.statusCode, res.statusMessage);
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        console.log('🔐 响应数据长度:', data.length);
+        console.log('🔐 响应数据预览:', data.substring(0, Math.min(200, data.length)));
+        
+        try {
+          const jsonData = JSON.parse(data);
+          resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 300, json: () => Promise.resolve(jsonData), text: () => Promise.resolve(data) });
+        } catch (e) {
+          console.error('🔐 JSON 解析失败:', e.message);
+          resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 300, json: () => Promise.reject(new Error('Not JSON')), text: () => Promise.resolve(data) });
+        }
+      });
+    });
+    
+    req.on('error', (error) => {
+      console.error('🔐 HTTP 请求错误:', error.message);
+      reject(error);
+    });
+    
+    // 设置超时
+    req.setTimeout(10000, () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+    
+    if (options.body) {
+      req.write(options.body);
+    }
+    
+    req.end();
+  });
+}
+
+// 处理 OAuth 回调
+function handleOAuthCallback(url, resolve, reject) {
+  try {
+    const urlObj = new URL(url);
+    
+    // 检查是否是回调 URL（包含 code 参数）
+    if (urlObj.pathname.includes('/auth/callback') || urlObj.searchParams.has('code')) {
+      const code = urlObj.searchParams.get('code');
+      const error = urlObj.searchParams.get('error');
+      
+      if (error) {
+        console.error('🔐 OAuth 错误:', error);
+        if (oauthWindow && !oauthWindow.isDestroyed()) {
+          oauthWindow.close();
+        }
+        reject(new Error(`OAuth error: ${error}`));
+        return;
+      }
+      
+      if (code) {
+        console.log('🔐 获取到 OAuth code:', code.substring(0, 20) + '...');
+        
+        // 关闭 OAuth 窗口
+        if (oauthWindow && !oauthWindow.isDestroyed()) {
+          oauthWindow.close();
+        }
+        
+        // 返回 code 给前端
+        resolve({ code, success: true });
+      }
+    }
+  } catch (error) {
+    console.error('🔐 处理 OAuth 回调错误:', error);
+    // 不 reject，因为可能只是中间页面导航
+  }
+}
+
+// 🔐 IPC: Google OAuth 登录
+ipcMain.handle('oauth-google', async () => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // 获取 OAuth URL（需要从 API 获取）
+      // 开发环境：优先使用本地后端，生产环境：使用 Vercel
+      const isDev = !app.isPackaged;
+      const API_BASE_URL = isDev 
+        ? (process.env.LOCAL_API_URL || 'http://localhost:8000')
+        : (process.env.VERCEL_API_URL || 'https://www.desktopai.org');
+      const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=http://localhost`;
+      console.log('🔐 请求 OAuth URL:', apiUrl);
+      console.log('🔐 API_BASE_URL:', API_BASE_URL);
+      
+      let response;
+      try {
+        response = await httpRequest(apiUrl);
+        console.log('🔐 API 响应状态:', response.status, 'OK:', response.ok);
+      } catch (httpError) {
+        console.error('🔐 HTTP 请求失败:', httpError);
+        console.error('🔐 错误详情:', httpError.message);
+        console.error('🔐 错误堆栈:', httpError.stack);
+        throw new Error(`HTTP request failed: ${httpError.message}`);
+      }
+      
+      if (!response.ok) {
+        let errorText = 'Unknown error';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          console.error('🔐 无法读取错误响应:', e);
+        }
+        console.error('🔐 API 错误响应状态:', response.status);
+        console.error('🔐 API 错误响应内容:', errorText);
+        throw new Error(`Failed to get OAuth URL: HTTP ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('🔐 API 响应数据:', data);
+      
+      if (!data || !data.url) {
+        throw new Error('Invalid response: missing url field');
+      }
+      
+      const authUrl = data.url;
+      
+      console.log('🔐 打开 Google OAuth 窗口:', authUrl);
+      
+      // 创建 OAuth 窗口
+      oauthWindow = new BrowserWindow({
+        width: 500,
+        height: 600,
+        modal: true,
+        parent: mainWindow,
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+      
+      // 监听窗口准备显示
+      oauthWindow.once('ready-to-show', () => {
+        oauthWindow.show();
+      });
+      
+      // 监听窗口导航，捕获回调 URL
+      oauthWindow.webContents.on('will-navigate', (event, url) => {
+        console.log('🔐 OAuth 窗口导航到:', url);
+        handleOAuthCallback(url, resolve, reject);
+      });
+      
+      // 也监听 did-navigate（某些情况下用这个）
+      oauthWindow.webContents.on('did-navigate', (event, url) => {
+        console.log('🔐 OAuth 窗口已导航到:', url);
+        handleOAuthCallback(url, resolve, reject);
+      });
+      
+      // 监听窗口关闭
+      oauthWindow.on('closed', () => {
+        oauthWindow = null;
+      });
+      
+      // 加载 OAuth URL
+      oauthWindow.loadURL(authUrl);
+      
+    } catch (error) {
+      console.error('🔐 OAuth 错误:', error);
+      console.error('🔐 错误堆栈:', error.stack);
+      reject(new Error(error.message || 'Failed to initiate Google OAuth'));
+    }
+  });
 });
 
 // 🎯 IPC 处理器：场景相关

@@ -184,3 +184,36 @@ async def get_current_active_user(
     return current_user
 
 
+async def get_google_oauth_url(redirect_to: str = None) -> str:
+    """获取 Google OAuth 授权 URL"""
+    try:
+        supabase = get_supabase()
+        
+        # 构建重定向 URL
+        if not redirect_to:
+            import os
+            # 默认重定向到前端登录页面
+            redirect_to = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        
+        # 确保 redirect_to 是完整的 URL
+        if not redirect_to.startswith("http"):
+            redirect_to = f"https://{redirect_to}" if not redirect_to.startswith("localhost") else f"http://{redirect_to}"
+        
+        # 构建回调 URL（指向前端回调路由，前端会用 code 调用后端 API）
+        callback_url = f"{redirect_to}/auth/callback"
+        
+        # 获取 Google OAuth URL
+        response = supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirect_to": callback_url
+            }
+        })
+        
+        return response.url
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取 Google OAuth URL 失败: {str(e)}"
+        )
+

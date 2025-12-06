@@ -15,7 +15,7 @@ if not is_production:
         load_dotenv(dotenv_path=str(env_path), override=False)
 
 # ========== 现在可以导入其他模块 ==========
-from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header
+from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -314,6 +314,96 @@ async def login(user_data: UserLogin, http_request: Request):
     
     # 非桌面版：正常处理
     return await login_user(user_data.email, user_data.password)
+
+
+@app.get("/api/auth/google/url", tags=["认证"])
+async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_request: Request = None):
+    """获取 Google OAuth 授权 URL"""
+    from backend.auth_supabase import get_google_oauth_url
+    
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        async with httpx.AsyncClient() as http_client:
+            try:
+                params = {}
+                if redirect_to:
+                    params["redirect_to"] = redirect_to
+                response = await http_client.get(
+                    f"{vercel_api_url}/api/auth/google/url",
+                    params=params,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理
+    # 如果没有提供 redirect_to，使用请求来源
+    if not redirect_to and http_request:
+        origin = http_request.headers.get("Origin") or http_request.headers.get("Referer", "").rsplit("/", 1)[0]
+        redirect_to = origin if origin else None
+    
+    url = await get_google_oauth_url(redirect_to)
+    return {"url": url}
+
+
+@app.get("/api/auth/callback", tags=["认证"])
+async def oauth_callback(code: str, state: Optional[str] = None, http_request: Request = None):
+    """处理 OAuth 回调"""
+    from backend.db_supabase import get_supabase
+    
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        async with httpx.AsyncClient() as http_client:
+            try:
+                params = {"code": code}
+                if state:
+                    params["state"] = state
+                response = await http_client.get(
+                    f"{vercel_api_url}/api/auth/callback",
+                    params=params,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理
+    try:
+        supabase = get_supabase()
+        # 使用 code 交换 session
+        response = supabase.auth.exchange_code_for_session(code)
+        
+        if not response.session or not response.user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth 回调失败：无法获取用户会话"
+            )
+        
+        # 返回 token 信息
+        token = Token(
+            access_token=response.session.access_token,
+            refresh_token=response.session.refresh_token,
+            user={
+                "id": response.user.id,
+                "email": response.user.email
+            }
+        )
+        
+        return token
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"OAuth 回调处理失败: {str(e)}"
+        )
 
 
 @app.get("/api/me", response_model=User, tags=["认证"])

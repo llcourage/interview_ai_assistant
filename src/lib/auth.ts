@@ -179,3 +179,77 @@ export const isAuthenticated = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * 获取 Google OAuth 授权 URL
+ */
+export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<string> => {
+  const params = new URLSearchParams();
+  if (redirectTo) {
+    params.append('redirect_to', redirectTo);
+  }
+  
+  const response = await fetch(`${API_BASE_URL}/api/auth/google/url?${params.toString()}`);
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Failed to get Google OAuth URL' }));
+    throw new Error(error.detail || 'Failed to get Google OAuth URL');
+  }
+  
+  const data = await response.json();
+  return data.url;
+};
+
+/**
+ * 使用 Google OAuth 登录
+ */
+export const loginWithGoogle = async (): Promise<void> => {
+  try {
+    // 检查是否是 Electron 环境
+    if (typeof window !== 'undefined' && (window as any).aiShot?.loginWithGoogle) {
+      // Electron 环境：使用 Electron OAuth 窗口
+      const result = await (window as any).aiShot.loginWithGoogle();
+      if (result.success && result.code) {
+        // 使用 code 交换 token
+        const token = await handleOAuthCallback(result.code);
+        // 触发认证状态变化事件
+        window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
+        // 重定向到主页面
+        window.location.href = '/';
+        return;
+      } else {
+        throw new Error(result.error || 'Failed to get OAuth code from Electron');
+      }
+    } else {
+      // Web 环境：跳转到 Google 授权页面
+      const redirectTo = window.location.origin;
+      const authUrl = await getGoogleOAuthUrl(redirectTo);
+      // 跳转到 Google 授权页面
+      window.location.href = authUrl;
+    }
+  } catch (error: any) {
+    console.error('Google OAuth error:', error);
+    throw new Error(error.message || 'Failed to initiate Google login');
+  }
+};
+
+/**
+ * 处理 OAuth 回调
+ */
+export const handleOAuthCallback = async (code: string, state?: string): Promise<AuthToken> => {
+  const params = new URLSearchParams({ code });
+  if (state) {
+    params.append('state', state);
+  }
+  
+  const response = await fetch(`${API_BASE_URL}/api/auth/callback?${params.toString()}`);
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'OAuth callback failed' }));
+    throw new Error(error.detail || 'OAuth callback failed');
+  }
+  
+  const token: AuthToken = await response.json();
+  saveToken(token);
+  return token;
+};
+

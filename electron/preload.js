@@ -63,6 +63,11 @@ contextBridge.exposeInMainWorld('aiShot', {
     ipcRenderer.send('open-main-window');
   },
 
+  // Google OAuth 登录
+  loginWithGoogle: () => {
+    return ipcRenderer.invoke('oauth-google');
+  },
+
   // 监听滚动请求
   onScrollContent: (callback) => {
     ipcRenderer.on('scroll-content', (event, direction) => {

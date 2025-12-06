@@ -135,6 +135,12 @@ export interface AiShotAPI {
    * @param callback 回调函数
    */
   onOpenScenarioEditor?: (callback: (data: { mode: 'create' | 'edit'; scenario?: any }) => void) => void;
+
+  /**
+   * Google OAuth 登录（Electron 专用）
+   * @returns Promise，返回包含 code 的对象
+   */
+  loginWithGoogle?: () => Promise<{ success: boolean; code?: string; error?: string }>;
 }
 
 declare global {

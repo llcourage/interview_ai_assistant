@@ -8,6 +8,7 @@ import { Success } from './Success';
 import { Profile } from './Profile';
 import App from './App';
 import { Login } from './Login';
+import { AuthCallback } from './AuthCallback';
 import Overlay from './Overlay';
 import { isElectron } from './utils/isElectron';
 import { isAuthenticated } from './lib/auth';
@@ -98,6 +99,7 @@ export const AppRouter: React.FC = () => {
       <Route path="/plans" element={<Plans />} />
       <Route path="/help" element={<Help />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/success" element={<Success />} />
       <Route path="/profile" element={<Profile />} />
