@@ -167,7 +167,7 @@ export const Settings: React.FC = () => {
               <div className="plan-usage">
                 <div className="usage-item">
                   <div className="usage-header">
-                    <label>月度 Token 配额使用情况</label>
+                    <label>Monthly Token Quota Usage</label>
                     <span className="usage-percentage">
                       {(((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) * 100).toFixed(1)}%
                     </span>
@@ -186,18 +186,18 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="usage-details">
                     <span className="usage-text">
-                      <strong>已使用:</strong> {(planInfo.monthly_tokens_used || 0).toLocaleString()} tokens
+                      <strong>Used:</strong> {(planInfo.monthly_tokens_used || 0).toLocaleString()} tokens
                     </span>
                     <span className="usage-remaining">
-                      <strong>剩余:</strong> {Math.max(0, planInfo.monthly_token_limit - (planInfo.monthly_tokens_used || 0)).toLocaleString()} tokens
+                      <strong>Remaining:</strong> {Math.max(0, planInfo.monthly_token_limit - (planInfo.monthly_tokens_used || 0)).toLocaleString()} tokens
                     </span>
                     <span className="usage-total">
-                      <strong>总额:</strong> {planInfo.monthly_token_limit.toLocaleString()} tokens
+                      <strong>Total:</strong> {planInfo.monthly_token_limit.toLocaleString()} tokens
                     </span>
                   </div>
                   {((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 && (
                     <div className="usage-warning-banner">
-                      ⚠️ 您的配额使用率已超过 80%，剩余配额有限。配额将在每月重置。
+                      ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited. Quota will reset monthly.
                     </div>
                   )}
                 </div>

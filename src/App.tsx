@@ -11,7 +11,6 @@ import { ScenarioEditDialog } from './components/ScenarioEditDialog'
 import { ScenarioSelector } from './components/ScenarioSelector'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
-import { QuotaCard } from './components/QuotaCard'
 import { getCurrentSceneName } from './lib/sceneStorage'
 
 // Session 类型定义
@@ -458,11 +457,6 @@ function App() {
           </div>
         </div>
       </header>
-
-      {/* Quota Card - Display quota usage in main app */}
-      <div className="app-main" style={{ marginTop: '1rem' }}>
-        <QuotaCard />
-      </div>
 
       {/* Plan Selector Modal */}
       {showPlanSelector && (
