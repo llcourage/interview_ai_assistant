@@ -516,7 +516,7 @@ async def get_plan(http_request: Request):
     # Start plan 没有订阅信息（一次性购买）
     subscription_info = None
     if user_plan.plan != PlanType.START:
-        subscription_info = await get_subscription_info(current_user.id)
+    subscription_info = await get_subscription_info(current_user.id)
     
     # 支持月度配额和终身配额
     monthly_token_limit = limits.get("monthly_token_limit")
@@ -840,7 +840,7 @@ async def chat(
         
         # 获取当前配额，计算 billable tokens（clamp 到剩余配额）
         quota_before = await get_user_quota(current_user.id)
-        current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
+            current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
         
         if monthly_token_limit is not None and monthly_token_limit > 0:
             remaining_quota = monthly_token_limit - current_tokens_used

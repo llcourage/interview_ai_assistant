@@ -118,12 +118,12 @@ export const Profile: React.FC = () => {
       <div className="main-container">
         <div className="profile-center-wrapper">
           <div className="profile-cards-container">
-            <ProfileHeader
-              email={userEmail}
-              plan={planInfo?.plan || null}
-              nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
-              onManagePlan={handleManagePlan}
-            />
+          <ProfileHeader
+            email={userEmail}
+            plan={planInfo?.plan || null}
+            nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
+            onManagePlan={handleManagePlan}
+          />
             <QuotaUsageCard
               monthlyTokenLimit={planInfo?.monthly_token_limit}
               monthlyTokensUsed={planInfo?.monthly_tokens_used}

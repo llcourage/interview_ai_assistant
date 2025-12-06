@@ -164,8 +164,8 @@ export const Settings: React.FC = () => {
             </div>
 
             {planInfo.monthly_token_limit !== undefined && planInfo.monthly_token_limit > 0 && (
-              <div className="plan-usage">
-                <div className="usage-item">
+            <div className="plan-usage">
+              <div className="usage-item">
                   <div className="usage-header">
                     <label>Monthly Token Quota Usage</label>
                     <span className="usage-percentage">
@@ -173,19 +173,19 @@ export const Settings: React.FC = () => {
                     </span>
                   </div>
                   <div className="usage-bar-container">
-                    <div 
+                  <div 
                       className={`usage-bar ${((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 ? 'usage-bar-warning' : ''}`}
                     >
                       <div 
                         className={`usage-progress ${((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.9 ? 'usage-progress-danger' : ((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 ? 'usage-progress-warning' : ''}`}
-                        style={{ 
+                    style={{ 
                           width: `${Math.min(((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) * 100, 100)}%` 
-                        }}
-                      />
-                    </div>
+                    }}
+                  />
+                </div>
                   </div>
                   <div className="usage-details">
-                    <span className="usage-text">
+                <span className="usage-text">
                       <strong>Used:</strong> {(planInfo.monthly_tokens_used || 0).toLocaleString()} tokens
                     </span>
                     <span className="usage-remaining">
@@ -193,8 +193,8 @@ export const Settings: React.FC = () => {
                     </span>
                     <span className="usage-total">
                       <strong>Total:</strong> {planInfo.monthly_token_limit.toLocaleString()} tokens
-                    </span>
-                  </div>
+                </span>
+              </div>
                   {((planInfo.monthly_tokens_used || 0) / planInfo.monthly_token_limit) >= 0.8 && (
                     <div className="usage-warning-banner">
                       ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited. Quota will reset monthly.
