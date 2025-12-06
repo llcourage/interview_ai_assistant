@@ -17,6 +17,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   // Check URL parameters
   useEffect(() => {
@@ -26,6 +30,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     if (mode === 'signup') {
       setIsRegister(true);
+      setAcceptedTerms(false);
+      setAcceptedPrivacy(false);
+      setShowTerms(false);
+      setShowPrivacy(false);
     }
 
     // If plan and redirect exist, save to localStorage
@@ -43,6 +51,17 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     try {
       if (isRegister) {
+        // Check if user accepted both terms and privacy policy
+        if (!acceptedTerms) {
+          setError('Please read and accept the Terms of Use to create an account.');
+          setLoading(false);
+          return;
+        }
+        if (!acceptedPrivacy) {
+          setError('Please read and accept the Privacy Policy to create an account.');
+          setLoading(false);
+          return;
+        }
         // Register
         await register(email, password);
           setMessage('Registration successful! Signing in...');
@@ -154,6 +173,277 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             />
           </div>
           
+          {isRegister && (
+            <div className="terms-section">
+              <div className="terms-checkbox-container">
+                <input
+                  type="checkbox"
+                  id="terms-checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  disabled={loading}
+                />
+                <label htmlFor="terms-checkbox" className="terms-label">
+                  I have read and agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowTerms(!showTerms);
+                    }}
+                    className="terms-link"
+                  >
+                    Terms of Use
+                  </button>
+                </label>
+              </div>
+              <div className="terms-checkbox-container">
+                <input
+                  type="checkbox"
+                  id="privacy-checkbox"
+                  checked={acceptedPrivacy}
+                  onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                  disabled={loading}
+                />
+                <label htmlFor="privacy-checkbox" className="terms-label">
+                  I have read and agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowPrivacy(!showPrivacy);
+                    }}
+                    className="terms-link"
+                  >
+                    Privacy Policy
+                  </button>
+                </label>
+              </div>
+              {showTerms && (
+                <div className="terms-modal" onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setShowTerms(false);
+                  }
+                }}>
+                  <div className="terms-modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="terms-modal-header">
+                      <h3>Desktop AI – Terms of Use</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowTerms(false)}
+                        className="terms-close-btn"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="terms-modal-body">
+                      <p><strong>Last updated: 2025-12-01</strong></p>
+                      <p>By accessing or using Desktop AI ("the Service"), you agree to the following Terms of Use. If you do not agree with these terms, you must not use the Service.</p>
+
+                      <h4>1. Description of the Service</h4>
+                      <p>Desktop AI provides AI-powered assistance for tasks such as writing, analysis, brainstorming, and productivity support.</p>
+                      <p>The Service generates responses using artificial intelligence models. All outputs are machine-generated and may be inaccurate, incomplete, misleading, or inappropriate in certain contexts.</p>
+                      <p>Desktop AI is a tool for assistance only and does not replace human judgment.</p>
+
+                      <h4>2. Disclaimer of Accuracy and Warranties</h4>
+                      <p>Desktop AI is provided "as is" and "as available."</p>
+                      <p>We make no guarantees regarding the accuracy, reliability, completeness, or correctness of any output.</p>
+                      <p>AI-generated content may contain factual errors, outdated information, or unreasonable suggestions.</p>
+                      <p>You acknowledge that you use all outputs at your own risk.</p>
+                      <p>To the maximum extent permitted by law, Desktop AI disclaims all warranties, express or implied, including but not limited to fitness for a particular purpose and non-infringement.</p>
+
+                      <h4>3. Anti-Cheating and Prohibited Use Policy (IMPORTANT)</h4>
+                      <p>You must not use Desktop AI for any activity that violates rules, laws, contracts, or ethical standards, including but not limited to:</p>
+                      <ul>
+                        <li>Academic cheating (e.g., submitting AI-generated work as your own where prohibited)</li>
+                        <li>Exam, interview, or assessment fraud</li>
+                        <li>Circumventing employment policies or compliance requirements</li>
+                        <li>Impersonation, plagiarism, or misrepresentation</li>
+                        <li>Assisting or enabling dishonest, deceptive, or unethical behavior</li>
+                      </ul>
+                      <p>Desktop AI is intended to support learning and productivity, not to replace personal effort, qualifications, or integrity.</p>
+                      <p>You are solely responsible for ensuring that your use of the Service complies with:</p>
+                      <ul>
+                        <li>School or academic institution policies</li>
+                        <li>Employer rules and codes of conduct</li>
+                        <li>Laws, regulations, and professional standards</li>
+                      </ul>
+
+                      <h4>4. User Responsibility</h4>
+                      <p>You acknowledge and agree that:</p>
+                      <ul>
+                        <li>You are fully responsible for how you use the outputs of Desktop AI.</li>
+                        <li>Any decisions, actions, or consequences resulting from the use of the Service are your sole responsibility.</li>
+                        <li>Desktop AI does not know your personal context, rules, or constraints.</li>
+                        <li>Do not input confidential, sensitive, proprietary, or personal data unless you clearly understand and accept the risks.</li>
+                      </ul>
+
+                      <h4>5. Limitation of Liability</h4>
+                      <p>To the maximum extent permitted by law:</p>
+                      <ul>
+                        <li>Desktop AI and its creators shall not be liable for any direct, indirect, incidental, consequential, or special damages</li>
+                        <li>This includes, but is not limited to, academic penalties, employment consequences, financial loss, legal issues, or reputational harm</li>
+                        <li>Your sole remedy for dissatisfaction with the Service is to stop using it.</li>
+                      </ul>
+
+                      <h4>6. Data Usage and Logging</h4>
+                      <p>To operate and improve the Service, Desktop AI may collect and store limited usage data and logs, including but not limited to:</p>
+                      <ul>
+                        <li>Feature usage</li>
+                        <li>Error reports</li>
+                        <li>Performance metrics</li>
+                      </ul>
+                      <p>We do not guarantee that AI inputs or outputs will be private or confidential.</p>
+
+                      <h4>7. Changes to These Terms</h4>
+                      <p>We may update these Terms of Use from time to time.</p>
+                      <p>If material changes are made:</p>
+                      <ul>
+                        <li>You may be required to re-accept the updated Terms before continuing to use the Service</li>
+                        <li>Continued use after updates constitutes acceptance of the new terms</li>
+                      </ul>
+
+                      <h4>8. Acceptance</h4>
+                      <p>By logging in, accessing, or using Desktop AI, you acknowledge that:</p>
+                      <ul>
+                        <li>You have read and understood these Terms of Use</li>
+                        <li>You agree to be bound by them</li>
+                        <li>You accept full responsibility for your use of the Service</li>
+                      </ul>
+                    </div>
+                    <div className="terms-modal-footer">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAcceptedTerms(true);
+                          setShowTerms(false);
+                        }}
+                        className="terms-accept-btn"
+                      >
+                        I Accept
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {showPrivacy && (
+                <div className="terms-modal" onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setShowPrivacy(false);
+                  }
+                }}>
+                  <div className="terms-modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="terms-modal-header">
+                      <h3>Desktop AI – Privacy Policy</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowPrivacy(false)}
+                        className="terms-close-btn"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="terms-modal-body">
+                      <p><strong>Last updated: 2025-12-01</strong></p>
+                      <p>Desktop AI ("we", "our", or "the Service") is committed to protecting your privacy. This Privacy Policy explains what data we collect, what we do not collect, and how data is used when you use Desktop AI.</p>
+
+                      <h4>1. Our Privacy Principles</h4>
+                      <p>Desktop AI is designed with a privacy-first architecture:</p>
+                      <ul>
+                        <li>We minimize data collection</li>
+                        <li>We do not store user content</li>
+                        <li>We collect only what is strictly necessary to operate billing and maintain service reliability</li>
+                      </ul>
+
+                      <h4>2. Information We Do Not Collect</h4>
+                      <p>Desktop AI does not collect, store, or retain any of the following:</p>
+                      <ul>
+                        <li>Chat messages or conversation content</li>
+                        <li>AI prompts or AI-generated responses</li>
+                        <li>Voice recordings or audio input</li>
+                        <li>Conversation history</li>
+                        <li>Personal profile information or user-provided profile data</li>
+                        <li>Files, documents, or screen content</li>
+                      </ul>
+                      <p>Any content you submit is processed transiently for generating a response and is not persisted by Desktop AI.</p>
+
+                      <h4>3. Information We Do Collect</h4>
+                      <p>We collect only minimal, non-content usage data, including:</p>
+                      <ul>
+                        <li>Usage counts (e.g., number of requests, interactions, or tokens consumed)</li>
+                        <li>Feature usage metrics (used solely to enforce plan limits)</li>
+                        <li>Subscription and billing-related identifiers</li>
+                        <li>Basic operational logs (e.g., request success/failure, latency, error rates)</li>
+                      </ul>
+                      <p>We do not associate usage data with the actual content of your requests.</p>
+
+                      <h4>4. How We Use Collected Data</h4>
+                      <p>The limited data we collect is used only for the following purposes:</p>
+                      <ul>
+                        <li>Billing and subscription management</li>
+                        <li>Enforcing usage limits based on your plan</li>
+                        <li>Preventing abuse of the Service</li>
+                        <li>Monitoring system performance and reliability</li>
+                      </ul>
+                      <p>Desktop AI does not:</p>
+                      <ul>
+                        <li>Sell user data</li>
+                        <li>Share user data for advertising</li>
+                        <li>Use your data to train AI models</li>
+                      </ul>
+
+                      <h4>5. Data Retention</h4>
+                      <ul>
+                        <li>Content data is not retained because it is not stored</li>
+                        <li>Usage and billing data may be retained as long as necessary for:</li>
+                        <ul>
+                          <li>Subscription management</li>
+                          <li>Accounting and legal obligations</li>
+                          <li>Resolving billing disputes</li>
+                        </ul>
+                      </ul>
+
+                      <h4>6. Data Security</h4>
+                      <p>We use reasonable technical and organizational measures to protect usage and billing data.</p>
+                      <p>However, no online service can guarantee absolute security. By using Desktop AI, you acknowledge and accept this risk.</p>
+
+                      <h4>7. Third-Party Services</h4>
+                      <p>Desktop AI may rely on third-party infrastructure providers (e.g., cloud hosting, payment processors) strictly to operate the Service.</p>
+                      <p>These providers are only given access to the minimum data required to perform their function and are subject to their own privacy obligations.</p>
+
+                      <h4>8. Your Responsibilities</h4>
+                      <p>You are responsible for ensuring that your use of Desktop AI complies with:</p>
+                      <ul>
+                        <li>Applicable laws and regulations</li>
+                        <li>Employer, academic, or organizational privacy rules</li>
+                      </ul>
+                      <p>Do not submit sensitive or confidential information unless you fully understand the risks.</p>
+
+                      <h4>9. Changes to This Privacy Policy</h4>
+                      <p>We may update this Privacy Policy from time to time.</p>
+                      <p>If material changes are made, we may require you to review and re-accept the updated policy before continuing to use the Service.</p>
+
+                      <h4>10. Contact</h4>
+                      <p>If you have questions or concerns about this Privacy Policy, please discontinue use of the Service.</p>
+                    </div>
+                    <div className="terms-modal-footer">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAcceptedPrivacy(true);
+                          setShowPrivacy(false);
+                        }}
+                        className="terms-accept-btn"
+                      >
+                        I Accept
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? '⏳ Processing...' : (isRegister ? 'Sign Up' : 'Sign In')}
           </button>
@@ -186,6 +476,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               setIsRegister(!isRegister);
               setError('');
               setMessage('');
+              setAcceptedTerms(false);
+              setAcceptedPrivacy(false);
+              setShowTerms(false);
+              setShowPrivacy(false);
             }}
             className="toggle-btn"
             disabled={loading}
