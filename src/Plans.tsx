@@ -10,7 +10,7 @@ export const Plans: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState<string | null>(null);
 
-  const handlePlanSelect = async (plan: 'start' | 'normal' | 'high') => {
+  const handlePlanSelect = async (plan: 'start' | 'normal' | 'high' | 'ultra') => {
     setLoading(plan);
     
     try {
@@ -110,16 +110,29 @@ export const Plans: React.FC = () => {
 
           <PlanCard
             name="High Plan"
-            recommended
             features={[
-              "GPT-4o Model (Full Version)",
-              "Access to gpt-4o-mini",
+              "GPT-5-mini Model",
               "500K Tokens per Month"
             ]}
-            price="$29.9"
+            price="$39"
             billing="/week"
             loading={loading === 'high'}
             onSelect={() => handlePlanSelect('high')}
+          />
+
+          <PlanCard
+            name="Ultra Plan"
+            recommended
+            subtitle="Premium AI"
+            features={[
+              "GPT-4o Model",
+              "1M Tokens per Month",
+              "Priority Support"
+            ]}
+            price="$69"
+            billing="/week"
+            loading={loading === 'ultra'}
+            onSelect={() => handlePlanSelect('ultra')}
           />
         </div>
       </div>

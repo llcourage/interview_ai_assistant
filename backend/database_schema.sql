@@ -1,14 +1,14 @@
 -- ========================================
 -- Desktop AI 数据库表结构（简化版）
 -- 用于 Supabase 数据库
--- 只保留 Normal 和 High Plan
+-- 支持 Start Plan (免费), Normal Plan, High Plan
 -- ========================================
 
 -- 1. 用户订阅计划表
 CREATE TABLE IF NOT EXISTS user_plans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    plan VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (plan IN ('start', 'normal', 'high')),
+    plan VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (plan IN ('start', 'normal', 'high', 'ultra')),
     stripe_customer_id VARCHAR(255),
     stripe_subscription_id VARCHAR(255),
     subscription_status VARCHAR(50),

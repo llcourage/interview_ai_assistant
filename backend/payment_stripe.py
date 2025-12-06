@@ -19,7 +19,8 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 # Plan 对应的 Stripe Price IDs
 STRIPE_PRICE_IDS = {
     PlanType.NORMAL: os.getenv("STRIPE_PRICE_NORMAL", "price_xxx"),
-    PlanType.HIGH: os.getenv("STRIPE_PRICE_HIGH", "price_yyy")
+    PlanType.HIGH: os.getenv("STRIPE_PRICE_HIGH", "price_yyy"),
+    PlanType.ULTRA: os.getenv("STRIPE_PRICE_ULTRA", "price_zzz")
 }
 
 
@@ -42,7 +43,7 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
             raise ValueError("STRIPE_SECRET_KEY 未配置，请在环境变量中设置")
         
         price_id = STRIPE_PRICE_IDS.get(plan)
-        if not price_id or price_id in ["price_xxx", "price_yyy"]:
+        if not price_id or price_id in ["price_xxx", "price_yyy", "price_zzz"]:
             raise ValueError(
                 f"未找到 {plan} 对应的 Stripe Price ID。"
                 f"当前值: {price_id}。"

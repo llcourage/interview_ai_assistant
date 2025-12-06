@@ -200,13 +200,16 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
     # Select model based on plan
     # Start Plan: uses gpt-4o-mini
     # Normal Plan: uses gpt-4o-mini
-    # High Plan: uses gpt-4o (full version) by default, can also access gpt-4o-mini
+    # High Plan: uses gpt-5-mini
+    # Ultra Plan: uses gpt-4o
     if plan == PlanType.START:
         model = "gpt-4o-mini"  # Start Plan uses mini
     elif plan == PlanType.NORMAL:
         model = "gpt-4o-mini"  # Normal Plan uses mini
     elif plan == PlanType.HIGH:
-        model = "gpt-4o"  # High Plan uses full version by default
+        model = "gpt-5-mini"  # High Plan uses gpt-5-mini
+    elif plan == PlanType.ULTRA:
+        model = "gpt-4o"  # Ultra Plan uses gpt-4o
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported plan type: {plan}")
     

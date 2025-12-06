@@ -12,7 +12,8 @@ class PlanType(str, Enum):
     """用户订阅计划类型"""
     START = "start"      # 入门计划 - 100k tokens 终身，不重置，gpt-4o-mini
     NORMAL = "normal"    # 付费计划 $19.9/week
-    HIGH = "high"        # 付费计划 $29.9/week
+    HIGH = "high"        # 付费计划 $39/week
+    ULTRA = "ultra"      # 高级计划 $69/week - 使用 gpt-4o
 
 
 class UserPlan(BaseModel):
@@ -70,10 +71,16 @@ PLAN_LIMITS = {
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
-        "monthly_token_limit": 500_000,  # 500k tokens per month (same as Normal)
+        "monthly_token_limit": 500_000,  # 500k tokens per month
         "is_lifetime": False,
-        "models": ["gpt-4o-mini", "gpt-4o"],  # Can access both mini and full gpt-4o
+        "models": ["gpt-5-mini"],  # High Plan uses gpt-5-mini
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
+    },
+    PlanType.ULTRA: {
+        "monthly_token_limit": 1_000_000,  # 1M tokens per month
+        "is_lifetime": False,
+        "models": ["gpt-4o"],  # Ultra Plan uses gpt-4o
+        "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "advanced_reasoning"]
     }
 }
 
