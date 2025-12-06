@@ -379,8 +379,10 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
     # 非桌面版：正常处理
     try:
         supabase = get_supabase()
-        # 使用 code 交换 session - 使用与 login_user 相同的方式
-        response = supabase.auth.exchange_code_for_session(code)
+        # 使用 code 交换 session - Python SDK 需要字典参数，而不是字符串
+        # 根据 Supabase Python SDK 文档，应该使用 {"auth_code": code} 格式
+        print(f"🔍 准备交换 code: {code[:20]}...")
+        response = supabase.auth.exchange_code_for_session({"auth_code": code})
         
         # 调试日志
         print(f"🔍 OAuth 回调响应类型: {type(response)}")
