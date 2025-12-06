@@ -9,14 +9,14 @@
 }
 
 .plans-container {
-  max-width: 1200px; /* 缩小容器宽度，让卡片更紧凑 */
+  max-width: 100%; /* 不限制最大宽度，让grid自己控制 */
   width: 100%;
   margin: 0 auto;
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: flex-start; /* 从 center 改为 flex-start，让内容靠上 */
-  padding: 2rem 1.5rem; /* 减小左右内边距 */
+  padding: 2rem 1rem; /* 恢复一点左右内边距 */
   overflow-y: auto;
   margin-top: 150px; /* 从 120px 减小到 80px，整体上移 */
   position: relative;
@@ -91,31 +91,32 @@
 
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem; /* 减小间距 */
-  max-width: 1100px; /* 缩小grid最大宽度，让卡片整体更紧凑 */
-  margin: 0 auto 0;
+  grid-template-columns: repeat(4, 240px) !important; /* 增加列宽：从200px到240px，保持4列横向排列 */
+  gap: 0.15rem; /* 极小间距：0.15rem (约2.4px) */
+  justify-content: center; /* 居中整体 */
   position: relative;
   z-index: 1;
-  width: 100%;
+  width: fit-content; /* 让grid根据内容自适应宽度 */
+  margin: 0 auto; /* 居中整个grid */
+  grid-auto-flow: row; /* 确保横向排列 */
 }
 
 /* Responsive */
-@media (max-width: 1200px) {
+@media (max-width: 1000px) {
   .plans-grid {
-    grid-template-columns: repeat(2, 1fr);
-    max-width: 900px;
+    grid-template-columns: repeat(2, 240px) !important; /* 中等屏幕：2列，保持相同的卡片宽度 */
+    gap: 0.15rem;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 450px) {
   .plans-title {
     font-size: 2rem;
   }
 
   .plans-grid {
-    grid-template-columns: 1fr;
-    max-width: 100%;
+    grid-template-columns: 1fr !important; /* 小屏幕：1列 */
+    gap: 0.15rem;
   }
 }
 
