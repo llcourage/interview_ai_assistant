@@ -1,0 +1,114 @@
+.quota-card {
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
+.quota-card .card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: rgb(241, 245, 249);
+  margin: 0 0 0.5rem 0;
+}
+
+.quota-usage-content {
+  margin-top: 1.5rem;
+}
+
+.quota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.quota-percentage {
+  font-size: 2rem;
+  font-weight: 700;
+  color: rgb(241, 245, 249); /* text-slate-100 */
+}
+
+.quota-bar-container {
+  margin-bottom: 1.5rem;
+}
+
+.quota-bar {
+  width: 100%;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.quota-bar-warning {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.quota-progress {
+  height: 100%;
+  background: linear-gradient(to right, #3b82f6, #8b5cf6); /* blue to violet */
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.quota-progress-warning {
+  background: linear-gradient(to right, #f59e0b, #ef4444); /* amber to red */
+}
+
+.quota-progress-danger {
+  background: linear-gradient(to right, #dc2626, #991b1b); /* red gradient */
+}
+
+.quota-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.quota-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.quota-label {
+  font-size: 0.875rem;
+  color: rgb(148, 163, 184); /* text-slate-400 */
+  font-weight: 500;
+}
+
+.quota-value {
+  font-size: 0.875rem;
+  color: rgb(241, 245, 249); /* text-slate-100 */
+  font-weight: 600;
+}
+
+.quota-warning-banner {
+  padding: 1rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 0.5rem;
+  color: #fbbf24; /* amber-400 */
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .quota-percentage {
+    font-size: 1.5rem;
+  }
+
+  .quota-details {
+    gap: 0.5rem;
+  }
+
+  .quota-detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}
+

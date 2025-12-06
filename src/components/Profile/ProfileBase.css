@@ -24,6 +24,15 @@
   padding: 2rem 0;
 }
 
+/* Profile 卡片容器 */
+.profile-cards-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 800px;
+}
+
 /* 卡片基础样式 - 统一视觉语言 */
 .card {
   background: rgb(15, 23, 42); /* bg-slate-900 */
