@@ -319,6 +319,24 @@ async def login(user_data: UserLogin, http_request: Request):
     return await login_user(user_data.email, user_data.password)
 
 
+@app.get("/api/config/supabase", tags=["配置"])
+async def get_supabase_config():
+    """获取 Supabase 配置（供前端 OAuth 使用）"""
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    
+    if not supabase_url or not supabase_anon_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase 配置缺失"
+        )
+    
+    return {
+        "supabase_url": supabase_url,
+        "supabase_anon_key": supabase_anon_key
+    }
+
+
 @app.get("/api/auth/google/url", tags=["认证"])
 async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_request: Request = None):
     """获取 Google OAuth 授权 URL"""
@@ -358,7 +376,16 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
         redirect_to = origin if origin else None
     
     url = await get_google_oauth_url(redirect_to)
-    return {"url": url}
+    
+    # 同时返回 Supabase 配置，供前端 OAuth 回调使用
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    
+    return {
+        "url": url,
+        "supabase_url": supabase_url,
+        "supabase_anon_key": supabase_anon_key
+    }
 
 
 @app.get("/api/auth/callback", tags=["认证"])
@@ -388,10 +415,9 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
     
     # 非桌面版：正常处理
     try:
-        # 对于 OAuth 回调，我们需要使用与生成 OAuth URL 时相同的 Supabase 客户端配置
-        # 使用 ANON_KEY 而不是 SERVICE_ROLE_KEY，因为 OAuth 是用户认证流程，且需要 PKCE 支持
+        # 使用 Supabase REST API 直接处理 OAuth 回调，避免 Python SDK 的 PKCE 问题
         import os
-        from supabase import create_client
+        import httpx
         
         supabase_url = os.getenv("SUPABASE_URL", "")
         supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
@@ -402,14 +428,62 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                 detail="Supabase 配置缺失: SUPABASE_URL 或 SUPABASE_ANON_KEY 未设置"
             )
         
-        # 创建使用 ANON_KEY 的 Supabase 客户端（与生成 OAuth URL 时相同）
-        # 这确保 PKCE 流程能够正常工作
-        supabase = create_client(supabase_url, supabase_anon_key)
-        
-        # 使用 code 交换 session
-        # Supabase Python SDK 会自动处理 PKCE（如果 OAuth URL 使用了 PKCE）
+        # 使用 Supabase REST API 交换 code
+        # 注意：如果 OAuth URL 使用了 PKCE，这里需要提供 code_verifier
+        # 但由于我们无法在不同请求间共享 code_verifier，我们尝试不使用 PKCE
         print(f"🔍 准备交换 code: {code[:20]}...")
-        response = supabase.auth.exchange_code_for_session({"auth_code": code})
+        
+        # 构建 Supabase Auth API 端点
+        auth_url = f"{supabase_url}/auth/v1/token?grant_type=authorization_code"
+        
+        # 准备请求数据
+        data = {
+            "code": code,
+            "grant_type": "authorization_code"
+        }
+        
+        headers = {
+            "apikey": supabase_anon_key,
+            "Content-Type": "application/json"
+        }
+        
+        # 发送请求到 Supabase REST API
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.post(
+                auth_url,
+                json=data,
+                headers=headers,
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                error_text = response.text
+                print(f"❌ Supabase OAuth 回调失败: {response.status_code} - {error_text}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"OAuth 回调处理失败: {error_text}"
+                )
+            
+            token_data = response.json()
+            
+            # 解析响应
+            if not token_data.get("access_token") or not token_data.get("user"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="OAuth 回调失败：无法获取 token 或用户信息"
+                )
+            
+            # 返回 token 信息
+            token = Token(
+                access_token=token_data["access_token"],
+                refresh_token=token_data.get("refresh_token", ""),
+                user={
+                    "id": token_data["user"]["id"],
+                    "email": token_data["user"].get("email", "")
+                }
+            )
+            
+            return token
         
         # 调试日志
         print(f"🔍 OAuth 回调响应类型: {type(response)}")

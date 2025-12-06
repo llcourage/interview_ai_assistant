@@ -181,8 +181,9 @@ export const isAuthenticated = async (): Promise<boolean> => {
 
 /**
  * 获取 Google OAuth 授权 URL
+ * 同时获取 Supabase 配置（用于 OAuth 回调）
  */
-export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<string> => {
+export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: string; supabaseUrl?: string; supabaseAnonKey?: string }> => {
   const params = new URLSearchParams();
   if (redirectTo) {
     params.append('redirect_to', redirectTo);
@@ -196,7 +197,11 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<string> =>
   }
   
   const data = await response.json();
-  return data.url;
+  return {
+    url: data.url,
+    supabaseUrl: data.supabase_url,
+    supabaseAnonKey: data.supabase_anon_key
+  };
 };
 
 /**
@@ -207,6 +212,16 @@ export const loginWithGoogle = async (): Promise<void> => {
     // 检查是否是 Electron 环境
     if (typeof window !== 'undefined' && (window as any).aiShot?.loginWithGoogle) {
       // Electron 环境：使用 Electron OAuth 窗口
+      // 先获取 Supabase 配置（从 API）
+      const redirectTo = 'https://www.desktopai.org/auth/callback';
+      const { supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
+      
+      // 保存 Supabase 配置到 localStorage，供 handleOAuthCallback 使用
+      if (supabaseUrl && supabaseAnonKey) {
+        localStorage.setItem('supabase_url', supabaseUrl);
+        localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+      }
+      
       const result = await (window as any).aiShot.loginWithGoogle();
       if (result.success && result.code) {
         // 使用 code 和 state 交换 token
@@ -223,7 +238,19 @@ export const loginWithGoogle = async (): Promise<void> => {
       // Web 环境：跳转到 Google 授权页面
       // redirectTo 指向前端路由，这样回调会在前端处理（使用 Supabase JS SDK 的 exchangeCodeForSession）
       const redirectTo = `${window.location.origin}/auth/callback`;
-      const authUrl = await getGoogleOAuthUrl(redirectTo);
+      const { url: authUrl, supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
+      
+      // 如果 API 返回了 Supabase 配置，更新 Supabase 客户端
+      if (supabaseUrl && supabaseAnonKey) {
+        const { supabase } = await import('./supabase');
+        // 动态更新 Supabase 客户端配置
+        // 注意：Supabase 客户端是单例，我们需要重新创建
+        // 但由于 createClient 在模块级别，我们需要在 handleOAuthCallback 中处理
+        // 暂时将配置保存到 localStorage，在 handleOAuthCallback 中使用
+        localStorage.setItem('supabase_url', supabaseUrl);
+        localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+      }
+      
       // 跳转到 Google 授权页面
       window.location.href = authUrl;
     }
@@ -238,8 +265,47 @@ export const loginWithGoogle = async (): Promise<void> => {
  * 使用前端 Supabase 客户端直接处理，避免 PKCE code_verifier 问题
  */
 export const handleOAuthCallback = async (code: string, state?: string): Promise<AuthToken> => {
-  // 导入 Supabase 客户端（动态导入避免循环依赖）
-  const { supabase } = await import('./supabase');
+  // 动态导入 Supabase 客户端
+  const { createClient } = await import('@supabase/supabase-js');
+  
+  // 从 localStorage 获取 Supabase 配置（如果之前保存过）
+  let supabaseUrl = localStorage.getItem('supabase_url');
+  let supabaseAnonKey = localStorage.getItem('supabase_anon_key');
+  
+  // 如果 localStorage 中没有，尝试从 API 获取
+  if (!supabaseUrl || !supabaseAnonKey) {
+    try {
+      const configResponse = await fetch(`${API_BASE_URL}/api/config/supabase`);
+      if (configResponse.ok) {
+        const config = await configResponse.json();
+        supabaseUrl = config.supabase_url;
+        supabaseAnonKey = config.supabase_anon_key;
+        // 保存到 localStorage 供下次使用
+        if (supabaseUrl && supabaseAnonKey) {
+          localStorage.setItem('supabase_url', supabaseUrl);
+          localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+        }
+      }
+    } catch (error) {
+      console.warn('无法从 API 获取 Supabase 配置，使用环境变量或默认值', error);
+    }
+  }
+  
+  // 如果还是没有，使用环境变量或默认值
+  if (!supabaseUrl) {
+    supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
+  }
+  
+  if (!supabaseAnonKey) {
+    supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  }
+  
+  if (!supabaseAnonKey) {
+    throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
+  }
+  
+  // 创建 Supabase 客户端（使用动态配置）
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
   
   // 使用 Supabase JS SDK 的 exchangeCodeForSession
   // 这样可以从浏览器存储中自动获取 code_verifier
