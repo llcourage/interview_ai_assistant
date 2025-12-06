@@ -86,12 +86,12 @@ export const Plans: React.FC = () => {
             name="Start Plan"
             subtitle="Perfect for getting started"
             features={[
-              "GPT-4o-mini Model",
+              "Great Model",
               "100K Tokens Lifetime",
               "No Monthly Reset"
             ]}
-            price="One-time"
-            billing="Purchase"
+            price="Free"
+            billing=""
             loading={loading === 'start'}
             onSelect={() => handlePlanSelect('start')}
           />
