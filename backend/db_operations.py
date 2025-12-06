@@ -107,11 +107,32 @@ async def update_user_plan(
     subscription_status: Optional[str] = None,
     plan_expires_at: Optional[datetime] = None
 ) -> UserPlan:
-    """更新用户Plan（如果记录不存在则创建）- 使用 upsert 避免 204 错误"""
+    """更新用户Plan（如果记录不存在则创建）- 使用 upsert 避免 204 错误
+    
+    如果从 start plan 升级到其他 plan，会自动重置 quota
+    """
     try:
         from postgrest.exceptions import APIError
         
         supabase = get_supabase()
+        
+        # 如果 plan 要更新，检查是否需要重置 quota（从 start 升级到其他 plan）
+        should_reset_quota = False
+        old_plan = None
+        if plan is not None:
+            # 获取旧的 plan
+            try:
+                old_plan_response = supabase.table("user_plans").select("plan").eq("user_id", user_id).maybe_single().execute()
+                if old_plan_response.data:
+                    old_plan_value = old_plan_response.data.get("plan")
+                    if old_plan_value:
+                        old_plan = PlanType(old_plan_value)
+                        # 如果从 start plan 升级到 normal/high plan，需要重置 quota
+                        if old_plan == PlanType.START and plan != PlanType.START:
+                            should_reset_quota = True
+                            print(f"🔄 用户 {user_id} 从 start plan 升级到 {plan.value} plan，将重置 quota")
+            except Exception as e:
+                print(f"⚠️ 检查旧 plan 失败（可能是新用户）: {e}")
         
         # 构建数据字典
         now = datetime.now()
@@ -165,13 +186,38 @@ async def update_user_plan(
         # 处理返回的数据
         if isinstance(response.data, list) and len(response.data) > 0:
             plan_data = normalize_plan_data(response.data[0])
-            return UserPlan(**plan_data)
+            result = UserPlan(**plan_data)
         elif not isinstance(response.data, list) and response.data:
             plan_data = normalize_plan_data(response.data)
-            return UserPlan(**plan_data)
+            result = UserPlan(**plan_data)
         else:
-            print(f"Supabase upsert returned unexpected data format: {response.data}")
-            raise Exception("Update plan failed: Returned data format is incorrect")
+            raise Exception("Update plan failed: Unexpected response format")
+        
+        # 如果需要重置 quota（从 start 升级到其他 plan）
+        if should_reset_quota and plan is not None:
+            try:
+                now = datetime.now()
+                quota_update_data = {
+                    "monthly_tokens_used": 0,
+                    "quota_reset_date": now.isoformat(),
+                    "plan": plan.value,  # 同时更新 quota 中的 plan
+                    "updated_at": now.isoformat()
+                }
+                quota_response = supabase.table("usage_quotas").update(quota_update_data).eq("user_id", user_id).execute()
+                if quota_response.data:
+                    print(f"✅ 已重置用户 {user_id} 的 quota（从 start plan 升级到 {plan.value}）")
+                else:
+                    # Quota 记录可能不存在，尝试创建
+                    try:
+                        await create_user_quota(user_id)
+                        print(f"✅ 已创建用户 {user_id} 的新 quota 记录")
+                    except Exception as create_error:
+                        print(f"⚠️ 创建 quota 记录失败: {create_error}")
+            except Exception as quota_error:
+                print(f"⚠️ 重置 quota 时出错: {quota_error}")
+                # 不抛出异常，因为 plan 更新已经成功了
+        
+        return result
             
     except APIError as e:
         print(f"Supabase upsert APIError: {e}")
@@ -265,20 +311,27 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                     print(f"⚠️ 更新 quota plan 失败: {update_error}")
             
             # 检查是否需要重置配额（按自然月重置）
+            # 对于终身配额（start plan），跳过重置
+            user_plan = await get_user_plan(user_id)
+            limits = PLAN_LIMITS.get(user_plan.plan, {})
+            is_lifetime = limits.get("is_lifetime", False)
+            
             now = datetime.now()
             should_reset_monthly = False
             
-            if quota.quota_reset_date:
-                reset_date = quota.quota_reset_date
-                if isinstance(reset_date, str):
-                    reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
-                
-                # quota_reset_date 是"上次重置时间"，如果当前年月 ≠ 上次重置的年月，则需要重置
-                reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
-                should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
-            else:
-                # 如果没有重置日期，视为需要重置
-                should_reset_monthly = True
+            # 终身配额不重置
+            if not is_lifetime:
+                if quota.quota_reset_date:
+                    reset_date = quota.quota_reset_date
+                    if isinstance(reset_date, str):
+                        reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+                    
+                    # quota_reset_date 是"上次重置时间"，如果当前年月 ≠ 上次重置的年月，则需要重置
+                    reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
+                    should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
+                else:
+                    # 如果没有重置日期，视为需要重置
+                    should_reset_monthly = True
             
             if should_reset_monthly:
                 # 直接在这里重置，避免调用 reset_user_quota 造成递归
@@ -494,10 +547,25 @@ async def check_rate_limit(user_id: str, estimated_tokens: int = 0) -> tuple[boo
         quota = await get_user_quota(user_id)
         limits = PLAN_LIMITS[user_plan.plan]
         
-        # 检查每月 token 限制（考虑预估的 tokens）
+        # 检查 token 限制（考虑预估的 tokens）
+        # 支持两种配额类型：月度配额（monthly_token_limit）和终身配额（lifetime_token_limit）
         monthly_token_limit = limits.get("monthly_token_limit")
+        lifetime_token_limit = limits.get("lifetime_token_limit")
+        is_lifetime = limits.get("is_lifetime", False)
+        
+        monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
+        
+        # 检查终身配额（start plan）
+        if is_lifetime and lifetime_token_limit is not None:
+            if monthly_tokens_used + estimated_tokens > lifetime_token_limit:
+                remaining = lifetime_token_limit - monthly_tokens_used
+                if remaining <= 0:
+                    return False, f"终身 tokens 已用完：{monthly_tokens_used:,}/{lifetime_token_limit:,}。请升级Plan。"
+                else:
+                    return False, f"终身 tokens 配额不足：已使用 {monthly_tokens_used:,}/{lifetime_token_limit:,}，剩余 {remaining:,}，但预估需要 {estimated_tokens:,}。请升级Plan。"
+        
+        # 检查月度配额（normal/high plan）
         if monthly_token_limit is not None:
-            monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
             # 检查当前已使用的 tokens 加上预估的 tokens 是否会超过限制
             if monthly_tokens_used + estimated_tokens > monthly_token_limit:
                 remaining = monthly_token_limit - monthly_tokens_used

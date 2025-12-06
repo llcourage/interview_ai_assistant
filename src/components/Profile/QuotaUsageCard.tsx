@@ -4,11 +4,13 @@ import './QuotaUsageCard.css';
 interface QuotaUsageCardProps {
   monthlyTokenLimit?: number;
   monthlyTokensUsed?: number;
+  plan?: string; // 'start', 'normal', 'high'
 }
 
 export const QuotaUsageCard: React.FC<QuotaUsageCardProps> = ({
   monthlyTokenLimit,
-  monthlyTokensUsed
+  monthlyTokensUsed,
+  plan
 }) => {
   if (!monthlyTokenLimit || monthlyTokenLimit <= 0) {
     return null;
@@ -19,10 +21,13 @@ export const QuotaUsageCard: React.FC<QuotaUsageCardProps> = ({
   const usagePercentage = (used / monthlyTokenLimit) * 100;
   const isWarning = usagePercentage >= 80;
   const isDanger = usagePercentage >= 90;
+  const isLifetime = plan === 'start';
 
   return (
     <div className="quota-card card">
-      <h2 className="card-title">Monthly Token Quota Usage</h2>
+      <h2 className="card-title">
+        {isLifetime ? 'Lifetime Token Quota Usage' : 'Monthly Token Quota Usage'}
+      </h2>
       
       <div className="quota-usage-content">
         <div className="quota-header">
@@ -59,7 +64,8 @@ export const QuotaUsageCard: React.FC<QuotaUsageCardProps> = ({
 
         {isWarning && (
           <div className="quota-warning-banner">
-            ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited. Quota will reset monthly.
+            ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited.
+            {!isLifetime && ' Quota will reset monthly.'}
           </div>
         )}
       </div>

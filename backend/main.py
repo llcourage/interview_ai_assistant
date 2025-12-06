@@ -198,9 +198,12 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
     )
     
     # Select model based on plan
+    # Start Plan: uses gpt-4o-mini
     # Normal Plan: uses gpt-4o-mini
     # High Plan: uses gpt-4o (full version) by default, can also access gpt-4o-mini
-    if plan == PlanType.NORMAL:
+    if plan == PlanType.START:
+        model = "gpt-4o-mini"  # Start Plan uses mini
+    elif plan == PlanType.NORMAL:
         model = "gpt-4o-mini"  # Normal Plan uses mini
     elif plan == PlanType.HIGH:
         model = "gpt-4o"  # High Plan uses full version by default
@@ -507,9 +510,20 @@ async def get_plan(http_request: Request):
     
     # 获取订阅信息
     # Get subscription info for all plans (both NORMAL and HIGH have subscriptions)
-    subscription_info = await get_subscription_info(current_user.id)
+    # Start plan 没有订阅信息（一次性购买）
+    subscription_info = None
+    if user_plan.plan != PlanType.START:
+        subscription_info = await get_subscription_info(current_user.id)
     
+    # 支持月度配额和终身配额
     monthly_token_limit = limits.get("monthly_token_limit")
+    lifetime_token_limit = limits.get("lifetime_token_limit")
+    is_lifetime = limits.get("is_lifetime", False)
+    
+    # 对于 start plan，使用 lifetime_token_limit 作为 token_limit
+    if is_lifetime and lifetime_token_limit is not None:
+        monthly_token_limit = lifetime_token_limit
+    
     monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
     
     return PlanResponse(
@@ -569,6 +583,18 @@ async def create_checkout(
         
         # 创建支付会话
         plan = PlanType(request.plan)
+        
+        # Start plan 是一次性购买，不需要 Stripe 订阅
+        # 暂时直接更新用户 plan（后续可以添加一次性支付逻辑）
+        if plan == PlanType.START:
+            from backend.db_operations import update_user_plan
+            await update_user_plan(current_user.id, plan=plan)
+            return {
+                "checkout_url": request.success_url,
+                "message": "Start plan activated"
+            }
+        
+        # Normal 和 High plan 需要 Stripe 订阅
         checkout_data = await create_checkout_session(
             user_id=current_user.id,
             plan=plan,
@@ -802,6 +828,12 @@ async def chat(
         # 一旦 OpenAI 返回成功，必须返回结果给用户并扣 token
         limits = PLAN_LIMITS[user_plan.plan]
         monthly_token_limit = limits.get("monthly_token_limit")
+        lifetime_token_limit = limits.get("lifetime_token_limit")
+        is_lifetime = limits.get("is_lifetime", False)
+        
+        # 对于终身配额，使用 lifetime_token_limit
+        if is_lifetime and lifetime_token_limit is not None:
+            monthly_token_limit = lifetime_token_limit
         
         # 获取当前配额，计算 billable tokens（clamp 到剩余配额）
         quota_before = await get_user_quota(current_user.id)

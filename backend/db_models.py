@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 class PlanType(str, Enum):
     """用户订阅计划类型"""
+    START = "start"      # 入门计划 - 100k tokens 终身，不重置，gpt-4o-mini
     NORMAL = "normal"    # 付费计划 $19.9/week
     HIGH = "high"        # 付费计划 $29.9/week
 
@@ -56,13 +57,21 @@ class UsageQuota(BaseModel):
 
 # Plan quota definitions
 PLAN_LIMITS = {
+    PlanType.START: {
+        "lifetime_token_limit": 100_000,  # 100k tokens lifetime, no reset
+        "is_lifetime": True,  # 标识为终身配额，不进行月度重置
+        "models": ["gpt-4o-mini"],  # Only mini model
+        "features": ["basic_chat", "image_analysis"]
+    },
     PlanType.NORMAL: {
         "monthly_token_limit": 500_000,  # 500k tokens per month
+        "is_lifetime": False,
         "models": ["gpt-4o-mini"],  # Only mini model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
         "monthly_token_limit": 500_000,  # 500k tokens per month (same as Normal)
+        "is_lifetime": False,
         "models": ["gpt-4o-mini", "gpt-4o"],  # Can access both mini and full gpt-4o
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     }

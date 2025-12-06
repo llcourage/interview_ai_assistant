@@ -127,6 +127,7 @@ export const Profile: React.FC = () => {
             <QuotaUsageCard
               monthlyTokenLimit={planInfo?.monthly_token_limit}
               monthlyTokensUsed={planInfo?.monthly_tokens_used}
+              plan={planInfo?.plan}
             />
           </div>
         </div>

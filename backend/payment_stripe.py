@@ -65,7 +65,45 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
                 except Exception as e:
                     print(f"⚠️ 更新 Customer 邮箱失败: {e}")
             
-            # 创建 Checkout Session（使用 customer_id，不能同时使用 customer_email）
+            # 检查用户是否已有活跃订阅
+            if user_plan_data.stripe_subscription_id:
+                try:
+                    # 如果已有订阅，直接更新订阅（Stripe 会自动处理按比例计费和退款）
+                    subscription = stripe.Subscription.retrieve(user_plan_data.stripe_subscription_id)
+                    
+                    # 更新订阅的 price（Stripe 会自动处理 proration）
+                    updated_subscription = stripe.Subscription.modify(
+                        user_plan_data.stripe_subscription_id,
+                        items=[{
+                            'id': subscription['items']['data'][0].id,
+                            'price': price_id,
+                        }],
+                        proration_behavior='always_invoice',  # 立即按比例计费/退款
+                        metadata={
+                            "user_id": user_id,
+                            "plan": plan.value
+                        }
+                    )
+                    
+                    # 更新数据库中的 plan
+                    await update_user_plan(
+                        user_id=user_id,
+                        plan=plan,
+                        subscription_status="active"
+                    )
+                    
+                    print(f"✅ 用户 {user_id} 订阅已升级到 {plan.value} plan（Stripe 自动处理按比例计费/退款）")
+                    
+                    # 返回 success_url，让用户跳转到成功页面
+                    return {
+                        "checkout_url": success_url,
+                        "message": "Subscription upgraded successfully"
+                    }
+                except stripe.error.StripeError as e:
+                    print(f"⚠️ 更新订阅失败: {e}，将创建新的 checkout session")
+                    # 如果更新失败，继续创建新的 checkout session
+            
+            # 如果没有活跃订阅，创建新的 Checkout Session
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=["card"],

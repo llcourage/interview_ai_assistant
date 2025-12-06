@@ -10,7 +10,7 @@ export const Plans: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState<string | null>(null);
 
-  const handlePlanSelect = async (plan: 'normal' | 'high') => {
+  const handlePlanSelect = async (plan: 'start' | 'normal' | 'high') => {
     setLoading(plan);
     
     try {
@@ -83,6 +83,20 @@ export const Plans: React.FC = () => {
         
         <div className="plans-grid">
           <PlanCard
+            name="Start Plan"
+            subtitle="Perfect for getting started"
+            features={[
+              "GPT-4o-mini Model",
+              "100K Tokens Lifetime",
+              "No Monthly Reset"
+            ]}
+            price="One-time"
+            billing="Purchase"
+            loading={loading === 'start'}
+            onSelect={() => handlePlanSelect('start')}
+          />
+
+          <PlanCard
             name="Normal Plan"
             features={[
               "GPT-4o-mini Model",
@@ -96,6 +110,7 @@ export const Plans: React.FC = () => {
 
           <PlanCard
             name="High Plan"
+            recommended
             features={[
               "GPT-4o Model (Full Version)",
               "Access to gpt-4o-mini",
