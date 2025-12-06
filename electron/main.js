@@ -833,11 +833,12 @@ ipcMain.handle('oauth-google', async () => {
   return new Promise(async (resolve, reject) => {
     try {
       // 获取 OAuth URL（需要从 API 获取）
-      // 开发环境：优先使用本地后端，生产环境：使用 Vercel
+      // 桌面版架构：所有 API 请求都直接到 Vercel（不依赖本地后端）
+      // 如果需要使用本地后端，可以通过环境变量 LOCAL_API_URL 指定
       const isDev = !app.isPackaged;
-      const API_BASE_URL = isDev 
-        ? (process.env.LOCAL_API_URL || 'http://localhost:8000')
-        : (process.env.VERCEL_API_URL || 'https://www.desktopai.org');
+      const API_BASE_URL = process.env.LOCAL_API_URL 
+        || process.env.VERCEL_API_URL 
+        || 'https://www.desktopai.org';
       const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=http://localhost`;
       console.log('🔐 请求 OAuth URL:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
