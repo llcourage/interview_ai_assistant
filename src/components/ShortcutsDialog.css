@@ -1,0 +1,233 @@
+.shortcuts-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.shortcuts-dialog-content {
+  background: var(--app-section-bg);
+  border-radius: 12px;
+  padding: 0;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Modern scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+/* Modern scrollbar for WebKit browsers (Chrome, Safari, Edge) */
+.shortcuts-dialog-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.shortcuts-dialog-content::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.shortcuts-dialog-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.shortcuts-dialog-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+  background-clip: padding-box;
+}
+
+.shortcuts-dialog-content::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.5);
+  background-clip: padding-box;
+}
+
+/* Light theme scrollbar */
+[data-theme="light"] .shortcuts-dialog-content {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+[data-theme="light"] .shortcuts-dialog-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .shortcuts-dialog-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .shortcuts-dialog-content::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.shortcuts-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--app-border);
+  position: sticky;
+  top: 0;
+  background: var(--app-section-bg);
+  z-index: 10;
+}
+
+.shortcuts-dialog-header h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 1.5rem;
+}
+
+.shortcuts-close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.shortcuts-close-btn:hover {
+  color: var(--app-text);
+  background: var(--app-button-hover-bg);
+}
+
+.shortcuts-dialog-body {
+  padding: 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+  /* Modern scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+/* Modern scrollbar for WebKit browsers */
+.shortcuts-dialog-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.shortcuts-dialog-body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.shortcuts-dialog-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.shortcuts-dialog-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+  background-clip: padding-box;
+}
+
+.shortcuts-dialog-body::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.5);
+  background-clip: padding-box;
+}
+
+/* Light theme scrollbar */
+[data-theme="light"] .shortcuts-dialog-body {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+[data-theme="light"] .shortcuts-dialog-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .shortcuts-dialog-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .shortcuts-dialog-body::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.shortcuts-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.75rem;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--app-section-bg);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+}
+
+.shortcut-key {
+  padding: 0.2rem 0.4rem;
+  background: var(--app-shortcut-bg);
+  color: var(--app-shortcut-text);
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.shortcut-description {
+  color: var(--app-text-secondary);
+  font-size: 0.85rem;
+}
+
+.shortcuts-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-top: 1px solid var(--app-border);
+  position: sticky;
+  bottom: 0;
+  background: var(--app-section-bg);
+}
+
+.shortcuts-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.shortcuts-btn-primary {
+  background: var(--app-button-bg);
+  color: var(--app-button-text);
+  border: 1px solid var(--app-button-border);
+}
+
+.shortcuts-btn-primary:hover {
+  background: var(--app-button-hover-bg);
+}
+

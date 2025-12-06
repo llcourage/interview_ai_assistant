@@ -4,14 +4,14 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import './App.css'
-import { isAuthenticated, getCurrentUser, logout, getAuthHeader } from './lib/auth'
-import { Login } from './Login'
+import { isAuthenticated, logout, getAuthHeader } from './lib/auth'
 import { PlanSelector, PlanType } from './components/PlanSelector'
 import { API_BASE_URL } from './lib/api'
 import { ScenarioEditDialog } from './components/ScenarioEditDialog'
 import { ScenarioSelector } from './components/ScenarioSelector'
 import { SettingsDialog } from './components/SettingsDialog'
-import { getCurrentSceneName, getSceneConfig } from './lib/sceneStorage'
+import { ShortcutsDialog } from './components/ShortcutsDialog'
+import { getCurrentSceneName } from './lib/sceneStorage'
 
 // Session 类型定义
 interface SessionData {
@@ -25,18 +25,7 @@ interface SessionData {
   }>;
 }
 
-// 扩展 window 类型以包含 aiShot
-declare global {
-  interface Window {
-    aiShot?: {
-      userLoggedIn: () => Promise<{ success: boolean }>;
-      userLoggedOut: () => Promise<{ success: boolean }>;
-      onScenarioSelected: (callback: (data: { sceneId: string; presetId: string; prompt: string }) => void) => void;
-      onOpenScenarioEditor: (callback: (data: { mode: 'create' | 'edit'; scenario?: any }) => void) => void;
-      notifyScenarioUpdated: () => void;
-    };
-  }
-}
+// aiShot API types are defined in src/types/window.d.ts
 
 function App() {
   const [authStatus, setAuthStatus] = useState<boolean | null>(null);
@@ -57,6 +46,7 @@ function App() {
   const [currentSceneName, setCurrentSceneName] = useState<string>(getCurrentSceneName());
   const [showScenarioSelector, setShowScenarioSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // 📦 Load Plan info from backend API (sync with web)
   useEffect(() => {
@@ -391,13 +381,21 @@ function App() {
             <button 
               className="theme-toggle" 
               onClick={() => setShowScenarioSelector(true)}
-              title={`Current Application Scenario: ${currentSceneName}. Click to change.`}
+              title={`Current Scenario: ${currentSceneName}. Click to change.`}
               style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
             >
-              🎯 Application Scenario: {currentSceneName}
+              🎯 Scenario: {currentSceneName}
             </button>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button 
+              className="theme-toggle" 
+              onClick={() => setShowShortcuts(true)}
+              title="Keyboard Shortcuts"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              ⌨️ Shortcuts
+            </button>
             <button 
               className="theme-toggle" 
               onClick={() => setShowSettings(true)}
@@ -433,7 +431,7 @@ function App() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <PlanSelector
               currentPlan={currentPlan}
-              onPlanChange={(plan) => {
+              onPlanChange={(_plan) => {
                 // Plan switching is disabled in client - users must upgrade through web interface
                 console.log('Plan switching is not allowed in client. Please upgrade through web interface.');
               }}
@@ -584,6 +582,14 @@ function App() {
         <SettingsDialog
           isOpen={showSettings}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Shortcuts Dialog */}
+      {showShortcuts && (
+        <ShortcutsDialog
+          isOpen={showShortcuts}
+          onClose={() => setShowShortcuts(false)}
         />
       )}
     </div>

@@ -102,7 +102,7 @@ export const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({
         <button className="scenario-selector-back-btn" onClick={onBack}>
           ← Back
         </button>
-        <h1>Choose Application Scenario</h1>
+        <h1>Choose Scenario</h1>
         <div className="scenario-selector-current">
           Current: <strong>{currentSceneName}</strong>
         </div>

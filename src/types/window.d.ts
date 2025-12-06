@@ -141,6 +141,13 @@ export interface AiShotAPI {
    * @returns Promise，返回包含 code 的对象
    */
   loginWithGoogle?: () => Promise<{ success: boolean; code?: string; error?: string }>;
+
+  /**
+   * 选择文件夹（Electron 专用）
+   * @param options 选项，包含 title 和 defaultPath
+   * @returns Promise，返回包含 canceled 和 path 的对象
+   */
+  selectFolder?: (options?: { title?: string; defaultPath?: string }) => Promise<{ canceled: boolean; path: string | null; error?: string }>;
 }
 
 declare global {

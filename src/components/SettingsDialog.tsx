@@ -6,25 +6,6 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
-interface Shortcut {
-  key: string;
-  description: string;
-}
-
-const SHORTCUTS: Shortcut[] = [
-  { key: 'Ctrl+H', description: 'Take Screenshot' },
-  { key: 'Ctrl+Enter', description: 'Send screenshot for analysis' },
-  { key: 'Ctrl+B', description: 'Toggle overlay window show/hide' },
-  { key: 'Ctrl+Up', description: 'Scroll up in AI response' },
-  { key: 'Ctrl+Down', description: 'Scroll down in AI response' },
-  { key: 'Ctrl+Left', description: 'Move overlay window left' },
-  { key: 'Ctrl+Right', description: 'Move overlay window right' },
-  { key: 'Ctrl+S', description: 'Toggle focus/transparent mode' },
-  { key: 'Ctrl+N', description: 'Create new session' },
-  { key: 'Ctrl+D', description: 'Clear all screenshots' },
-  { key: 'Ctrl+T', description: 'Start/Stop voice recording' },
-];
-
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
   const [promptStoragePath, setPromptStoragePath] = useState('');
   const [sessionStoragePath, setSessionStoragePath] = useState('');
@@ -199,24 +180,6 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
         )}
 
         <div className="settings-dialog-body">
-          {/* Keyboard Shortcuts Section */}
-          <section className="settings-section">
-            <h3>⌨️ Keyboard Shortcuts</h3>
-            <div className="shortcuts-list">
-              {SHORTCUTS.map((shortcut, index) => (
-                <div key={index} className="shortcut-item">
-                  <kbd className="shortcut-key">{shortcut.key}</kbd>
-                  <span className="shortcut-description">{shortcut.description}</span>
-                </div>
-              ))}
-            </div>
-            {!isElectron && (
-              <p className="settings-hint">
-                Note: Global shortcuts are only available in Electron desktop app.
-              </p>
-            )}
-          </section>
-
           {/* Prompt Storage Path Section */}
           <section className="settings-section">
             <h3>📝 Prompt Storage Location</h3>
