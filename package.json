@@ -8,9 +8,9 @@
     "start:react": "vite",
     "start:electron": "wait-on http://localhost:5173 && electron .",
     "build": "vite build",
-    "build:electron": "electron-builder",
+    "build:electron": "vite build && node scripts/fix-electron-paths.js && electron-builder",
     "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:5173 && electron .\"",
-    "package": "npm run build && electron-builder --win",
+    "package": "npm run build && node scripts/fix-electron-paths.js && electron-builder --win",
     "vercel-build": "npm run build"
   },
   "keywords": [

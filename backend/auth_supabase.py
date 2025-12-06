@@ -187,13 +187,27 @@ async def get_current_active_user(
 async def get_google_oauth_url(redirect_to: str = None) -> str:
     """获取 Google OAuth 授权 URL"""
     try:
-        supabase = get_supabase()
+        # 对于 OAuth，我们需要使用 ANON_KEY 而不是 SERVICE_ROLE_KEY
+        # 因为 OAuth 是用户认证流程，需要正常的 Supabase 认证
+        import os
+        from supabase import create_client
+        
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+        
+        if not supabase_url or not supabase_anon_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supabase 配置缺失: SUPABASE_URL 或 SUPABASE_ANON_KEY 未设置"
+            )
+        
+        # 创建使用 ANON_KEY 的 Supabase 客户端（用于 OAuth）
+        supabase = create_client(supabase_url, supabase_anon_key)
         
         # 构建重定向 URL
         if not redirect_to:
-            import os
             # 默认重定向到前端登录页面
-            redirect_to = os.getenv("FRONTEND_URL", "http://localhost:5173")
+            redirect_to = os.getenv("FRONTEND_URL", "https://www.desktopai.org")
         
         # 确保 redirect_to 是完整的 URL
         if not redirect_to.startswith("http"):
@@ -210,8 +224,21 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
             }
         })
         
+        if not response or not response.url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="获取 Google OAuth URL 失败: Supabase 返回的响应中没有 URL"
+            )
+        
         return response.url
+    except HTTPException:
+        # 重新抛出 HTTPException
+        raise
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ 获取 Google OAuth URL 失败: {e}")
+        print(f"详细错误信息:\n{error_trace}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取 Google OAuth URL 失败: {str(e)}"

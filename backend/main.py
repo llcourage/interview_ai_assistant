@@ -340,7 +340,14 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
                     timeout=30.0
                 )
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                # 验证返回的数据格式
+                if not isinstance(data, dict) or 'url' not in data:
+                    raise HTTPException(
+                        status_code=502, 
+                        detail=f"云端 API 返回格式错误: {data}"
+                    )
+                return data
             except httpx.HTTPError as e:
                 raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
     
@@ -516,7 +523,7 @@ async def get_plan(http_request: Request):
     # Start plan 没有订阅信息（一次性购买）
     subscription_info = None
     if user_plan.plan != PlanType.START:
-    subscription_info = await get_subscription_info(current_user.id)
+        subscription_info = await get_subscription_info(current_user.id)
     
     # 支持月度配额和终身配额
     monthly_token_limit = limits.get("monthly_token_limit")

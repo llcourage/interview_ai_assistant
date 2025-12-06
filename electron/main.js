@@ -760,14 +760,28 @@ function httpRequest(url, options = {}) {
       });
       res.on('end', () => {
         console.log('🔐 响应数据长度:', data.length);
-        console.log('🔐 响应数据预览:', data.substring(0, Math.min(200, data.length)));
+        console.log('🔐 响应状态码:', res.statusCode);
+        console.log('🔐 响应头:', res.headers);
+        console.log('🔐 响应数据预览:', data.substring(0, Math.min(500, data.length)));
         
         try {
           const jsonData = JSON.parse(data);
-          resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 300, json: () => Promise.resolve(jsonData), text: () => Promise.resolve(data) });
+          resolve({ 
+            status: res.statusCode, 
+            ok: res.statusCode >= 200 && res.statusCode < 300, 
+            json: () => Promise.resolve(jsonData), 
+            text: () => Promise.resolve(data) 
+          });
         } catch (e) {
           console.error('🔐 JSON 解析失败:', e.message);
-          resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 300, json: () => Promise.reject(new Error('Not JSON')), text: () => Promise.resolve(data) });
+          console.error('🔐 原始数据:', data);
+          // 即使 JSON 解析失败，也返回响应对象，让调用者处理
+          resolve({ 
+            status: res.statusCode, 
+            ok: res.statusCode >= 200 && res.statusCode < 300, 
+            json: () => Promise.reject(new Error(`JSON parse error: ${e.message}. Data: ${data.substring(0, 200)}`)), 
+            text: () => Promise.resolve(data) 
+          });
         }
       });
     });
@@ -849,6 +863,9 @@ ipcMain.handle('oauth-google', async () => {
       const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${encodeURIComponent(redirectTo)}`;
       console.log('🔐 请求 OAuth URL:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
+      console.log('🔐 redirectTo:', redirectTo);
+      console.log('🔐 isDev:', isDev);
+      console.log('🔐 isPackaged:', app.isPackaged);
       
       let response;
       try {
@@ -863,21 +880,50 @@ ipcMain.handle('oauth-google', async () => {
       
       if (!response.ok) {
         let errorText = 'Unknown error';
+        let errorJson = null;
         try {
           errorText = await response.text();
+          // 尝试解析为 JSON
+          try {
+            errorJson = JSON.parse(errorText);
+            console.error('🔐 API 错误响应 (JSON):', JSON.stringify(errorJson, null, 2));
+          } catch (e) {
+            // 不是 JSON，使用原始文本
+            console.error('🔐 API 错误响应 (文本):', errorText);
+          }
         } catch (e) {
           console.error('🔐 无法读取错误响应:', e);
         }
         console.error('🔐 API 错误响应状态:', response.status);
-        console.error('🔐 API 错误响应内容:', errorText);
-        throw new Error(`Failed to get OAuth URL: HTTP ${response.status} - ${errorText}`);
+        const errorMessage = errorJson?.detail || errorJson?.error || errorText;
+        throw new Error(`Failed to get OAuth URL: HTTP ${response.status} - ${errorMessage}`);
       }
       
-      const data = await response.json();
-      console.log('🔐 API 响应数据:', data);
+      let data;
+      try {
+        data = await response.json();
+        console.log('🔐 API 响应数据:', JSON.stringify(data, null, 2));
+      } catch (jsonError) {
+        const errorText = await response.text();
+        console.error('🔐 JSON 解析失败，原始响应:', errorText);
+        throw new Error(`Failed to parse API response: ${jsonError.message}. Response: ${errorText.substring(0, 200)}`);
+      }
       
-      if (!data || !data.url) {
-        throw new Error('Invalid response: missing url field');
+      if (!data) {
+        throw new Error('Invalid response: response is null or undefined');
+      }
+      
+      if (!data.url) {
+        console.error('🔐 响应中缺少 url 字段，完整响应:', JSON.stringify(data, null, 2));
+        
+        // 检查是否是错误响应
+        if (data.error || data.details) {
+          const errorMsg = data.details || data.error || 'Unknown error';
+          const errorDetails = data.traceback ? `\n\n详细信息:\n${data.traceback.substring(0, 500)}` : '';
+          throw new Error(`API 返回错误: ${errorMsg}${errorDetails}`);
+        }
+        
+        throw new Error(`Invalid response: missing url field. Response keys: ${Object.keys(data).join(', ')}`);
       }
       
       const authUrl = data.url;
