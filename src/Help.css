@@ -193,6 +193,53 @@
   color: var(--color-text-secondary);
 }
 
+.contact-description {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin-top: 0.5rem !important;
+}
+
+.plan-pricing-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+@media (max-width: 968px) {
+  .plan-pricing-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .plan-pricing-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plan-pricing-item {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid var(--color-border-subtle);
+  text-align: center;
+}
+
+.plan-pricing-item h4 {
+  margin: 0 0 0.75rem 0;
+  color: var(--color-text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.plan-price {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
 /* Responsive */
 @media (max-width: 968px) {
   .help-container {
