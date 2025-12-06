@@ -56,7 +56,7 @@ function App() {
   const [currentSceneName, setCurrentSceneName] = useState<string>(getCurrentSceneName());
   const [showScenarioSelector, setShowScenarioSelector] = useState(false);
 
-  // 📦 从后端 API 加载 Plan 信息（与网页端同步）
+  // 📦 Load Plan info from backend API (sync with web)
   useEffect(() => {
     const loadPlanFromAPI = async () => {
       try {
@@ -75,25 +75,25 @@ function App() {
             const newPlan = planData.plan as PlanType;
             setCurrentPlan(newPlan);
             localStorage.setItem('currentPlan', newPlan);
-            // 触发自定义事件，通知其他窗口（如悬浮窗）更新 plan
+            // Trigger custom event to notify other windows (e.g., overlay) to update plan
             window.dispatchEvent(new CustomEvent('planChanged', { detail: newPlan }));
           }
         }
       } catch (error) {
         console.error('Failed to load plan from API:', error);
-        // 如果 API 调用失败，保持使用 localStorage 中的值
+        // If API call fails, keep using value from localStorage
       }
     };
 
-    // 登录后立即加载 plan
+    // Load plan immediately after login
     if (authStatus) {
       loadPlanFromAPI();
     }
   }, [authStatus]);
 
-  // 📦 监听 Plan 变化（跨窗口和同窗口同步）
+  // 📦 Listen to Plan changes (cross-window and same-window sync)
   useEffect(() => {
-    // 监听 localStorage 的 storage 事件（跨窗口同步）
+    // Listen to localStorage storage events (cross-window sync)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'currentPlan' && e.newValue) {
         const newPlan = e.newValue as PlanType;
@@ -101,7 +101,7 @@ function App() {
       }
     };
 
-    // 监听自定义 planChanged 事件（同窗口同步）
+    // Listen to custom planChanged events (same-window sync)
     const handlePlanChange = (e: CustomEvent) => {
       const newPlan = e.detail as PlanType;
       setCurrentPlan(newPlan);
@@ -117,7 +117,7 @@ function App() {
     };
   }, []);
 
-  // 🔒 检查认证状态
+  // 🔒 Check authentication status
   useEffect(() => {
     let isMounted = true;
     let lastAuthStatus: boolean | null = null;
@@ -128,13 +128,13 @@ function App() {
       
       if (!isMounted) return;
       
-      // 只在状态变化时通知 Electron，避免重复调用
+      // Only notify Electron when status changes to avoid duplicate calls
       if (lastAuthStatus !== authenticated) {
         console.log('🔒 App.tsx - Auth status changed:', lastAuthStatus, '->', authenticated);
         lastAuthStatus = authenticated;
         setAuthStatus(authenticated);
       
-      // 🔒 如果已登录，通知 Electron 创建悬浮窗
+      // 🔒 If logged in, notify Electron to create overlay window
         if (authenticated && window.aiShot?.userLoggedIn) {
           console.log('🔒 App.tsx - Calling userLoggedIn');
         await window.aiShot.userLoggedIn();
@@ -147,14 +147,14 @@ function App() {
     
     checkAuth();
     
-    // 监听认证状态变化事件（登录/登出时触发）
+    // Listen to authentication state change events (triggered on login/logout)
     const handleAuthStateChange = () => {
       console.log('🔒 App.tsx - Auth state change event received');
       checkAuth();
     };
     window.addEventListener('auth-state-changed', handleAuthStateChange);
     
-    // 定期检查认证状态（替代 Supabase 的实时监听）
+    // Periodically check authentication status (replacement for Supabase real-time listening)
     const interval = setInterval(checkAuth, 5000);
     
     return () => {
@@ -164,28 +164,28 @@ function App() {
     };
   }, []);
 
-  // 🎨 监听主题变化
+  // 🎨 Listen to theme changes
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // 🎨 切换主题
+  // 🎨 Toggle theme
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
-  // 🎯 监听场景选择事件（从菜单）
+  // 🎯 Listen to scenario selection events (from menu)
   useEffect(() => {
     if (window.aiShot?.onScenarioSelected) {
       const handleScenarioSelected = (data: { sceneId: string; presetId: string; prompt: string }) => {
         console.log('Scenario selected from menu:', data);
-        // 更新场景配置
+        // Update scene configuration
         const { setCurrentScene } = require('./lib/sceneStorage');
         setCurrentScene(data.sceneId, data.presetId);
-        // 更新当前场景名称显示
+        // Update current scene name display
         setCurrentSceneName(getCurrentSceneName());
-        // 触发自定义事件通知其他组件
+        // Trigger custom event to notify other components
         window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
       };
       
@@ -197,7 +197,7 @@ function App() {
     }
   }, []);
 
-  // 🎯 监听场景配置变化（更新场景名称显示）
+  // 🎯 Listen to scene configuration changes (update scene name display)
   useEffect(() => {
     const handleSceneConfigChange = () => {
       setCurrentSceneName(getCurrentSceneName());
@@ -212,7 +212,7 @@ function App() {
     };
   }, []);
 
-  // 🎯 监听打开场景编辑器事件（从菜单）
+  // 🎯 Listen to open scenario editor events (from menu)
   useEffect(() => {
     if (window.aiShot?.onOpenScenarioEditor) {
       const handleOpenScenarioEditor = (data: { mode: 'create' | 'edit'; scenario?: any }) => {
@@ -230,7 +230,7 @@ function App() {
     }
   }, []);
 
-  // 🚪 退出登录
+  // 🚪 Logout
   const handleLogout = async () => {
     console.log('Logging out...');
     try {
@@ -238,7 +238,7 @@ function App() {
       console.log('Logout successful');
       setAuthStatus(false);
       
-      // 🔒 通知 Electron 关闭悬浮窗
+      // 🔒 Notify Electron to close overlay window
       if (window.aiShot?.userLoggedOut) {
         await window.aiShot.userLoggedOut();
       }
@@ -250,23 +250,58 @@ function App() {
   // 从 localStorage 加载所有 Session
   useEffect(() => {
     const loadSessions = () => {
-      const sessionsData = localStorage.getItem('sessions');
-      if (sessionsData) {
-        const parsed: SessionData[] = JSON.parse(sessionsData);
-        // 按时间倒序排列（最新的在前）
-        parsed.sort((a, b) => b.timestamp - a.timestamp);
-        setSessions(parsed);
+      try {
+        const sessionsData = localStorage.getItem('sessions');
+        if (sessionsData) {
+          const parsed: SessionData[] = JSON.parse(sessionsData);
+          // Filter out empty sessions (no conversation records)
+          const validSessions = parsed.filter(s => 
+            s.conversations && s.conversations.length > 0
+          );
+          // Sort by timestamp descending (newest first)
+          validSessions.sort((a, b) => b.timestamp - a.timestamp);
+          setSessions(validSessions);
+          console.log('📚 Loaded Session List:', validSessions.length, 'sessions');
+        } else {
+          setSessions([]);
+          console.log('📚 Session List: No session data in localStorage');
+        }
+      } catch (error) {
+        console.error('❌ Failed to load Session List:', error);
+        setSessions([]);
       }
     };
 
+    // Initial load
     loadSessions();
     
-    // 每秒刷新一次，以便实时显示新的 Session
+    // Listen to localStorage storage events (cross-window sync)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'sessions') {
+        console.log('📚 Session List: Detected localStorage change, reloading');
+        loadSessions();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Listen to custom events (same-window sync)
+    const handleSessionsUpdate = () => {
+      console.log('📚 Session List: Received update event, reloading');
+      loadSessions();
+    };
+    window.addEventListener('sessionsUpdated', handleSessionsUpdate as EventListener);
+    
+    // Refresh every second to show new sessions in real-time (as fallback)
     const interval = setInterval(loadSessions, 1000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('sessionsUpdated', handleSessionsUpdate as EventListener);
+    };
   }, []);
 
-  // 删除 Session
+  // Delete Session
   const deleteSession = (sessionId: string) => {
     const updatedSessions = sessions.filter(s => s.id !== sessionId);
     setSessions(updatedSessions);
@@ -276,7 +311,7 @@ function App() {
     }
   };
 
-  // 格式化时间
+  // Format timestamp
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleString('zh-CN', {
@@ -530,11 +565,11 @@ function App() {
           onSave={() => {
             setShowScenarioEditor(false);
             setEditingScenario(null);
-            // 通知 Electron 更新菜单
+            // Notify Electron to update menu
             if (window.aiShot?.notifyScenarioUpdated) {
               window.aiShot.notifyScenarioUpdated();
             }
-            // 触发场景配置更新事件
+            // Trigger scene configuration update event
             window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
           }}
         />

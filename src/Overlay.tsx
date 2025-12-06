@@ -90,16 +90,16 @@ const Overlay = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null); // 🚨 新增：对话底部标记
 
-  // 💾 保存当前 Session 到 localStorage
+  // 💾 Save current Session to localStorage
   const saveCurrentSession = useCallback(() => {
-    if (conversationHistory.length === 0) return; // 空会话不保存
+    if (conversationHistory.length === 0) return; // Don't save empty sessions
     
     const sessions: SessionData[] = JSON.parse(localStorage.getItem('sessions') || '[]');
     
-    // 查找是否已存在当前 Session
+    // Find if current Session already exists
     const existingIndex = sessions.findIndex(s => s.id === currentSessionId);
     
-    // 🚨 截断对话历史，只保存最近 N 轮
+    // 🚨 Truncate conversation history, only save recent N rounds
     const truncatedConversations = conversationHistory.length > MAX_CONVERSATIONS_TO_SAVE
       ? conversationHistory.slice(-MAX_CONVERSATIONS_TO_SAVE)
       : conversationHistory;
@@ -117,20 +117,22 @@ const Overlay = () => {
     }
     
     localStorage.setItem('sessions', JSON.stringify(sessions));
-    console.log('💾 Session 已保存:', currentSessionId, '对话数量:', truncatedConversations.length);
+    console.log('💾 Session saved:', currentSessionId, 'conversations:', truncatedConversations.length);
     if (conversationHistory.length > MAX_CONVERSATIONS_TO_SAVE) {
-      console.log(`📊 对话已截断: ${conversationHistory.length} -> ${MAX_CONVERSATIONS_TO_SAVE} 轮`);
+      console.log(`📊 Conversation truncated: ${conversationHistory.length} -> ${MAX_CONVERSATIONS_TO_SAVE} rounds`);
     }
+    // Trigger custom event to notify main window Session List update
+    window.dispatchEvent(new CustomEvent('sessionsUpdated'));
   }, [conversationHistory, currentSessionId]);
 
-  // 🆕 创建新 Session
+  // 🆕 Create new Session
   const createNewSession = () => {
-    console.log('🆕 创建新 Session');
+    console.log('🆕 Creating new Session');
     
-    // 保存当前 Session（如果有对话）
+    // Save current Session (if has conversations)
     saveCurrentSession();
     
-    // 重新加载页面以创建全新的 Session ID
+    // Reload page to create a brand new Session ID
     window.location.reload();
   };
 
