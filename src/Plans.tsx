@@ -84,7 +84,6 @@ export const Plans: React.FC = () => {
         <div className="plans-grid">
           <PlanCard
             name="Start Plan"
-            subtitle="Perfect for getting started"
             features={[
               "Great Model",
               "100K Tokens Lifetime",
@@ -123,7 +122,6 @@ export const Plans: React.FC = () => {
           <PlanCard
             name="Ultra Plan"
             recommended
-            subtitle="Premium AI"
             features={[
               "State of the Art Model",
               "1M Tokens per Month",
