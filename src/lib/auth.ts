@@ -298,9 +298,7 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
   
   // 确保返回的数据包含必要的字段
   if (!data.url) {
-    console.error('❌ Google OAuth URL API 返回的数据:', JSON.stringify(data, null, 2));
-    console.error('❌ API URL:', `${API_BASE_URL}/api/auth/google/url?${params.toString()}`);
-    throw new Error(`API 返回的数据中缺少 url 字段。响应数据: ${JSON.stringify(data)}`);
+    throw new Error('API 返回的数据中缺少 url 字段');
   }
   
   return {
