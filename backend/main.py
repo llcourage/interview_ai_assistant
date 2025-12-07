@@ -766,31 +766,17 @@ async def exchange_oauth_code(request: Request):
                 print(f"🔐 Code verifier is empty: {not code_verifier or len(code_verifier.strip()) == 0}")
                 print(f"🔐 Code is empty: {not code or len(code.strip()) == 0}")
                 
-                # Try form-data format first (Supabase typically expects this)
-                try:
-                    token_response = await client.post(
-                        token_url,
-                        data=token_data,  # Use data instead of json for form-data
-                        headers={
-                            "apikey": supabase_anon_key,
-                            "Content-Type": "application/x-www-form-urlencoded"
-                        },
-                        timeout=30.0
-                    )
-                    print(f"🔐 Supabase REST API response status (form-data): {token_response.status_code}")
-                except Exception as form_error:
-                    print(f"⚠️ Form-data request failed: {form_error}, trying JSON format")
-                    # Fallback to JSON format
-                    token_response = await client.post(
-                        token_url,
-                        json=token_data,
-                        headers={
-                            "apikey": supabase_anon_key,
-                            "Content-Type": "application/json"
-                        },
-                        timeout=30.0
-                    )
-                    print(f"🔐 Supabase REST API response status (JSON): {token_response.status_code}")
+                # Supabase PKCE token exchange requires JSON format
+                token_response = await client.post(
+                    token_url,
+                    json=token_data,
+                    headers={
+                        "apikey": supabase_anon_key,
+                        "Content-Type": "application/json"
+                    },
+                    timeout=30.0
+                )
+                print(f"🔐 Supabase REST API response status: {token_response.status_code}")
                 
                 print(f"🔐 Supabase REST API response status: {token_response.status_code}")
                 
