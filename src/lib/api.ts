@@ -1,18 +1,22 @@
 /**
- * API 配置
+ * API Configuration
  * Desktop version: All API requests go to Vercel backend
  * Web version: Uses current origin (Vercel) or Vercel API URL
  */
 import { isElectron } from '../utils/isElectron';
 
+// Hard clean function: ensure URL has no leading/trailing whitespace
+const clean = (s?: string) => (s ?? "").trim();
+
 // Vercel API URL (used by Desktop version and as fallback)
-const DEFAULT_VERCEL_API_URL = 'https://www.desktopai.org';
+const DEFAULT_VERCEL_API_URL = clean('https://www.desktopai.org');
 
 export const getApiBaseUrl = (): string => {
   // If environment variable is set, use it (highest priority)
-  if (import.meta.env.VITE_API_URL) {
-    console.log('🔧 API_BASE_URL: Using VITE_API_URL from env:', import.meta.env.VITE_API_URL);
-    return import.meta.env.VITE_API_URL;
+  const viteApiUrl = clean(import.meta.env.VITE_API_URL);
+  if (viteApiUrl) {
+    console.log('🔧 API_BASE_URL: Using VITE_API_URL from env:', viteApiUrl);
+    return viteApiUrl;
   }
   
   // Production mode
@@ -23,7 +27,7 @@ export const getApiBaseUrl = (): string => {
       return DEFAULT_VERCEL_API_URL;
     }
     // Web version: use current origin (if deployed on Vercel, will use Vercel domain)
-    const origin = window.location.origin;
+    const origin = clean(window.location.origin);
     console.log('🔧 API_BASE_URL: Production Web, using origin:', origin);
     return origin;
   }
@@ -35,7 +39,7 @@ export const getApiBaseUrl = (): string => {
 
 export const API_BASE_URL = getApiBaseUrl();
 
-// 打印最终使用的 API URL（仅一次）
+// Print final API URL used (once only)
 console.log('🌐 API Base URL configured:', API_BASE_URL);
 console.log('🌐 Environment:', {
   DEV: import.meta.env.DEV,

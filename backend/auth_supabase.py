@@ -184,6 +184,20 @@ async def get_current_active_user(
     return current_user
 
 
+def clean_url(s: str | None) -> str:
+    """Clean URL: strip whitespace"""
+    return (s or "").strip()
+
+def require_clean_url(name: str, s: str | None) -> str:
+    """Require clean URL: strip and validate no internal whitespace"""
+    v = clean_url(s)
+    if not v:
+        return v
+    # Critical: prohibit any internal whitespace (prevent multi-line/indentation)
+    if v != v.strip() or "\n" in v or "\r" in v or "\t" in v:
+        raise ValueError(f"{name} contains whitespace: {repr(s)}")
+    return v
+
 async def get_google_oauth_url(redirect_to: str = None) -> str:
     """Get Google OAuth authorization URL"""
     try:
@@ -191,6 +205,7 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
         # Because OAuth is a user authentication flow, requires normal Supabase authentication
         import os
         from supabase import create_client
+        from urllib.parse import urlparse
         
         supabase_url = os.getenv("SUPABASE_URL", "")
         supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
@@ -214,14 +229,41 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
         # Create Supabase client using ANON_KEY (for OAuth)
         supabase = create_client(supabase_url, supabase_anon_key)
         
-        # Build redirect URL
-        if not redirect_to:
-            # Default redirect to frontend login page
-            redirect_to = os.getenv("FRONTEND_URL", "https://www.desktopai.org")
-        
-        # Ensure redirect_to is a complete URL
-        if not redirect_to.startswith("http"):
-            redirect_to = f"https://{redirect_to}" if not redirect_to.startswith("localhost") else f"http://{redirect_to}"
+        # Force normalization: clean all URL-related values
+        try:
+            # Build redirect URL
+            if not redirect_to:
+                # Default redirect to frontend login page
+                frontend_url_env = os.getenv("FRONTEND_URL")
+                redirect_to = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
+            else:
+                redirect_to = require_clean_url("redirect_to parameter", redirect_to)
+            
+            # Reverse validation: parse redirect_to origin
+            u = urlparse(redirect_to)
+            if u.scheme not in ("http", "https") or not u.netloc:
+                raise ValueError(f"Invalid redirect_to: {redirect_to}")
+            
+            # Supabase doesn't accept hash URLs in redirect_to, so convert hash route to path route
+            # For Electron dev: http://localhost:5173/#/auth/callback -> http://localhost:5173/auth/callback
+            if u.fragment and u.fragment.startswith('/auth/callback'):
+                # Extract hash route and convert to path
+                hash_route = u.fragment
+                # Remove hash and use path instead
+                redirect_to = f"{u.scheme}://{u.netloc}/auth/callback"
+                if u.query:
+                    redirect_to += f"?{u.query}"
+                print(f"🔐 Converted hash URL to path URL: {u.geturl()} -> {redirect_to}")
+            
+            # Ensure redirect_to is a complete URL
+            if not redirect_to.startswith("http"):
+                redirect_to = f"https://{redirect_to}" if not redirect_to.startswith("localhost") else f"http://{redirect_to}"
+        except ValueError as e:
+            print(f"❌ URL validation error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
         
         # Build callback URL
         # Note: For both Electron and Web, OAuth callback should point to frontend page (/auth/callback)
@@ -239,59 +281,101 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
         # Frontend will get code_verifier from browser storage
         print(f"🔐 Preparing to call Supabase OAuth, provider: google, redirect_to: {callback_url}")
         try:
+            # Call Supabase OAuth API
             response = supabase.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
                     "redirect_to": callback_url
                 }
             })
+            
             print(f"🔐 Supabase OAuth response type: {type(response)}")
-            print(f"🔐 Supabase OAuth response content: {response}")
+            print(f"🔐 Supabase OAuth response attributes: {dir(response) if hasattr(response, '__dict__') else 'N/A'}")
             
             if not response:
+                print(f"❌ Supabase OAuth returned None or empty response")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to get Google OAuth URL: Supabase returned empty response"
                 )
             
-            # Supabase Python SDK may return dict or object
+            # Supabase Python SDK may return different formats
+            # Try multiple ways to extract URL
             url = None
+            
+            # Method 1: Check if response is a dict
             if isinstance(response, dict):
                 url = response.get("url") or response.get("data", {}).get("url")
-            elif hasattr(response, "url"):
-                # If it's an object, directly get url attribute
-                url = response.url
-            elif hasattr(response, "data"):
-                # If it has data attribute, try to get from data
-                data = response.data
-                if isinstance(data, dict):
-                    url = data.get("url")
-                elif hasattr(data, "url"):
-                    url = data.url
+                print(f"🔐 Response is dict, extracted URL: {'Found' if url else 'Not found'}")
             
-            # If still not found, try to convert to string and parse (last resort)
+            # Method 2: Check if response has url attribute directly
+            if not url and hasattr(response, "url"):
+                try:
+                    url = response.url
+                    print(f"🔐 Response has url attribute: {'Found' if url else 'None'}")
+                except Exception as e:
+                    print(f"⚠️ Error accessing response.url: {e}")
+            
+            # Method 3: Check if response has data attribute
+            if not url and hasattr(response, "data"):
+                try:
+                    data = response.data
+                    if isinstance(data, dict):
+                        url = data.get("url")
+                    elif hasattr(data, "url"):
+                        url = data.url
+                    print(f"🔐 Response has data attribute, extracted URL: {'Found' if url else 'Not found'}")
+                except Exception as e:
+                    print(f"⚠️ Error accessing response.data: {e}")
+            
+            # Method 4: Try to access as a response object with model attribute
+            if not url and hasattr(response, "model"):
+                try:
+                    model = response.model
+                    if hasattr(model, "url"):
+                        url = model.url
+                    print(f"🔐 Response has model attribute, extracted URL: {'Found' if url else 'Not found'}")
+                except Exception as e:
+                    print(f"⚠️ Error accessing response.model: {e}")
+            
+            # If still not found, log full response for debugging
             if not url:
                 response_str = str(response)
-                print(f"🔐 Attempting to extract URL from response string: {response_str[:200]}")
-                # Can add more parsing logic here, but usually shouldn't reach here
+                response_repr = repr(response)
+                print(f"❌ No URL found in Supabase OAuth response")
+                print(f"🔐 Response string (first 500 chars): {response_str[:500]}")
+                print(f"🔐 Response repr (first 500 chars): {response_repr[:500]}")
+                
+                # Try to extract URL from string representation (last resort)
+                import re
+                url_match = re.search(r'url[=:]\s*["\']?([^"\'\s]+)["\']?', response_str, re.IGNORECASE)
+                if url_match:
+                    url = url_match.group(1)
+                    print(f"🔐 Extracted URL from string representation: {url[:100]}...")
             
             if not url:
-                print(f"❌ No URL found in Supabase OAuth response, response content: {response}")
+                error_detail = f"Failed to get Google OAuth URL: No URL in Supabase response. Response type: {type(response)}, Response content: {str(response)[:200]}"
+                print(f"❌ {error_detail}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to get Google OAuth URL: No URL in Supabase response. Response type: {type(response)}, Response content: {str(response)[:200]}"
+                    detail=error_detail
                 )
             
             print(f"✅ Successfully got Google OAuth URL: {url[:100]}...")
             return url
+        except HTTPException:
+            # Re-raise HTTP exceptions
+            raise
         except Exception as oauth_error:
             import traceback
             oauth_trace = traceback.format_exc()
+            error_msg = f"Failed to call Supabase OAuth API: {str(oauth_error)}"
             print(f"❌ Supabase OAuth call exception: {oauth_error}")
-            print(f"Detailed error information:\n{oauth_trace}")
+            print(f"❌ Error type: {type(oauth_error).__name__}")
+            print(f"❌ Detailed error information:\n{oauth_trace}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to call Supabase OAuth API: {str(oauth_error)}"
+                detail=error_msg
             )
     except HTTPException:
         # Re-raise HTTPException

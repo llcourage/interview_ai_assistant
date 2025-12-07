@@ -17,6 +17,17 @@ export const AuthCallback: React.FC = () => {
       console.log('🔐 AuthCallback: window.location.search:', window.location.search);
       console.log('🔐 AuthCallback: window.location.hash:', window.location.hash);
       
+      // For Electron with HashRouter: if we're at /auth/callback (path route from Supabase),
+      // convert it to hash route #/auth/callback
+      if (isElectron() && window.location.pathname === '/auth/callback' && !window.location.hash.includes('/auth/callback')) {
+        const search = window.location.search;
+        const hash = `#/auth/callback${search}`;
+        console.log('🔐 AuthCallback: Converting path route to hash route:', window.location.pathname + search, '->', hash);
+        window.location.hash = hash;
+        // Wait a bit for hash change to take effect
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       // 对于 Web 环境（BrowserRouter），参数在 search 中
       // 对于 Electron 环境（HashRouter），参数可能在 hash 中
       // Supabase OAuth 回调可能返回 access_token 在 hash 中（URL hash 模式）
@@ -242,8 +253,13 @@ export const AuthCallback: React.FC = () => {
 
       try {
         console.log('🔐 AuthCallback: 开始处理 OAuth code');
+        console.log('🔐 AuthCallback: code length:', code ? code.length : 0);
+        console.log('🔐 AuthCallback: state:', state || 'N/A');
+        
         const session = await handleOAuthCallback(code, state || undefined);
         console.log('🔐 AuthCallback: OAuth 回调处理成功');
+        console.log('🔐 AuthCallback: session access_token length:', session?.access_token ? session.access_token.length : 0);
+        console.log('🔐 AuthCallback: session user:', session?.user?.email || 'N/A');
         
         // 处理完 OAuth 回调后，调用后端 API 设置 session cookie
         try {
@@ -275,22 +291,49 @@ export const AuthCallback: React.FC = () => {
         }
         
         // 如果是 Electron OAuth 窗口，通过 IPC 发送成功结果
-        if (isElectron() && (window as any).ipcRenderer) {
+        if (isElectron()) {
           try {
-            console.log('🔐 AuthCallback: 通过 IPC 发送 OAuth 结果到主进程');
-            // 通过 IPC 发送成功结果
-            (window as any).ipcRenderer.send('oauth-result', { 
+            console.log('🔐 AuthCallback: 检测到 Electron 环境，准备通过 IPC 发送 OAuth 结果');
+            console.log('🔐 AuthCallback: code length:', code ? code.length : 0);
+            console.log('🔐 AuthCallback: state:', state || 'N/A');
+            
+            // 尝试多种方式发送 OAuth 结果
+            const oauthResult = { 
               success: true, 
               code, 
               state: state || undefined 
-            });
-            console.log('🔐 AuthCallback: IPC 消息已发送');
+            };
+            console.log('🔐 AuthCallback: 准备发送 oauth-result 消息:', JSON.stringify({
+              success: oauthResult.success,
+              hasCode: !!oauthResult.code,
+              hasState: !!oauthResult.state
+            }));
+            
+            // 方法 1: 使用 aiShot.sendOAuthResult（如果可用）
+            if ((window as any).aiShot?.sendOAuthResult) {
+              console.log('🔐 AuthCallback: 使用 aiShot.sendOAuthResult');
+              (window as any).aiShot.sendOAuthResult(oauthResult);
+            }
+            // 方法 2: 直接使用 ipcRenderer（如果暴露）
+            else if ((window as any).ipcRenderer) {
+              console.log('🔐 AuthCallback: 使用 ipcRenderer.send');
+              (window as any).ipcRenderer.send('oauth-result', oauthResult);
+            }
+            // 方法 3: 尝试通过 window.postMessage（降级方案）
+            else {
+              console.warn('🔐 AuthCallback: 无法找到 IPC 方法，尝试 postMessage');
+              window.postMessage({ type: 'oauth-result', ...oauthResult }, '*');
+            }
+            
+            console.log('🔐 AuthCallback: IPC 消息已发送，等待主进程处理');
+            
             // 显示成功消息
             setLoading(false);
             setError(''); // 清除错误
             return; // 不导航，让 Electron 主进程处理
-          } catch (e) {
+          } catch (e: any) {
             console.error('🔐 AuthCallback: 无法发送 OAuth 结果到主进程:', e);
+            console.error('🔐 AuthCallback: 错误详情:', e?.message || String(e), e?.stack);
             // 降级到正常流程
           }
         }

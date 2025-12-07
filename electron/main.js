@@ -607,6 +607,34 @@ function registerShortcuts() {
     }
   });
 
+  // Ctrl+Shift+I or F12: Toggle DevTools
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    console.log('Shortcut triggered: Ctrl+Shift+I (Toggle DevTools)');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+        console.log('DevTools closed');
+      } else {
+        mainWindow.webContents.openDevTools();
+        console.log('DevTools opened');
+      }
+    }
+  });
+
+  // F12: Toggle DevTools (alternative)
+  globalShortcut.register('F12', () => {
+    console.log('Shortcut triggered: F12 (Toggle DevTools)');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+        console.log('DevTools closed');
+      } else {
+        mainWindow.webContents.openDevTools();
+        console.log('DevTools opened');
+      }
+    }
+  });
+
   // 🚨 Ctrl+Up/Down: Scroll content (only scroll internal content of single reply box)
   const upRegistered = globalShortcut.register('CommandOrControl+Up', () => {
     console.log('Shortcut triggered: Ctrl+Up (Scroll up)');
@@ -710,6 +738,7 @@ function registerShortcuts() {
   console.log('  Ctrl+H: Screenshot');
   console.log('  Ctrl+Enter: Send screenshot for analysis');
   console.log('  Ctrl+B: Toggle overlay window show/hide');
+  console.log('  Ctrl+Shift+I or F12: Toggle DevTools');
   console.log('  Ctrl+Up: Scroll up');
   console.log('  Ctrl+Down: Scroll down');
   console.log('  Ctrl+Left: Move left');
@@ -852,22 +881,37 @@ function handleOAuthCallback(url, resolve, reject) {
 
 // 🔐 IPC: Google OAuth login
 ipcMain.handle('oauth-google', async () => {
+  console.log('🔐 [MAIN] oauth-google handler called');
   return new Promise(async (resolve, reject) => {
     try {
+      console.log('🔐 [MAIN] Starting OAuth flow...');
       // Get OAuth URL (needs to be fetched from API)
       // Desktop architecture: All API requests go directly to Vercel (no local backend dependency)
       // If local backend is needed, can specify via LOCAL_API_URL environment variable
       const isDev = !app.isPackaged;
-      const API_BASE_URL = process.env.LOCAL_API_URL 
-        || process.env.VERCEL_API_URL 
-        || 'https://www.desktopai.org';
+      
+      // Hard clean function: ensure URL has no leading/trailing whitespace
+      const clean = (s) => (s ?? "").trim();
+      
+      // Alert-level logging: print raw environment variable values (for troubleshooting configuration issues)
+      console.log("🔍 LOCAL_API_URL raw:", JSON.stringify(process.env.LOCAL_API_URL));
+      console.log("🔍 VERCEL_API_URL raw:", JSON.stringify(process.env.VERCEL_API_URL));
+      
+      const API_BASE_URL = clean(process.env.LOCAL_API_URL) 
+        || clean(process.env.VERCEL_API_URL) 
+        || clean('https://www.desktopai.org');
       // For Electron desktop app, use frontend callback URL
       // This allows frontend to use Supabase JS SDK to handle PKCE (code_verifier in browser storage)
       // After frontend handles callback, it will call backend API to set session cookie
-      const redirectTo = isDev 
-        ? `http://localhost:5173/auth/callback`
-        : 'https://www.desktopai.org/auth/callback';
-      const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${encodeURIComponent(redirectTo)}`;
+      // In dev mode, use hash route (#/auth/callback) to allow natural navigation without interception
+      const redirectTo = clean(isDev 
+        ? `http://localhost:5173/#/auth/callback`
+        : 'https://www.desktopai.org/auth/callback');
+      const redirectToEncoded = encodeURIComponent(redirectTo);
+      console.log('🔐 redirect_to raw:', redirectTo);
+      console.log('🔐 redirect_to decoded:', decodeURIComponent(redirectToEncoded));
+      console.log('🔐 redirect_to encoded:', redirectToEncoded);
+      const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${redirectToEncoded}`;
       console.log('🔐 Requesting OAuth URL:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
       console.log('🔐 redirectTo:', redirectTo);
@@ -876,13 +920,15 @@ ipcMain.handle('oauth-google', async () => {
       
       let response;
       try {
+        console.log('🔐 [MAIN] Sending HTTP request to:', apiUrl);
         response = await httpRequest(apiUrl);
-        console.log('🔐 API response status:', response.status, 'OK:', response.ok);
+        console.log('🔐 [MAIN] API response status:', response.status, 'OK:', response.ok);
       } catch (httpError) {
-        console.error('🔐 HTTP request failed:', httpError);
-        console.error('🔐 Error details:', httpError.message);
-        console.error('🔐 Error stack:', httpError.stack);
-        throw new Error(`HTTP request failed: ${httpError.message}`);
+        console.error('🔐 [MAIN] HTTP request failed:', httpError);
+        console.error('🔐 [MAIN] Error details:', httpError.message);
+        console.error('🔐 [MAIN] Error stack:', httpError.stack);
+        reject(new Error(`HTTP request failed: ${httpError.message}`));
+        return;
       }
       
       if (!response.ok) {
@@ -935,28 +981,43 @@ ipcMain.handle('oauth-google', async () => {
       
       const authUrl = data.url;
       
-      console.log('🔐 Opening Google OAuth window:', authUrl);
+      console.log('🔐 [MAIN] Got OAuth URL, length:', authUrl.length);
+      console.log('🔐 [MAIN] Opening Google OAuth window...');
       
       // Create OAuth window
       // Note: OAuth window needs to load frontend page so frontend can use Supabase JS SDK to handle PKCE
-      oauthWindow = new BrowserWindow({
-        width: 500,
-        height: 600,
-        modal: true,
-        parent: mainWindow,
-        show: false,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          preload: path.join(__dirname, 'preload.js'),  // Need preload so frontend can communicate
-          // Disable webSecurity in development to allow cross-origin requests (development only)
-          webSecurity: !isDev // Disabled in development, enabled in production
-        }
-      });
+      try {
+        oauthWindow = new BrowserWindow({
+          width: 500,
+          height: 600,
+          modal: true,
+          parent: mainWindow,
+          show: false,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),  // Need preload so frontend can communicate
+            // Disable webSecurity in development to allow cross-origin requests (development only)
+            webSecurity: !isDev // Disabled in development, enabled in production
+          }
+        });
+        console.log('🔐 [MAIN] OAuth window created successfully');
+      } catch (windowError) {
+        console.error('🔐 [MAIN] Failed to create OAuth window:', windowError);
+        reject(new Error(`Failed to create OAuth window: ${windowError.message}`));
+        return;
+      }
       
       // Listen to window ready to show
       oauthWindow.once('ready-to-show', () => {
+        console.log('🔐 [MAIN] OAuth window ready to show');
         oauthWindow.show();
+      });
+      
+      // Listen to window errors
+      oauthWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+        console.error('🔐 [MAIN] OAuth window failed to load:', errorCode, errorDescription);
+        reject(new Error(`OAuth window failed to load: ${errorDescription}`));
       });
       
       // Solution: Let OAuth window load frontend page, frontend page will handle OAuth callback
@@ -966,6 +1027,36 @@ ipcMain.handle('oauth-google', async () => {
         const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
         const oauthUrl = `http://localhost:${devPort}/#/auth/callback?oauth_url=${encodeURIComponent(authUrl)}`;
         console.log('🔐 Development: OAuth window loading frontend page:', oauthUrl);
+        
+        // Add error handler for connection refused (Vite server not ready)
+        oauthWindow.webContents.once('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+          if (errorCode === -106 || errorCode === -105) { // ERR_CONNECTION_REFUSED or ERR_NAME_NOT_RESOLVED
+            console.error('🔐 OAuth window failed to load:', errorDescription);
+            console.error('🔐 Error code:', errorCode);
+            console.error('🔐 This usually means Vite dev server is not running or not ready');
+            console.error('🔐 Please ensure Vite dev server is running on http://localhost:' + devPort);
+            
+            // Show error to user
+            oauthWindow.webContents.executeJavaScript(`
+              document.body.innerHTML = \`
+                <div style="padding: 40px; font-family: Arial; text-align: center; background: #f5f7fa; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+                  <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px;">
+                    <h2 style="color: #e74c3c;">❌ Connection Error</h2>
+                    <p><strong>Failed to connect to Vite dev server</strong></p>
+                    <p>Error: ${errorDescription}</p>
+                    <p style="margin-top: 20px; color: #666;">
+                      Please ensure the Vite dev server is running on <code>http://localhost:${devPort}</code>
+                    </p>
+                    <p style="margin-top: 10px; color: #666;">
+                      Try running: <code>npm run start:react</code> or <code>npm run dev</code>
+                    </p>
+                  </div>
+                </div>
+              \`;
+            `).catch(err => console.error('Failed to display error message:', err));
+          }
+        });
+        
         oauthWindow.loadURL(oauthUrl);
       } else {
         // Production: load frontend page from local dist folder
@@ -979,17 +1070,36 @@ ipcMain.handle('oauth-google', async () => {
       }
       
       // Listen to OAuth result sent by frontend via IPC
+      console.log('🔐 Setting up oauth-result listener, waiting for frontend callback...');
       ipcMain.once('oauth-result', (event, result) => {
-        console.log('🔐 Received frontend OAuth result:', result);
+        console.log('🔐 Received frontend OAuth result:', JSON.stringify({
+          success: result.success,
+          hasCode: !!result.code,
+          hasState: !!result.state,
+          error: result.error
+        }));
         if (oauthWindow && !oauthWindow.isDestroyed()) {
+          console.log('🔐 Closing OAuth window');
           oauthWindow.close();
         }
         if (result.success && result.code) {
+          console.log('🔐 OAuth success, resolving with code and state');
           resolve({ code: result.code, state: result.state, success: true });
         } else {
-          reject(new Error(result.error || 'OAuth failed'));
+          const errorMsg = result.error || 'OAuth failed';
+          console.error('🔐 OAuth failed:', errorMsg);
+          reject(new Error(errorMsg));
         }
       });
+      
+      // Add timeout to prevent hanging forever
+      setTimeout(() => {
+        if (oauthWindow && !oauthWindow.isDestroyed()) {
+          console.warn('🔐 OAuth timeout: No result received after 5 minutes, closing window');
+          oauthWindow.close();
+          reject(new Error('OAuth timeout: No response from OAuth callback'));
+        }
+      }, 5 * 60 * 1000); // 5 minutes timeout
       
       // Listen to window close
       oauthWindow.on('closed', () => {
@@ -1008,6 +1118,8 @@ ipcMain.handle('oauth-google', async () => {
       });
       
       // Listen to navigation, capture callback URL (when Google redirects to callback URL)
+      // NOTE: In dev mode, redirect_to now uses hash route (#/auth/callback), so we let navigation happen naturally
+      // No need to intercept and modify hash, as OAuth callback will directly navigate to the correct hash URL
       oauthWindow.webContents.on('will-navigate', (event, url) => {
         console.log('🔐 OAuth window navigating to:', url);
         // Check if it's a callback URL (contains code)
@@ -1016,94 +1128,89 @@ ipcMain.handle('oauth-google', async () => {
           console.log('🔐 URL parse result:', {
             hostname: urlObj.hostname,
             pathname: urlObj.pathname,
-            hasCode: urlObj.searchParams.has('code'),
-            hasError: urlObj.searchParams.has('error')
+            hash: urlObj.hash,
+            hasCode: urlObj.searchParams.has('code') || urlObj.hash.includes('code='),
+            hasError: urlObj.searchParams.has('error') || urlObj.hash.includes('error=')
           });
           
-          // Check if it's frontend callback URL (localhost:5173 or www.desktopai.org)
-          const isFrontendCallback = (
-            (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
-            urlObj.port === '5173' &&
-            urlObj.pathname.includes('/auth/callback')
-          ) || (
-            urlObj.hostname === 'www.desktopai.org' &&
-            urlObj.pathname.includes('/auth/callback')
-          );
-          
-          if (isFrontendCallback) {
-            const code = urlObj.searchParams.get('code');
-            const state = urlObj.searchParams.get('state');
-            const error = urlObj.searchParams.get('error');
-            
-            if (code) {
-              // This is frontend callback URL, prevent navigation, let frontend handle
-              console.log('🔐 Detected frontend OAuth callback URL, preventing navigation, letting frontend handle');
-              console.log('🔐 Extracted OAuth code:', code.substring(0, 20) + '...');
-              event.preventDefault();
-              
-              // Handle callback in frontend page (update URL hash, trigger React Router)
-              const hashParams = new URLSearchParams({ code });
-              if (state) hashParams.set('state', state);
-              const hash = `#/auth/callback?${hashParams.toString()}`;
-              console.log('🔐 Updating frontend hash to:', hash);
-              
-              oauthWindow.webContents.executeJavaScript(`
-                (() => {
-                  console.log('🔐 Frontend: updating hash to', '${hash}');
-                  // Update URL hash, React Router will handle automatically
-                  window.location.hash = '${hash}';
-                  // Trigger hashchange event to ensure React Router responds
-                  window.dispatchEvent(new Event('hashchange'));
-                })();
-              `).catch(err => {
-                console.error('🔐 JavaScript execution failed:', err);
-                // Fallback: directly use handleOAuthCallback
-        handleOAuthCallback(url, resolve, reject);
-              });
-            } else if (error) {
-              console.error('🔐 OAuth error:', error);
-              event.preventDefault();
-              if (oauthWindow && !oauthWindow.isDestroyed()) {
-                oauthWindow.close();
-              }
-              reject(new Error(`OAuth error: ${error}`));
+          // Only handle errors, let successful callbacks navigate naturally
+          const error = urlObj.searchParams.get('error') || (urlObj.hash.includes('error=') ? new URLSearchParams(urlObj.hash.split('?')[1] || '').get('error') : null);
+          if (error) {
+            console.error('🔐 OAuth error:', error);
+            event.preventDefault();
+            if (oauthWindow && !oauthWindow.isDestroyed()) {
+              oauthWindow.close();
             }
+            reject(new Error(`OAuth error: ${error}`));
           }
-          // If it's Supabase internal callback URL, don't handle, let it continue navigation
+          // Let all other navigation proceed naturally, especially hash-based callbacks
         } catch (e) {
-          // URL parse failed, ignore
+          // URL parse failed, ignore and let navigation proceed
           console.error('🔐 URL parse failed:', e);
         }
       });
       
-      // Also listen to did-navigate (used in some cases)
-      // When will-navigate is prevented, did-navigate may not trigger
-      // But if will-navigate doesn't catch it, did-navigate can be a fallback
+      // Also listen to did-navigate to detect when OAuth callback completes
+      // In dev mode with hash route, callback will be in hash: http://localhost:5173/#/auth/callback?code=...
+      // Also handle Supabase direct callback: https://cjrblsalpfhugeatrhrr.supabase.co/auth/v1/callback?code=...
       oauthWindow.webContents.on('did-navigate', (event, url) => {
         console.log('🔐 OAuth window navigated to:', url);
-        // Check if it's frontend callback URL
         try {
           const urlObj = new URL(url);
-          const hasCode = urlObj.searchParams.has('code');
+          const hasCodeInQuery = urlObj.searchParams.has('code');
+          const hasCodeInHash = urlObj.hash.includes('code=');
+          const hasCode = hasCodeInQuery || hasCodeInHash;
+          
           console.log('🔐 did-navigate URL parse result:', {
             hostname: urlObj.hostname,
             pathname: urlObj.pathname,
+            hash: urlObj.hash.substring(0, 100) + (urlObj.hash.length > 100 ? '...' : ''),
+            hasCodeInQuery,
+            hasCodeInHash,
             hasCode
           });
           
-          // Check if it's frontend callback URL (localhost:5173 or www.desktopai.org)
+          // Check if it's Supabase callback URL (direct callback from Supabase)
+          const isSupabaseCallback = urlObj.hostname.includes('supabase.co') && 
+                                     urlObj.pathname.includes('/auth/v1/callback') &&
+                                     hasCodeInQuery;
+          
+          // Check if it's frontend callback URL (localhost:5173 with hash route, or www.desktopai.org)
           const isFrontendCallback = (
             (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
             urlObj.port === '5173' &&
-            urlObj.pathname.includes('/auth/callback')
+            (urlObj.pathname === '/' || urlObj.pathname === '') &&
+            urlObj.hash.includes('/auth/callback')
           ) || (
             urlObj.hostname === 'www.desktopai.org' &&
-            urlObj.pathname === '/auth/callback'
+            (urlObj.pathname === '/auth/callback' || urlObj.hash.includes('/auth/callback'))
           );
           
-          if (isFrontendCallback && hasCode) {
+          // Handle Supabase direct callback: extract code and resolve immediately
+          if (isSupabaseCallback && hasCodeInQuery) {
             const code = urlObj.searchParams.get('code');
-            console.log('🔐 did-navigate: Detected frontend callback URL, code:', code?.substring(0, 20) + '...');
+            const state = urlObj.searchParams.get('state');
+            console.log('🔐 [MAIN] Detected Supabase direct callback with code, extracting code and state');
+            console.log('🔐 [MAIN] Code length:', code ? code.length : 0);
+            console.log('🔐 [MAIN] State:', state || 'N/A');
+            
+            if (code) {
+              // Close OAuth window
+              if (oauthWindow && !oauthWindow.isDestroyed()) {
+                console.log('🔐 [MAIN] Closing OAuth window');
+                oauthWindow.close();
+              }
+              
+              // Resolve promise with code and state
+              console.log('🔐 [MAIN] Resolving OAuth promise with code');
+              resolve({ code, state: state || undefined, success: true });
+              return;
+            }
+          }
+          
+          // Handle frontend callback URL
+          if (isFrontendCallback && hasCode) {
+            console.log('🔐 did-navigate: Detected frontend callback URL with code');
       
             // ⭐ 1. First notify main window to refresh login status
             if (mainWindow && !mainWindow.isDestroyed()) {

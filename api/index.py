@@ -86,10 +86,15 @@ class handler(BaseHTTPRequestHandler):
             print(f"   - User-Agent: {self.headers.get('User-Agent', 'N/A')}")
             print(f"   - Origin: {self.headers.get('Origin', 'N/A')}")
             print(f"   - Content-Type: {self.headers.get('Content-Type', 'N/A')}")
+            print(f"   - Method: {self.command}")
+            print(f"   - Path (self.path): {self.path}")
             # 打印所有相关 headers 以调试路径问题
-            for header_name in ['X-Rewrite-Url', 'X-Original-Url', 'X-Forwarded-Uri']:
-                if self.headers.get(header_name):
-                    print(f"   - {header_name}: {self.headers.get(header_name)}")
+            for header_name in ['X-Rewrite-Url', 'X-Original-Url', 'X-Forwarded-Uri', 'X-Forwarded-Path']:
+                header_value = self.headers.get(header_name)
+                if header_value:
+                    print(f"   - {header_name}: {header_value}")
+            # 打印所有 headers（用于调试）
+            print(f"   - All headers: {dict(self.headers)}")
             
             # 获取 FastAPI 应用
             app = get_app()
@@ -151,6 +156,11 @@ class handler(BaseHTTPRequestHandler):
                 elif message["type"] == "http.response.body":
                     body += message.get("body", b"")
             
+            # 记录响应状态（特别是 405 错误）
+            if status == 405:
+                print(f"⚠️ Method Not Allowed (405) for {self.command} {self.path}")
+                print(f"   This usually means the route exists but doesn't support {self.command} method")
+            
             # 发送响应
             # FastAPI 的 CORSMiddleware 已经设置了所有必要的 CORS 头部，不需要手动添加
             self.send_response(status)
@@ -197,9 +207,41 @@ class handler(BaseHTTPRequestHandler):
         import urllib.parse
         
         # 解析路径和查询字符串
+        # Vercel 会将 /api/* 重写到 /api/index，但 self.path 应该保持原始路径
+        # 例如：请求 /api/auth/exchange-code 时，self.path 应该是 "/api/auth/exchange-code"
+        # 而不是 "/api/index"
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
         query_string = parsed_path.query.encode()
+        
+        # 如果路径是 /api/index，可能是直接访问或路径丢失
+        # 尝试从 header 中恢复原始路径
+        if path == "/api/index" or path.startswith("/api/index"):
+            print(f"   - ⚠️ Detected rewrite: path is {path}, attempting to recover original path")
+            # Vercel 可能在不同的 header 中传递原始路径
+            original_path = None
+            
+            # 尝试多个可能的 header
+            for header_name in ['X-Rewrite-Url', 'X-Original-Url', 'X-Forwarded-Uri', 'X-Forwarded-Path']:
+                header_value = self.headers.get(header_name)
+                if header_value:
+                    original_path = header_value
+                    print(f"   - Found {header_name}: {original_path}")
+                    break
+            
+            if original_path:
+                parsed_path = urllib.parse.urlparse(original_path)
+                path = parsed_path.path
+                query_string = parsed_path.query.encode()
+                print(f"   - ✅ Using original path: {path}")
+            else:
+                print(f"   - ⚠️ Warning: Path is {path} but no original path found in headers")
+                print(f"   - ⚠️ This may cause routing issues. Checking if Vercel preserves path in self.path...")
+                # 根据 Vercel 文档，self.path 应该保持原始路径
+                # 如果这里仍然是 /api/index，可能是 Vercel 的行为变化
+                # 在这种情况下，我们需要依赖 FastAPI 的路由匹配
+        
+        print(f"   - ✅ Final path for FastAPI: {path}")
         
         # 构建 headers
         headers = []

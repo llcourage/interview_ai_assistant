@@ -86,16 +86,18 @@ async def startup_event():
 # Configure CORS
 # Note: When allow_credentials=True, cannot use allow_origins=["*"]
 # Must explicitly specify allowed origins, otherwise browser will reject cross-origin requests with cookies
+# Electron apps may send requests without Origin header (file:// protocol or custom protocol)
 origins = [
     "http://localhost:5173",      # Vite dev server
     "http://127.0.0.1:5173",     # Vite dev server (alternative)
     "https://www.desktopai.org", # Production web
     "http://localhost:3000",      # Alternative development port
+    None,                         # Allow requests without Origin (Electron apps, file:// protocol)
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        # ⭐ Cannot use "*", must explicitly specify
+    allow_origins=origins,        # ⭐ Cannot use "*", must explicitly specify (None allows no Origin)
     allow_credentials=True,       # ⭐ Must be True to allow cookies
     allow_methods=["*"],
     allow_headers=["*"],
@@ -346,16 +348,55 @@ async def get_supabase_config():
     }
 
 
+def clean_url(s: str | None) -> str:
+    """Clean URL: strip whitespace"""
+    return (s or "").strip()
+
+def require_clean_url(name: str, s: str | None) -> str:
+    """Require clean URL: strip and validate no internal whitespace"""
+    v = clean_url(s)
+    if not v:
+        return v
+    # Critical: prohibit any internal whitespace (prevent multi-line/indentation)
+    if v != v.strip() or "\n" in v or "\r" in v or "\t" in v:
+        raise ValueError(f"{name} contains whitespace: {repr(s)}")
+    return v
+
 @app.get("/api/auth/google/url", tags=["Authentication"])
 async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_request: Request = None):
     """Get Google OAuth authorization URL"""
     from backend.auth_supabase import get_google_oauth_url
+    from urllib.parse import urlparse
+    
+    # Force normalization: clean all URL-related values
+    try:
+        # Clean FRONTEND_URL fallback
+        frontend_url_fallback = require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
+        
+        # Clean redirect_to from request
+        if redirect_to is not None:
+            redirect_to = require_clean_url("redirect_to parameter", redirect_to)
+            # Reverse validation: parse redirect_to origin
+            u = urlparse(redirect_to)
+            if u.scheme not in ("http", "https") or not u.netloc:
+                raise ValueError(f"Invalid redirect_to: {redirect_to}")
+        
+        # Clean FRONTEND_URL environment variable
+        frontend_url_env = os.getenv("FRONTEND_URL")
+        if frontend_url_env:
+            frontend_url_env = require_clean_url("FRONTEND_URL env", frontend_url_env)
+    except ValueError as e:
+        print(f"❌ URL validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     
     # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
-        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        vercel_api_url = require_clean_url("VERCEL_API_URL", os.getenv("VERCEL_API_URL", "https://www.desktopai.org"))
         async with httpx.AsyncClient() as http_client:
             try:
                 params = {}
@@ -366,7 +407,22 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
                     params=params,
                     timeout=30.0
                 )
-                response.raise_for_status()
+                
+                # Check response status before parsing JSON
+                if response.status_code != 200:
+                    error_text = response.text
+                    try:
+                        error_json = response.json()
+                        error_detail = error_json.get("detail", error_json.get("error", error_text))
+                    except:
+                        error_detail = error_text
+                    
+                    print(f"❌ Vercel API returned error: {response.status_code} - {error_detail}")
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=f"Cloud API error: {error_detail}"
+                    )
+                
                 data = response.json()
                 # Verify returned data format
                 if not isinstance(data, dict) or 'url' not in data:
@@ -375,7 +431,23 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
                         detail=f"Cloud API returned invalid format: {data}"
                     )
                 return data
+            except HTTPException:
+                raise
+            except httpx.HTTPStatusError as e:
+                # Handle HTTP status errors (4xx, 5xx)
+                error_text = e.response.text if hasattr(e.response, 'text') else str(e)
+                try:
+                    error_json = e.response.json()
+                    error_detail = error_json.get("detail", error_json.get("error", error_text))
+                except:
+                    error_detail = error_text
+                print(f"❌ Vercel API HTTP error: {e.response.status_code} - {error_detail}")
+                raise HTTPException(
+                    status_code=e.response.status_code,
+                    detail=f"Cloud API error: {error_detail}"
+                )
             except httpx.HTTPError as e:
+                print(f"❌ Unable to connect to Vercel API: {e}")
                 raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
     # Non-desktop version: normal processing
@@ -383,6 +455,8 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
     if not redirect_to and http_request:
         origin = http_request.headers.get("Origin") or http_request.headers.get("Referer", "").rsplit("/", 1)[0]
         redirect_to = origin if origin else None
+        if redirect_to:
+            redirect_to = require_clean_url("redirect_to from request", redirect_to)
     
     url = await get_google_oauth_url(redirect_to)
     
@@ -506,7 +580,8 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             # Build redirect URL (redirect to frontend success page)
             # For Electron, this redirect will be captured by Electron, so URL doesn't matter
             # For Web, redirect to frontend page
-            frontend_url = os.getenv("FRONTEND_URL", "https://www.desktopai.org")
+            frontend_url_env = os.getenv("FRONTEND_URL")
+            frontend_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
             redirect_url = f"{frontend_url}/auth/success"
             
             # Create redirect response and set session cookie
@@ -597,9 +672,14 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
         )
 
 
-@app.post("/api/auth/set-session", tags=["Authentication"])
-async def set_session(request: Request):
-    """Set session cookie (called by frontend after OAuth callback)"""
+@app.post("/api/auth/exchange-code", tags=["Authentication"])
+async def exchange_oauth_code(request: Request):
+    """
+    Exchange OAuth code for session token (for Electron environment)
+    Electron should use this endpoint instead of directly connecting to Supabase
+    """
+    print(f"🔐 /api/auth/exchange-code: Received request")
+    
     # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
@@ -607,14 +687,123 @@ async def set_session(request: Request):
         vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
         async with httpx.AsyncClient() as http_client:
             try:
+                body = await request.json()
+                print(f"🔐 /api/auth/exchange-code: Forwarding to Vercel (desktop version)")
                 response = await http_client.post(
-                    f"{vercel_api_url}/api/auth/set-session",
-                    json={"access_token": access_token},
+                    f"{vercel_api_url}/api/auth/exchange-code",
+                    json=body,
                     timeout=30.0
                 )
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
+                print(f"✅ /api/auth/exchange-code: Successfully exchanged code, user: {result.get('user', {}).get('email', 'N/A')}")
+                return result
             except httpx.HTTPError as e:
+                print(f"❌ /api/auth/exchange-code: Failed to forward to Vercel: {e}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
+    
+    # Non-desktop version: normal processing
+    try:
+        body = await request.json()
+        code = body.get("code")
+        code_verifier = body.get("code_verifier")  # Optional, for PKCE
+        
+        print(f"🔐 /api/auth/exchange-code: Processing code exchange (code length: {len(code) if code else 0})")
+        
+        if not code:
+            raise HTTPException(status_code=400, detail="Missing code parameter")
+        
+        # Use Supabase Python SDK to exchange code for session
+        # Note: OAuth exchange should use ANON_KEY, not SERVICE_ROLE_KEY
+        import os
+        from supabase import create_client
+        
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+        
+        if not supabase_url or not supabase_anon_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase configuration missing: SUPABASE_URL or SUPABASE_ANON_KEY not set"
+            )
+        
+        # Create Supabase client with ANON_KEY for OAuth (not SERVICE_ROLE_KEY)
+        supabase = create_client(supabase_url, supabase_anon_key)
+        
+        print(f"🔐 Exchanging OAuth code for session (code: {code[:20]}...)")
+        
+        # Exchange code for session
+        # Note: Supabase Python SDK handles PKCE automatically if code_verifier is provided
+        if code_verifier:
+            # Use PKCE flow
+            response = supabase.auth.exchange_code_for_session({
+                "code": code,
+                "code_verifier": code_verifier
+            })
+        else:
+            # Try non-PKCE flow (may not work if OAuth URL was generated with PKCE)
+            response = supabase.auth.exchange_code_for_session({
+                "code": code
+            })
+        
+        if not response or not response.session or not response.user:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to exchange code for session: Invalid response from Supabase"
+            )
+        
+        # Return token information
+        token = Token(
+            access_token=response.session.access_token,
+            refresh_token=response.session.refresh_token,
+            token_type="bearer",
+            user={
+                "id": response.user.id,
+                "email": response.user.email or ""
+            }
+        )
+        
+        print(f"✅ Successfully exchanged code for session, user: {response.user.email}")
+        return token
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Failed to exchange OAuth code: {e}")
+        print(f"Error stack:\n{error_trace}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to exchange OAuth code: {str(e)}"
+        )
+
+
+@app.post("/api/auth/set-session", tags=["Authentication"])
+async def set_session(request: Request):
+    """Set session cookie (called by frontend after OAuth callback)"""
+    print(f"🔐 /api/auth/set-session: Received request")
+    
+    # If desktop version, forward to Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        async with httpx.AsyncClient() as http_client:
+            try:
+                body = await request.json()
+                print(f"🔐 /api/auth/set-session: Forwarding to Vercel (desktop version)")
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/auth/set-session",
+                    json=body,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                result = response.json()
+                print(f"✅ /api/auth/set-session: Successfully set session, user: {result.get('user', {}).get('email', 'N/A')}")
+                return result
+            except httpx.HTTPError as e:
+                print(f"❌ /api/auth/set-session: Failed to forward to Vercel: {e}")
                 raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
     # Non-desktop version: normal processing
@@ -623,7 +812,10 @@ async def set_session(request: Request):
         body = await request.json()
         access_token = body.get("access_token")
         if not access_token:
+            print(f"❌ /api/auth/set-session: Missing access_token")
             raise HTTPException(status_code=400, detail="Missing access_token")
+        
+        print(f"🔐 /api/auth/set-session: Processing session setup (token length: {len(access_token)})")
         
         # Verify token
         from backend.auth_supabase import verify_token
@@ -637,10 +829,42 @@ async def set_session(request: Request):
         
         # Determine cookie domain based on request origin
         origin = request.headers.get("Origin", "")
+        user_agent = request.headers.get("User-Agent", "")
+        is_electron = "Electron" in user_agent if user_agent else False
         is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
         
-        # Set session cookie
-        if is_localhost:
+        # For Electron apps, try to set cookie with both localhost and production settings
+        # Electron apps may use file:// protocol, so we need to handle both cases
+        if is_electron or not origin:
+            # Electron app: try to set cookie without domain first (for file:// protocol)
+            # Also set with domain for cross-domain requests
+            print(f"🔐 Electron app detected, setting cookie with multiple configurations")
+            
+            # 1. Set cookie without domain (for file:// protocol compatibility)
+            response_obj.set_cookie(
+                key="da_session",
+                value=access_token,
+                httponly=True,
+                secure=True,  # Use secure for HTTPS
+                samesite="none",  # Allow cross-site requests
+                max_age=60 * 60 * 24 * 7,  # 7 days
+                path="/",
+            )
+            
+            # 2. Also set with domain for production (in case Electron can use it)
+            response_obj.set_cookie(
+                key="da_session",
+                value=access_token,
+                httponly=True,
+                secure=True,
+                samesite="none",
+                domain=".desktopai.org",
+                max_age=60 * 60 * 24 * 7,  # 7 days
+                path="/",
+            )
+            
+            print(f"✅ Session cookie set (Electron app), user: {user.email}")
+        elif is_localhost:
             # Development environment: don't set domain, allow localhost use
             response_obj.set_cookie(
                 key="da_session",
@@ -740,9 +964,27 @@ async def read_users_me(http_request: Request):
     # Prioritize getting session token from Cookie (set after OAuth login)
     session_token = http_request.cookies.get("da_session")
     
+    # Log request details for debugging
+    origin = http_request.headers.get("Origin", "")
+    referer = http_request.headers.get("Referer", "")
+    user_agent = http_request.headers.get("User-Agent", "")
+    has_cookie = bool(session_token)
+    auth_header = http_request.headers.get("Authorization", "")
+    has_auth_header = bool(auth_header and auth_header.startswith("Bearer "))
+    
+    # Check if it's an Electron app request
+    is_electron = "Electron" in user_agent if user_agent else False
+    
+    print(f"🔍 /api/me: Request details - Origin: {origin or 'N/A'}, Referer: {referer or 'N/A'}, User-Agent: {user_agent[:50] if user_agent else 'N/A'}...")
+    print(f"🔍 /api/me: Authentication - Has Cookie: {has_cookie}, Has Auth Header: {has_auth_header}, Is Electron: {is_electron}")
+    
+    # For Electron apps, if no Origin, that's normal (file:// protocol)
+    if not origin and is_electron:
+        print(f"ℹ️  /api/me: Electron app request without Origin header (normal for file:// protocol)")
+    
     if session_token:
         # Use token in session cookie to verify user
-        print(f"🔍 /api/me: Getting session token from Cookie")
+        print(f"🔍 /api/me: Getting session token from Cookie (length: {len(session_token)})")
         try:
             # Use Supabase to verify token
             from backend.auth_supabase import verify_token
@@ -752,12 +994,14 @@ async def read_users_me(http_request: Request):
                 return user
         except Exception as e:
             print(f"❌ /api/me: Cookie session verification failed: {e}")
+            import traceback
+            print(f"❌ /api/me: Error traceback:\n{traceback.format_exc()}")
             # Cookie invalid, continue trying Authorization header
     
     # If no Cookie or Cookie invalid, try getting token from Authorization header
-    auth_header = http_request.headers.get("Authorization", "")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.replace("Bearer ", "")
+        print(f"🔍 /api/me: Getting token from Authorization header (length: {len(token)})")
         try:
             from backend.auth_supabase import verify_token
             user = await verify_token(token)
@@ -766,8 +1010,11 @@ async def read_users_me(http_request: Request):
                 return user
         except Exception as e:
             print(f"❌ /api/me: Authorization header verification failed: {e}")
+            import traceback
+            print(f"❌ /api/me: Error traceback:\n{traceback.format_exc()}")
     
     # Neither available, return 401
+    print(f"❌ /api/me: No valid authentication found - Cookie: {has_cookie}, Auth Header: {has_auth_header}")
     raise HTTPException(status_code=401, detail="Unauthenticated: Missing valid session cookie or Authorization token")
 
 

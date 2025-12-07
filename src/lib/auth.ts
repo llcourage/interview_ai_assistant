@@ -219,12 +219,39 @@ export const isAuthenticated = async (): Promise<boolean> => {
   // 2. 没有 token 或 token 无效，检查服务器 Cookie 会话（Electron OAuth 流程）
   console.log('🔑 isAuthenticated: 未找到有效 token，调用 /api/me 检查服务器会话');
   try {
+    // 尝试获取 token（即使之前验证失败，也可能有无效的 token）
+    const token = getToken();
+    const authHeader = token ? getAuthHeader() : null;
+    
+    // 检查是否是 Electron 环境
+    const isElectronEnv = typeof window !== 'undefined' && (window as any).aiShot !== undefined;
+    
+    // 构建请求头
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    
+    // 对于 Electron 应用，优先使用 Authorization header（因为 Cookie 可能无法正确工作）
+    // 对于 Web 应用，同时发送 Cookie 和 Authorization header（双重保险）
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+      if (isElectronEnv) {
+        console.log('🔑 isAuthenticated: Electron 环境，优先使用 Authorization header');
+      } else {
+        console.log('🔑 isAuthenticated: 同时发送 Cookie 和 Authorization header');
+      }
+    } else {
+      if (isElectronEnv) {
+        console.log('🔑 isAuthenticated: Electron 环境，无 token，仅尝试 Cookie');
+      } else {
+        console.log('🔑 isAuthenticated: 仅发送 Cookie（无 Authorization header）');
+      }
+    }
+    
     // 直接调用 API 检查服务器会话，使用 credentials: 'include' 携带 Cookie
     const response = await fetch(`${API_BASE_URL}/api/me`, {
       credentials: 'include', // 携带 Cookie（用于跨域请求）
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
     
     console.log('🌐 isAuthenticated: /api/me 响应状态:', response.status, response.statusText);
@@ -315,28 +342,45 @@ export const loginWithGoogle = async (): Promise<void> => {
   try {
     // 检查是否是 Electron 环境
     if (typeof window !== 'undefined' && (window as any).aiShot?.loginWithGoogle) {
-      // Electron 环境：使用 Electron OAuth 窗口
-      // 先获取 Supabase 配置（从 API）
-      const redirectTo = 'https://www.desktopai.org/auth/callback';
-      const { supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
+      // Electron 环境：使用 Electron OAuth 窗口，通过后端 API 处理
+      console.log('🔐 Electron 环境：通过后端 API 处理 OAuth 登录');
       
-      // 保存 Supabase 配置到 localStorage，供 handleOAuthCallback 使用
-      if (supabaseUrl && supabaseAnonKey) {
-        localStorage.setItem('supabase_url', supabaseUrl);
-        localStorage.setItem('supabase_anon_key', supabaseAnonKey);
-      }
-      
+      // Electron 不需要获取 Supabase 配置，因为所有操作都通过后端 API
+      console.log('🔐 Electron: 调用主进程 loginWithGoogle');
       const result = await (window as any).aiShot.loginWithGoogle();
+      console.log('🔐 Electron: 收到主进程返回结果:', { 
+        success: result.success, 
+        hasCode: !!result.code, 
+        hasState: !!result.state,
+        error: result.error 
+      });
+      
       if (result.success && result.code) {
-        // 使用 code 和 state 交换 token
-        await handleOAuthCallback(result.code, result.state);
+        console.log('🔐 Electron: 开始处理 OAuth callback，code length:', result.code.length);
+        // 使用 code 和 state 交换 token（通过后端 API）
+        const token = await handleOAuthCallback(result.code, result.state);
+        console.log('🔐 Electron: OAuth callback 处理完成，token saved:', !!token);
+        
+        // 验证 token 是否已保存
+        const savedToken = getToken();
+        if (savedToken) {
+          console.log('✅ Electron: Token 已保存，用户:', savedToken.user?.email);
+        } else {
+          console.error('❌ Electron: Token 保存失败！');
+        }
+        
         // 触发认证状态变化事件
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
+        console.log('🔐 Electron: 触发 auth-state-changed 事件');
+        
         // 重定向到主页面
+        console.log('🔐 Electron: 重定向到主页面');
         window.location.href = '/';
         return;
       } else {
-        throw new Error(result.error || 'Failed to get OAuth code from Electron');
+        const errorMsg = result.error || 'Failed to get OAuth code from Electron';
+        console.error('❌ Electron: OAuth 失败:', errorMsg);
+        throw new Error(errorMsg);
       }
     } else {
       // Web 环境：直接使用 Supabase JS SDK 生成 OAuth URL
@@ -429,98 +473,177 @@ export const loginWithGoogle = async (): Promise<void> => {
 
 /**
  * 处理 OAuth 回调
- * 使用前端 Supabase 客户端直接处理，避免 PKCE code_verifier 问题
+ * Electron 环境：通过后端 API 处理，不直接连接 Supabase
+ * Web 环境：使用前端 Supabase 客户端直接处理，避免 PKCE code_verifier 问题
  */
 export const handleOAuthCallback = async (code: string, state?: string): Promise<AuthToken> => {
-  // 动态导入 Supabase 客户端
-  let createClient: any;
-  try {
-    const supabaseModule = await import('@supabase/supabase-js');
-    createClient = supabaseModule.createClient;
-  } catch (importError: any) {
-    console.error('🔐 动态导入 Supabase SDK 失败:', importError);
-    throw new Error(`无法加载 Supabase SDK: ${importError.message || importError}. 请检查网络连接或刷新页面重试。`);
-  }
+  // 检查是否是 Electron 环境
+  const isElectronEnv = typeof window !== 'undefined' && (window as any).aiShot !== undefined;
   
-  // 从 localStorage 获取 Supabase 配置（如果之前保存过）
-  let supabaseUrl = localStorage.getItem('supabase_url');
-  let supabaseAnonKey = localStorage.getItem('supabase_anon_key');
-  
-  // 如果 localStorage 中没有，尝试从 API 获取
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (isElectronEnv) {
+    // Electron 环境：通过后端 API 处理 OAuth 回调，不直接连接 Supabase
+    console.log('🔐 Electron 环境：通过后端 API 处理 OAuth 回调');
+    
     try {
-      const configResponse = await fetch(`${API_BASE_URL}/api/config/supabase`);
-      if (configResponse.ok) {
-        const config = await configResponse.json();
-        supabaseUrl = config.supabase_url;
-        supabaseAnonKey = config.supabase_anon_key;
-        // 保存到 localStorage 供下次使用
-        if (supabaseUrl && supabaseAnonKey) {
-          localStorage.setItem('supabase_url', supabaseUrl);
-          localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+      // 调用后端 API 交换 OAuth code
+      const exchangeUrl = `${API_BASE_URL}/api/auth/exchange-code`;
+      const requestBody = {
+        code: code,
+        state: state
+      };
+      console.log('🔐 Electron OAuth: 调用 exchange-code 端点:');
+      console.log('   - URL:', exchangeUrl);
+      console.log('   - Method: POST');
+      console.log('   - Code length:', code?.length);
+      console.log('   - State length:', state?.length);
+      
+      const response = await fetch(exchangeUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        credentials: 'include', // 携带 Cookie
+      });
+      
+      console.log('🔐 Electron OAuth: exchange-code 响应:');
+      console.log('   - Status:', response.status, response.statusText);
+      console.log('   - OK:', response.ok);
+      console.log('   - URL:', response.url);
+      
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const error = await response.json();
+          errorDetail = error.detail || error.error || error.message || JSON.stringify(error) || errorDetail;
+          console.error('🔐 Electron OAuth: API 错误响应:');
+          console.error('   - Status:', response.status, response.statusText);
+          console.error('   - Error object:', error);
+          console.error('   - Error JSON:', JSON.stringify(error, null, 2));
+        } catch (e) {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          console.error('🔐 Electron OAuth: API 错误响应 (非 JSON):', {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText.substring(0, 500),
+            parseError: e
+          });
+          errorDetail = errorText || errorDetail;
         }
+        throw new Error(errorDetail);
       }
-    } catch (error) {
-      console.warn('无法从 API 获取 Supabase 配置，使用环境变量或默认值', error);
+      
+      const token: AuthToken = await response.json();
+      console.log('🔐 Electron OAuth: 收到 token，保存到 localStorage');
+      saveToken(token);
+      
+      // 验证 token 是否已保存
+      const savedToken = getToken();
+      if (savedToken) {
+        console.log('✅ Electron OAuth: Token 已保存到 localStorage，用户:', token.user?.email);
+      } else {
+        console.error('❌ Electron OAuth: Token 保存失败！');
+      }
+      
+      return token;
+    } catch (error: any) {
+      console.error('❌ Electron OAuth 回调失败:', error);
+      throw new Error(error.message || 'Failed to exchange OAuth code through backend API');
     }
-  }
-  
-  // 如果还是没有，使用环境变量或默认值
-  if (!supabaseUrl) {
-    supabaseUrl = (import.meta.env as any).VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
-  }
-  
-  if (!supabaseAnonKey) {
-    supabaseAnonKey = (import.meta.env as any).VITE_SUPABASE_ANON_KEY || '';
-  }
-  
-  if (!supabaseAnonKey) {
-    console.error('❌ Supabase 配置获取失败:', {
-      fromLocalStorage: !!localStorage.getItem('supabase_anon_key'),
-      fromEnv: !!(import.meta.env as any).VITE_SUPABASE_ANON_KEY,
-      supabaseUrl,
-      supabaseAnonKey: supabaseAnonKey ? '***' : '(empty)'
+  } else {
+    // Web 环境：使用前端 Supabase 客户端直接处理
+    console.log('🔐 Web 环境：使用 Supabase JS SDK 处理 OAuth 回调');
+    
+    // 动态导入 Supabase 客户端
+    let createClient: any;
+    try {
+      const supabaseModule = await import('@supabase/supabase-js');
+      createClient = supabaseModule.createClient;
+    } catch (importError: any) {
+      console.error('🔐 动态导入 Supabase SDK 失败:', importError);
+      throw new Error(`无法加载 Supabase SDK: ${importError.message || importError}. 请检查网络连接或刷新页面重试。`);
+    }
+    
+    // 从 localStorage 获取 Supabase 配置（如果之前保存过）
+    let supabaseUrl = localStorage.getItem('supabase_url');
+    let supabaseAnonKey = localStorage.getItem('supabase_anon_key');
+    
+    // 如果 localStorage 中没有，尝试从 API 获取
+    if (!supabaseUrl || !supabaseAnonKey) {
+      try {
+        const configResponse = await fetch(`${API_BASE_URL}/api/config/supabase`);
+        if (configResponse.ok) {
+          const config = await configResponse.json();
+          supabaseUrl = config.supabase_url;
+          supabaseAnonKey = config.supabase_anon_key;
+          // 保存到 localStorage 供下次使用
+          if (supabaseUrl && supabaseAnonKey) {
+            localStorage.setItem('supabase_url', supabaseUrl);
+            localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+          }
+        }
+      } catch (error) {
+        console.warn('无法从 API 获取 Supabase 配置，使用环境变量或默认值', error);
+      }
+    }
+    
+    // 如果还是没有，使用环境变量或默认值
+    if (!supabaseUrl) {
+      supabaseUrl = (import.meta.env as any).VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
+    }
+    
+    if (!supabaseAnonKey) {
+      supabaseAnonKey = (import.meta.env as any).VITE_SUPABASE_ANON_KEY || '';
+    }
+    
+    if (!supabaseAnonKey) {
+      console.error('❌ Supabase 配置获取失败:', {
+        fromLocalStorage: !!localStorage.getItem('supabase_anon_key'),
+        fromEnv: !!(import.meta.env as any).VITE_SUPABASE_ANON_KEY,
+        supabaseUrl,
+        supabaseAnonKey: supabaseAnonKey ? '***' : '(empty)'
+      });
+      throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
+    }
+    
+    if (!supabaseUrl) {
+      throw new Error('Supabase URL 未配置。');
+    }
+    
+    console.log('✅ 使用 Supabase 配置创建客户端:', {
+      url: supabaseUrl,
+      keyLength: supabaseAnonKey.length
     });
-    throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
-  }
-  
-  if (!supabaseUrl) {
-    throw new Error('Supabase URL 未配置。');
-  }
-  
-  console.log('✅ 使用 Supabase 配置创建客户端:', {
-    url: supabaseUrl,
-    keyLength: supabaseAnonKey.length
-  });
-  
-  // 创建 Supabase 客户端（使用动态配置）
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-  
-  // 使用 Supabase JS SDK 的 exchangeCodeForSession
-  // 这样可以从浏览器存储中自动获取 code_verifier
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  
-  if (error) {
-    console.error('Supabase exchangeCodeForSession error:', error);
-    throw new Error(error.message || 'OAuth callback failed');
-  }
-  
-  if (!data.session || !data.user) {
-    throw new Error('OAuth callback failed: No session or user data received');
-  }
-  
-  // 转换为我们的 AuthToken 格式
-  const token: AuthToken = {
-    access_token: data.session.access_token,
-    refresh_token: data.session.refresh_token,
-    token_type: 'bearer',
-    user: {
-      id: data.user.id,
-      email: data.user.email || ''
+    
+    // 创建 Supabase 客户端（使用动态配置）
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    
+    // 使用 Supabase JS SDK 的 exchangeCodeForSession
+    // 这样可以从浏览器存储中自动获取 code_verifier
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    
+    if (error) {
+      console.error('Supabase exchangeCodeForSession error:', error);
+      throw new Error(error.message || 'OAuth callback failed');
     }
-  };
-  
-  saveToken(token);
-  return token;
+    
+    if (!data.session || !data.user) {
+      throw new Error('OAuth callback failed: No session or user data received');
+    }
+    
+    // 转换为我们的 AuthToken 格式
+    const token: AuthToken = {
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      token_type: 'bearer',
+      user: {
+        id: data.user.id,
+        email: data.user.email || ''
+      }
+    };
+    
+    saveToken(token);
+    return token;
+  }
 };
 
