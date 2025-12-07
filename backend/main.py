@@ -723,25 +723,10 @@ async def read_users_me(http_request: Request):
             else:
                 # Token 验证返回 None，说明 token 无效
                 print(f"❌ /api/me: Cookie session token 验证返回 None，token 无效")
-                # 清除无效的 cookie 并返回 401
-                from fastapi.responses import JSONResponse
-                response_obj = JSONResponse(status_code=401, content={"detail": "Invalid session token"})
-                # 根据请求来源确定 cookie domain
-                origin = http_request.headers.get("Origin", "")
-                is_localhost = "localhost" in origin or "127.0.0.1" in origin
-                cookie_kwargs = {
-                    "key": "da_session",
-                    "value": "",
-                    "httponly": True,
-                    "secure": not is_localhost,  # 开发环境可能使用 http
-                    "samesite": "none" if not is_localhost else "lax",
-                    "max_age": 0,
-                    "path": "/",
-                }
-                if not is_localhost:
-                    cookie_kwargs["domain"] = ".desktopai.org"
-                response_obj.set_cookie(**cookie_kwargs)
-                return response_obj
+                # 清除无效的 cookie 并抛出 401
+                # 注意：不能在 HTTPException 中设置 cookie，需要在响应中设置
+                # 但这里我们直接抛出异常，让 FastAPI 处理
+                raise HTTPException(status_code=401, detail="Invalid session token")
         except HTTPException:
             # 重新抛出 HTTPException
             raise
@@ -765,10 +750,6 @@ async def read_users_me(http_request: Request):
     
     # 都没有，返回 401
     raise HTTPException(status_code=401, detail="未认证：缺少有效的 session cookie 或 Authorization token")
-    
-    token = auth_header.replace("Bearer ", "")
-    current_user = await verify_token(token)
-    return current_user
 
 
 # ========== 用户Plan相关 API ==========
