@@ -711,9 +711,16 @@ async def exchange_oauth_code(request: Request):
         code_verifier = body.get("code_verifier")  # Optional, for PKCE
         
         print(f"🔐 /api/auth/exchange-code: Processing code exchange (code length: {len(code) if code else 0})")
+        print(f"🔐 /api/auth/exchange-code: code_verifier received: {'Yes (length: ' + str(len(code_verifier)) + ')' if code_verifier else 'No'}")
+        print(f"🔐 /api/auth/exchange-code: Request body keys: {list(body.keys())}")
         
         if not code:
             raise HTTPException(status_code=400, detail="Missing code parameter")
+        
+        if not code_verifier:
+            print(f"⚠️ /api/auth/exchange-code: WARNING - code_verifier is missing!")
+            print(f"⚠️ /api/auth/exchange-code: This will fail if OAuth URL was generated with PKCE.")
+            print(f"⚠️ /api/auth/exchange-code: Request body: {json.dumps({k: ('***' if k == 'code_verifier' and v else (v[:20] + '...' if isinstance(v, str) and len(v) > 20 else v)) for k, v in body.items()}, indent=2)}")
         
         # Use Supabase Python SDK to exchange code for session
         # Note: OAuth exchange should use ANON_KEY, not SERVICE_ROLE_KEY

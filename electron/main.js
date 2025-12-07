@@ -985,17 +985,20 @@ ipcMain.handle('oauth-google', async () => {
       console.log('🔐 [MAIN] Got OAuth URL, length:', authUrl.length);
       console.log('🔐 [MAIN] Got code_verifier:', codeVerifier ? 'Yes (length: ' + codeVerifier.length + ')' : 'No');
       
-      // Store code_verifier in main window's localStorage (via webContents.executeJavaScript)
-      // This allows frontend to access it when exchanging code
+      // Store code_verifier in a variable that will be returned with the OAuth result
+      // This is more reliable than localStorage, as it doesn't depend on window context
+      let storedCodeVerifier = codeVerifier;
+      
+      // Also store in main window's localStorage as backup (via webContents.executeJavaScript)
       if (codeVerifier && mainWindow && !mainWindow.isDestroyed()) {
         try {
           await mainWindow.webContents.executeJavaScript(`
             localStorage.setItem('oauth_code_verifier', ${JSON.stringify(codeVerifier)});
             console.log('🔐 [MAIN] Stored code_verifier in main window localStorage');
           `);
-          console.log('🔐 [MAIN] Successfully stored code_verifier in main window');
+          console.log('🔐 [MAIN] Successfully stored code_verifier in main window localStorage');
         } catch (e) {
-          console.error('🔐 [MAIN] Failed to store code_verifier in main window:', e);
+          console.error('🔐 [MAIN] Failed to store code_verifier in main window localStorage:', e);
         }
       }
       
@@ -1100,8 +1103,13 @@ ipcMain.handle('oauth-google', async () => {
           oauthWindow.close();
         }
         if (result.success && result.code) {
-          console.log('🔐 OAuth success, resolving with code and state');
-          resolve({ code: result.code, state: result.state, success: true });
+          console.log('🔐 OAuth success, resolving with code, state, and code_verifier');
+          resolve({ 
+            code: result.code, 
+            state: result.state, 
+            code_verifier: storedCodeVerifier, // Include code_verifier in the response
+            success: true 
+          });
         } else {
           const errorMsg = result.error || 'OAuth failed';
           console.error('🔐 OAuth failed:', errorMsg);

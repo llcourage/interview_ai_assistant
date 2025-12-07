@@ -357,6 +357,17 @@ export const loginWithGoogle = async (): Promise<void> => {
       
       if (result.success && result.code) {
         console.log('🔐 Electron: 开始处理 OAuth callback，code length:', result.code.length);
+        
+        // Get code_verifier from result (preferred) or localStorage (fallback)
+        const codeVerifier = result.code_verifier || localStorage.getItem('oauth_code_verifier');
+        if (codeVerifier) {
+          // Store in localStorage for handleOAuthCallback to use
+          localStorage.setItem('oauth_code_verifier', codeVerifier);
+          console.log('🔐 Electron: code_verifier from result:', codeVerifier ? `Found (length: ${codeVerifier.length})` : 'Not found');
+        } else {
+          console.error('❌ Electron: code_verifier is missing from both result and localStorage!');
+        }
+        
         // 使用 code 和 state 交换 token（通过后端 API）
         const token = await handleOAuthCallback(result.code, result.state);
         console.log('🔐 Electron: OAuth callback 处理完成，token saved:', !!token);
@@ -489,7 +500,17 @@ export const handleOAuthCallback = async (code: string, state?: string): Promise
       const exchangeUrl = `${API_BASE_URL}/api/auth/exchange-code`;
       // Get code_verifier from localStorage (saved when OAuth URL was generated)
       const codeVerifier = localStorage.getItem('oauth_code_verifier');
-      console.log('🔐 Electron OAuth: code_verifier from localStorage:', codeVerifier ? 'Found' : 'Not found');
+      console.log('🔐 Electron OAuth: code_verifier from localStorage:', codeVerifier ? `Found (length: ${codeVerifier.length})` : 'Not found');
+      
+      // Debug: Check all localStorage keys
+      const allKeys = Object.keys(localStorage);
+      console.log('🔐 Electron OAuth: localStorage keys:', allKeys);
+      console.log('🔐 Electron OAuth: localStorage has oauth_code_verifier:', allKeys.includes('oauth_code_verifier'));
+      
+      if (!codeVerifier) {
+        console.error('❌ Electron OAuth: code_verifier is missing from localStorage!');
+        console.error('❌ This will cause OAuth exchange to fail. Check if code_verifier was saved when OAuth URL was generated.');
+      }
       
       const requestBody = {
         code: code,
@@ -501,6 +522,13 @@ export const handleOAuthCallback = async (code: string, state?: string): Promise
       console.log('   - Method: POST');
       console.log('   - Code length:', code?.length);
       console.log('   - State length:', state?.length);
+      console.log('   - Code verifier length:', codeVerifier?.length || 0);
+      console.log('   - Request body (without sensitive data):', {
+        code: code ? code.substring(0, 20) + '...' : null,
+        state: state ? state.substring(0, 20) + '...' : null,
+        hasCodeVerifier: !!codeVerifier,
+        codeVerifierLength: codeVerifier?.length || 0
+      });
       
       const response = await fetch(exchangeUrl, {
         method: 'POST',
