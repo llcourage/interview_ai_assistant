@@ -770,6 +770,12 @@ async def get_plan(http_request: Request):
     user_plan = await get_user_plan(current_user.id)
     quota = await get_user_quota(current_user.id)
     
+    # 确保 plan 字段存在
+    if not user_plan or not user_plan.plan:
+        # 如果 plan 不存在，使用默认的 NORMAL plan
+        print(f"⚠️ 用户 {current_user.id} 的 plan 为空，使用默认 NORMAL plan")
+        user_plan.plan = PlanType.NORMAL
+    
     limits = PLAN_LIMITS[user_plan.plan]
     
     # 获取订阅信息
@@ -777,7 +783,7 @@ async def get_plan(http_request: Request):
     # Start plan 没有订阅信息（一次性购买）
     subscription_info = None
     if user_plan.plan != PlanType.START:
-    subscription_info = await get_subscription_info(current_user.id)
+        subscription_info = await get_subscription_info(current_user.id)
     
     # 支持周度配额和终身配额
     weekly_token_limit = limits.get("weekly_token_limit")
