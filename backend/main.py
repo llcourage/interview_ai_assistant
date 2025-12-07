@@ -754,19 +754,30 @@ async def exchange_oauth_code(request: Request):
             async with httpx.AsyncClient() as client:
                 token_url = f"{supabase_url}/auth/v1/token?grant_type=pkce"
                 
-                # Supabase PKCE token exchange requires form-data format, not JSON
+                # Validate code and code_verifier before sending
+                if not code or not isinstance(code, str) or not code.strip():
+                    raise HTTPException(status_code=400, detail=f"Invalid code: code is empty or not a string (type: {type(code)})")
+                if not code_verifier or not isinstance(code_verifier, str) or not code_verifier.strip():
+                    raise HTTPException(status_code=400, detail=f"Invalid code_verifier: code_verifier is empty or not a string (type: {type(code_verifier)})")
+                
+                # Strip whitespace to ensure clean values
+                code = code.strip()
+                code_verifier = code_verifier.strip()
+                
+                print(f"🔐 Token URL: {token_url}")
+                print(f"🔐 Code (after strip): {code[:20]}... (length: {len(code)}, type: {type(code)})")
+                print(f"🔐 Code verifier (after strip): {code_verifier[:20]}... (length: {len(code_verifier)}, type: {type(code_verifier)})")
+                
+                # Supabase PKCE token exchange requires "code" parameter (not "auth_code")
+                # Based on Supabase GoTrue API documentation
                 token_data = {
                     "code": code,
                     "code_verifier": code_verifier
                 }
-                print(f"🔐 Token URL: {token_url}")
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
-                print(f"🔐 Code: {code[:20]}... (length: {len(code)})")
-                print(f"🔐 Code verifier: {code_verifier[:20]}... (length: {len(code_verifier)})")
-                print(f"🔐 Code verifier is empty: {not code_verifier or len(code_verifier.strip()) == 0}")
-                print(f"🔐 Code is empty: {not code or len(code.strip()) == 0}")
+                print(f"🔐 Request body preview: {json.dumps({k: (v[:20] + '...' if isinstance(v, str) and len(v) > 20 else v) for k, v in token_data.items()})}")
                 
-                # Supabase PKCE token exchange requires JSON format
+                # Supabase PKCE token exchange requires JSON format with "code" parameter
                 token_response = await client.post(
                     token_url,
                     json=token_data,
@@ -776,8 +787,6 @@ async def exchange_oauth_code(request: Request):
                     },
                     timeout=30.0
                 )
-                print(f"🔐 Supabase REST API response status: {token_response.status_code}")
-                
                 print(f"🔐 Supabase REST API response status: {token_response.status_code}")
                 
                 if token_response.status_code != 200:
