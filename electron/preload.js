@@ -1,86 +1,86 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// 暴露安全的 API 给渲染进程
+// Expose safe API to renderer process
 contextBridge.exposeInMainWorld('aiShot', {
-  // 监听截屏事件
+  // Listen to screenshot event
   onScreenshotTaken: (callback) => {
     ipcRenderer.on('screenshot-taken', (event, base64Image) => {
       callback(base64Image);
     });
   },
 
-  // 监听发送截图请求
+  // Listen to send screenshot request
   onSendScreenshotRequest: (callback) => {
     ipcRenderer.on('send-screenshot-request', (event, base64Image) => {
       callback(base64Image);
     });
   },
 
-  // 监听截图错误
+  // Listen to screenshot error
   onScreenshotError: (callback) => {
     ipcRenderer.on('screenshot-error', (event, errorMessage) => {
       callback(errorMessage);
     });
   },
 
-  // 手动触发截屏
+  // Manually trigger screenshot
   captureScreen: () => {
     return ipcRenderer.invoke('capture-screen');
   },
 
-  // 发送到后端
+  // Send to backend
   sendToBackend: (imageBase64) => {
     return ipcRenderer.invoke('send-to-backend', imageBase64);
   },
 
-  // 最小化悬浮窗
+  // Minimize overlay window
   minimizeOverlay: () => {
     ipcRenderer.send('minimize-overlay');
   },
 
-  // 显示悬浮窗
+  // Show overlay window
   showOverlay: () => {
     ipcRenderer.send('show-overlay');
   },
 
-  // 调整悬浮窗大小
+  // Resize overlay window
   resizeOverlay: (height) => {
     ipcRenderer.send('resize-overlay', height);
   },
 
-  // 移动悬浮窗 (前端触发)
+  // Move overlay window (triggered by frontend)
   moveOverlay: (direction, step) => {
     ipcRenderer.send('move-overlay', { direction, step });
   },
 
-  // 控制点击穿透
+  // Control click-through
   setIgnoreMouseEvents: (ignore) => {
     ipcRenderer.send('set-ignore-mouse-events', ignore);
   },
 
-  // 打开主窗口
+  // Open main window
   openMainWindow: () => {
     ipcRenderer.send('open-main-window');
   },
 
-  // Google OAuth 登录
+  // Google OAuth login
   loginWithGoogle: () => {
     return ipcRenderer.invoke('oauth-google');
   },
 
-  // 监听滚动请求
+  // Listen to scroll request
   onScrollContent: (callback) => {
     ipcRenderer.on('scroll-content', (event, direction) => {
       callback(direction);
     });
   },
 
-  // 移除事件监听器
+  // Remove event listener
   removeListener: (channel) => {
     ipcRenderer.removeAllListeners(channel);
   },
 
-  // 🔒 用户登录/登出事件
+  // 🔒 User login/logout events
   userLoggedIn: () => {
     return ipcRenderer.invoke('user-logged-in');
   },
@@ -89,12 +89,12 @@ contextBridge.exposeInMainWorld('aiShot', {
     return ipcRenderer.invoke('user-logged-out');
   },
 
-  // 🎤 本地语音转文字（使用本地 Whisper）
+  // 🎤 Local speech-to-text (using local Whisper)
   speechToTextLocal: (audioData, language = 'zh') => {
     return ipcRenderer.invoke('speech-to-text-local', audioData, language);
   },
 
-  // 🎯 场景相关 IPC
+  // 🎯 Scene-related IPC
   getAllScenes: () => {
     return ipcRenderer.invoke('get-all-scenes');
   },
@@ -107,59 +107,59 @@ contextBridge.exposeInMainWorld('aiShot', {
     ipcRenderer.send('scenario-updated');
   },
 
-  // 监听场景选择事件
+  // Listen to scenario selection event
   onScenarioSelected: (callback) => {
     ipcRenderer.on('scenario-selected', (event, data) => {
       callback(data);
     });
   },
 
-  // 监听打开场景编辑器事件
+  // Listen to open scenario editor event
   onOpenScenarioEditor: (callback) => {
     ipcRenderer.on('open-scenario-editor', (event, data) => {
       callback(data);
     });
   },
 
-  // 📁 选择文件夹
+  // 📁 Select folder
   selectFolder: (options) => {
     return ipcRenderer.invoke('select-folder', options);
   },
 
-  // ⚠️ 显示 Token 使用率警告
+  // ⚠️ Show Token usage warning
   showTokenWarning: (message, usagePercentage) => {
     ipcRenderer.send('show-token-warning', message, usagePercentage);
   },
 
-  // 🔐 OAuth 结果（用于 OAuth 窗口）
+  // 🔐 OAuth result (for OAuth window)
   sendOAuthResult: (result) => {
     ipcRenderer.send('oauth-result', result);
   },
 
-  // 🔄 监听登录状态刷新事件
+  // 🔄 Listen to login status refresh event
   onAuthRefresh: (callback) => {
-    console.log('[preload] 注册 auth:refresh 监听');
-    // 注意：不移除旧监听器，避免 React StrictMode 下 cleanup 导致监听器被删除
-    // 即使重复注册，也只是会触发多次回调，不会导致监听器丢失
+    console.log('[preload] Registering auth:refresh listener');
+    // Note: Don't remove old listeners to avoid React StrictMode cleanup deleting listeners
+    // Even if registered multiple times, it will only trigger callbacks multiple times, won't cause listener loss
     ipcRenderer.on('auth:refresh', () => {
-      console.log('[preload] 收到 auth:refresh 事件，调用回调');
+      console.log('[preload] Received auth:refresh event, calling callback');
       try {
         callback();
       } catch (e) {
-        console.error('[preload] auth:refresh 回调异常：', e);
+        console.error('[preload] auth:refresh callback exception:', e);
       }
     });
   },
 
-  // 移除事件监听器（暂时禁用，避免 React StrictMode 下 cleanup 导致监听器丢失）
+  // Remove event listener (temporarily disabled to avoid React StrictMode cleanup causing listener loss)
   removeAuthRefreshListener: () => {
-    console.log('[preload] removeAuthRefreshListener 调用（暂时不做任何事情，避免 StrictMode 下监听器丢失）');
-    // 暂时不执行 removeAllListeners，避免 React StrictMode 下 cleanup 导致监听器被删除
+    console.log('[preload] removeAuthRefreshListener called (temporarily doing nothing to avoid listener loss in StrictMode)');
+    // Temporarily don't execute removeAllListeners to avoid React StrictMode cleanup deleting listeners
     // ipcRenderer.removeAllListeners('auth:refresh');
   }
 });
 
-// 暴露 ipcRenderer 给 OAuth 窗口使用（仅用于发送 OAuth 结果）
+// Expose ipcRenderer for OAuth window use (only for sending OAuth result)
 if (window.location.hash.includes('auth/callback') || window.location.search.includes('oauth_url')) {
   contextBridge.exposeInMainWorld('ipcRenderer', {
     send: (channel, data) => {

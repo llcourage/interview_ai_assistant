@@ -9,7 +9,7 @@ const { createWriteStream } = require('fs');
 const https = require('https');
 const http = require('http');
 
-// 🚨 恢复 GPU 加速（有些系统禁用后反而黑屏）
+// 🚨 Restore GPU acceleration (some systems may show black screen when disabled)
 // app.disableHardwareAcceleration();
 
 let mainWindow = null;
@@ -19,7 +19,7 @@ let currentScreenshot = null;
 
 const isDev = !app.isPackaged;
 
-// 📝 设置日志文件
+// 📝 Setup log file
 const logDir = path.join(app.getPath('userData'), 'logs');
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
@@ -27,7 +27,7 @@ if (!fs.existsSync(logDir)) {
 const logFile = path.join(logDir, `main-${new Date().toISOString().replace(/:/g, '-').split('.')[0]}.log`);
 const logStream = createWriteStream(logFile, { flags: 'a' });
 
-// 重定向 console 到文件和控制台
+// Redirect console to file and console
 const originalLog = console.log;
 const originalError = console.error;
 const originalWarn = console.warn;
@@ -36,7 +36,7 @@ function logToFile(level, ...args) {
   const timestamp = new Date().toISOString();
   const message = `[${timestamp}] [${level}] ${args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')}\n`;
   logStream.write(message);
-  // 同时输出到控制台
+  // Also output to console
   if (level === 'ERROR') {
     originalError(...args);
   } else if (level === 'WARN') {
@@ -51,12 +51,12 @@ console.error = (...args) => logToFile('ERROR', ...args);
 console.warn = (...args) => logToFile('WARN', ...args);
 
 console.log('='.repeat(60));
-console.log('🚀 Electron 应用启动');
-console.log(`   环境: ${isDev ? 'Development' : 'Production'}`);
-console.log(`   日志文件: ${logFile}`);
-console.log(`   应用路径: ${app.getAppPath()}`);
-console.log(`   资源路径: ${process.resourcesPath || 'N/A'}`);
-console.log(`   打包状态: ${app.isPackaged ? '已打包' : '未打包'}`);
+console.log('🚀 Electron app starting');
+console.log(`   Environment: ${isDev ? 'Development' : 'Production'}`);
+console.log(`   Log file: ${logFile}`);
+console.log(`   App path: ${app.getAppPath()}`);
+console.log(`   Resources path: ${process.resourcesPath || 'N/A'}`);
+console.log(`   Packaged: ${app.isPackaged ? 'Yes' : 'No'}`);
 console.log('='.repeat(60));
 
 // Desktop version architecture:
@@ -64,7 +64,7 @@ console.log('='.repeat(60));
 // - All API requests go to Vercel backend (no local FastAPI)
 // - No API keys stored locally, all managed on Vercel
 
-// 🎯 获取场景配置（从渲染进程）
+// 🎯 Get scene configuration (from renderer process)
 async function getSceneConfig() {
   if (!mainWindow) return null;
   try {
@@ -89,11 +89,11 @@ async function getSceneConfig() {
   }
 }
 
-// 🎯 获取所有场景（包括内置和自定义）
+// 🎯 Get all scenes (including built-in and custom)
 async function getAllScenes() {
   const customScenes = await getSceneConfig();
   
-  // 内置场景
+  // Built-in scenes
   const builtInScenes = [
     {
       id: 'coding',
@@ -141,7 +141,7 @@ async function getAllScenes() {
   };
 }
 
-// 🎯 创建 Application Scenario 菜单
+// 🎯 Create Application Scenario menu
 async function createApplicationScenarioMenu() {
   const scenes = await getAllScenes();
   
@@ -221,18 +221,18 @@ async function createApplicationScenarioMenu() {
   };
 }
 
-// 🎨 创建现代化菜单
+// 🎨 Create modern menu
 async function createMenu() {
-  // 菜单已全部删除，使用空菜单
+  // Menu has been removed, using empty menu
   const template = [];
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
 
-// 🎯 更新 Application Scenario 菜单（已删除，不再需要）
+// 🎯 Update Application Scenario menu (removed, no longer needed)
 async function updateApplicationScenarioMenu() {
-  // 菜单已简化，不再需要更新场景菜单
+  // Menu has been simplified, no longer need to update scene menu
 }
 
 function createMainWindow() {
@@ -242,14 +242,14 @@ function createMainWindow() {
     show: false,
     frame: true,
     backgroundColor: '#f5f7fa',
-    autoHideMenuBar: false, // 显示菜单栏
+    autoHideMenuBar: false, // Show menu bar
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      // 在开发环境中禁用 webSecurity 以允许跨域请求（仅用于开发）
-      // ⚠️ 注意：这仅用于开发环境，生产环境应该保持 webSecurity 启用
-      webSecurity: !isDev // 开发环境禁用，生产环境启用
+      // Disable webSecurity in development to allow cross-origin requests (development only)
+      // ⚠️ Note: This is for development only, production should keep webSecurity enabled
+      webSecurity: !isDev // Disabled in development, enabled in production
     },
     icon: path.join(__dirname, '../resources/icon.png')
   });
@@ -258,29 +258,29 @@ function createMainWindow() {
     // Development: connect to Vite dev server
     const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
     const devUrl = `http://localhost:${devPort}`;
-    console.log(`🔧 开发模式: 连接到 ${devUrl}`);
+    console.log(`🔧 Development mode: connecting to ${devUrl}`);
     mainWindow.loadURL(devUrl);
-    // mainWindow.webContents.openDevTools(); // 🚨 关闭开发者工具
+    // mainWindow.webContents.openDevTools(); // 🚨 Close DevTools
   } else {
     // Production: load from dist/ folder (static files built by Vite)
     // All API requests will be forwarded to Vercel backend
-    // ✅ 关键：必须指向具体的 index.html 文件
+    // ✅ Key: Must point to specific index.html file
     const indexHtml = path.join(__dirname, '../dist/index.html');
-    console.log(`📦 生产模式: 加载文件 ${indexHtml}`);
-    console.log(`   文件是否存在: ${fs.existsSync(indexHtml)}`);
+    console.log(`📦 Production mode: loading file ${indexHtml}`);
+    console.log(`   File exists: ${fs.existsSync(indexHtml)}`);
     console.log(`   __dirname: ${__dirname}`);
-    console.log(`   完整路径: ${path.resolve(indexHtml)}`);
+    console.log(`   Full path: ${path.resolve(indexHtml)}`);
     
-    // ✅ 使用 loadFile 加载具体的 HTML 文件
+    // ✅ Use loadFile to load specific HTML file
     mainWindow.loadFile(indexHtml);
     
-    // 🚨 临时启用 DevTools 以便调试
+    // 🚨 Temporarily enable DevTools for debugging
     mainWindow.webContents.openDevTools();
   }
 
-  // 🚨 添加错误监听
+  // 🚨 Add error listener
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    console.error('🚨 主窗口加载失败:', {
+    console.error('🚨 Main window load failed:', {
       errorCode,
       errorDescription,
       validatedURL,
@@ -288,84 +288,84 @@ function createMainWindow() {
       timestamp: new Date().toISOString()
     });
     
-    // 显示错误信息
+    // Display error message
     const errorHtml = `
       <div style="padding: 40px; font-family: Arial; text-align: center; background: #f5f7fa; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
         <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px;">
-          <h2 style="color: #e74c3c;">❌ 页面加载失败</h2>
-          <p><strong>错误代码:</strong> ${errorCode}</p>
-          <p><strong>错误描述:</strong> ${errorDescription}</p>
+          <h2 style="color: #e74c3c;">❌ Page Load Failed</h2>
+          <p><strong>Error Code:</strong> ${errorCode}</p>
+          <p><strong>Error Description:</strong> ${errorDescription}</p>
           <p><strong>URL:</strong> <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">${validatedURL}</code></p>
-          <p><strong>日志文件位置:</strong></p>
+          <p><strong>Log File Location:</strong></p>
           <p><code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px; word-break: break-all;">${logFile}</code></p>
-          <p style="margin-top: 20px; color: #666;">请查看日志文件获取更多信息</p>
+          <p style="margin-top: 20px; color: #666;">Please check the log file for more information</p>
         </div>
       </div>
     `;
     mainWindow.webContents.executeJavaScript(`
       document.body.innerHTML = ${JSON.stringify(errorHtml)};
-    `).catch(err => console.error('显示错误信息失败:', err));
+    `).catch(err => console.error('Failed to display error message:', err));
   });
   
-  // 监听控制台消息
+  // Listen to console messages
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     console.log(`[Renderer ${level}] ${message} (${sourceId}:${line})`);
   });
   
-  // 监听渲染进程崩溃
+  // Listen to renderer process crash
   mainWindow.webContents.on('render-process-gone', (event, details) => {
-    console.error('🚨 渲染进程崩溃:', details);
+    console.error('🚨 Renderer process crashed:', details);
   });
   
-  // 监听未捕获的异常
+  // Listen to uncaught exceptions
   mainWindow.webContents.on('unresponsive', () => {
-    console.error('🚨 窗口无响应');
+    console.error('🚨 Window unresponsive');
   });
   
   mainWindow.webContents.on('responsive', () => {
-    console.log('✅ 窗口恢复响应');
+    console.log('✅ Window responsive again');
   });
 
-  // 🚨 加载完成后显示（避免白屏闪烁）
+  // 🚨 Show window after loading completes (avoid white screen flash)
   mainWindow.once('ready-to-show', () => {
-    console.log('主窗口准备就绪，显示窗口');
+    console.log('Main window ready, showing window');
     mainWindow.show();
     mainWindow.focus();
   });
 
-  // 添加控制台消息监听（用于调试）
+  // Add console message listener (for debugging)
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     if (level === 3) { // error level
-      console.error('前端错误:', message);
+      console.error('Frontend error:', message);
     }
   });
 
-  // 🔗 拦截外部链接，在系统默认浏览器中打开
+  // 🔗 Intercept external links, open in system default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // 检查是否为外部链接
+    // Check if it's an external link
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      // 不是 localhost，在系统默认浏览器中打开
+      // Not localhost, open in system default browser
       if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
         shell.openExternal(url);
-        return { action: 'deny' }; // 阻止在应用内打开
+        return { action: 'deny' }; // Prevent opening in app
       }
     }
-    return { action: 'allow' }; // 允许本地链接在应用内打开
+    return { action: 'allow' }; // Allow local links to open in app
   });
 
-  // 🔗 拦截导航到外部链接和无效的 file:// 路径
+  // 🔗 Intercept navigation to external links and invalid file:// paths
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    // 拦截无效的 file:// 路径（如 file:///D:/, file:///D:/? 等）
-    // 匹配模式：file:/// + 单个驱动器字母 + :/ + 可选查询参数
+    // Intercept invalid file:// paths (e.g., file:///D:/, file:///D:/? etc.)
+    // Pattern: file:/// + single drive letter + :/ + optional query params
     if (url.startsWith('file:///') && /^file:\/\/\/[A-Z]:\/\??/i.test(url)) {
-      console.warn(`🚫 拦截无效的 file:// 导航: ${url}`);
+      console.warn(`🚫 Intercepting invalid file:// navigation: ${url}`);
       event.preventDefault();
       return;
     }
     
-    // 检查是否为外部链接
+    // Check if it's an external link
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      // 不是 localhost，在系统默认浏览器中打开
+      // Not localhost, open in system default browser
       if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
         event.preventDefault();
         shell.openExternal(url);
@@ -379,16 +379,16 @@ function createMainWindow() {
 }
 
 function createOverlayWindow() {
-  // 获取屏幕尺寸
+  // Get screen size
   const { screen } = require('electron');
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
   
-  // 计算窗口尺寸（屏幕的一半宽度，初始高度较小）
+  // Calculate window size (half screen width, small initial height)
   const windowWidth = Math.floor(screenWidth / 2);
-  // 🎯 增加最大高度到 80%，以容纳更多内容
+  // 🎯 Increase max height to 80% to accommodate more content
   const maxHeight = Math.floor(screenHeight * 0.8);
-  const initialHeight = 80; // 初始高度，只显示按钮
+  const initialHeight = 80; // Initial height, only show button
   
   overlayWindow = new BrowserWindow({
     width: windowWidth,
@@ -397,8 +397,8 @@ function createOverlayWindow() {
     minHeight: initialHeight,
     frame: false,
     transparent: true,
-    // 🚨 尝试给一个极其微弱的背景色，而不是完全透明
-    // 有时 #00000000 会导致渲染层被忽略
+    // 🚨 Try giving a very faint background color instead of completely transparent
+    // Sometimes #00000000 causes render layer to be ignored
     backgroundColor: '#01000000', 
     alwaysOnTop: true,
     skipTaskbar: false,
@@ -409,13 +409,13 @@ function createOverlayWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      // 在开发环境中禁用 webSecurity 以允许跨域请求（仅用于开发）
-      webSecurity: !isDev // 开发环境禁用，生产环境启用
+      // Disable webSecurity in development to allow cross-origin requests (development only)
+      webSecurity: !isDev // Disabled in development, enabled in production
     },
     show: false
   });
 
-  // 移除 DevTools
+  // Remove DevTools
   // overlayWindow.webContents.openDevTools({ mode: 'detach' });
 
   if (isDev) {
@@ -425,58 +425,58 @@ function createOverlayWindow() {
   } else {
     // Production: load from dist/ folder (static files built by Vite)
     // All API requests will be forwarded to Vercel backend
-    // ✅ 关键：必须指向具体的 index.html 文件
+    // ✅ Key: Must point to specific index.html file
     const indexHtml = path.join(__dirname, '../dist/index.html');
-    console.log(`📦 悬浮窗生产模式: 加载文件 ${indexHtml}`);
+    console.log(`📦 Overlay production mode: loading file ${indexHtml}`);
     overlayWindow.loadFile(indexHtml, {
       hash: '/overlay',
       search: 'type=overlay'
     });
   }
 
-  // 设置窗口位置（顶部居中）
+  // Set window position (top center)
   const x = Math.floor((screenWidth - windowWidth) / 2);
-  const y = 0; // 置顶
+  const y = 0; // Top
   overlayWindow.setPosition(x, y);
   
-  // 不需要再单独设置 opacity，上面已经设置了
+  // No need to set opacity separately, already set above
   // overlayWindow.setOpacity(1.0);
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
   });
 
-  // 🚨 调试：加载失败监听
+  // 🚨 Debug: load failure listener
   overlayWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('🚨 页面加载失败:', errorCode, errorDescription);
+    console.error('🚨 Page load failed:', errorCode, errorDescription);
   });
 
-  // 🔗 拦截外部链接，在系统默认浏览器中打开
+  // 🔗 Intercept external links, open in system default browser
   overlayWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // 检查是否为外部链接
+    // Check if it's an external link
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      // 不是 localhost，在系统默认浏览器中打开
+      // Not localhost, open in system default browser
       if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
         shell.openExternal(url);
-        return { action: 'deny' }; // 阻止在应用内打开
+        return { action: 'deny' }; // Prevent opening in app
       }
     }
-    return { action: 'allow' }; // 允许本地链接在应用内打开
+    return { action: 'allow' }; // Allow local links to open in app
   });
 
-  // 🔗 拦截导航到外部链接和无效的 file:// 路径
+  // 🔗 Intercept navigation to external links and invalid file:// paths
   overlayWindow.webContents.on('will-navigate', (event, url) => {
-    // 拦截无效的 file:// 路径（如 file:///D:/, file:///D:/? 等）
-    // 匹配模式：file:/// + 单个驱动器字母 + :/ + 可选查询参数
+    // Intercept invalid file:// paths (e.g., file:///D:/, file:///D:/? etc.)
+    // Pattern: file:/// + single drive letter + :/ + optional query params
     if (url.startsWith('file:///') && /^file:\/\/\/[A-Z]:\/\??/i.test(url)) {
-      console.warn(`🚫 拦截无效的 file:// 导航: ${url}`);
+      console.warn(`🚫 Intercepting invalid file:// navigation: ${url}`);
       event.preventDefault();
       return;
     }
     
-    // 检查是否为外部链接
+    // Check if it's an external link
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      // 不是 localhost，在系统默认浏览器中打开
+      // Not localhost, open in system default browser
       if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
         event.preventDefault();
         shell.openExternal(url);
@@ -484,38 +484,38 @@ function createOverlayWindow() {
     }
   });
 
-  // 🚨 调试：完成加载监听
+  // 🚨 Debug: load complete listener
   overlayWindow.webContents.on('did-finish-load', () => {
-    console.log('✅ 页面加载完成');
+    console.log('✅ Page load complete');
     
-    // 显示窗口
+    // Show window
     overlayWindow.show();
     overlayWindow.focus();
     
-    // 🚨 初始状态：不穿透，等前端 mousemove 接管后再动态切换
+    // 🚨 Initial state: not click-through, wait for frontend mousemove to take over then dynamically switch
     overlayWindow.setIgnoreMouseEvents(false);
-    console.log('✅ 窗口初始设为不穿透，等待前端接管');
+    console.log('✅ Window initially set to not click-through, waiting for frontend to take over');
   });
 }
 
-// 动态调整悬浮窗高度
+// Dynamically adjust overlay window height
 function resizeOverlayWindow(height) {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     const { screen } = require('electron');
     const primaryDisplay = screen.getPrimaryDisplay();
     const { height: screenHeight } = primaryDisplay.workAreaSize;
-    // 🎯 增加最大高度到 80%
+    // 🎯 Increase max height to 80%
     const maxHeight = Math.floor(screenHeight * 0.8);
     
-    // 限制最大高度为屏幕高度的 70%
-    const newHeight = Math.min(Math.max(height, 80), maxHeight); // 至少 80px
+    // Limit max height to 70% of screen height
+    const newHeight = Math.min(Math.max(height, 80), maxHeight); // At least 80px
     const currentSize = overlayWindow.getSize();
     const currentWidth = currentSize[0];
     const currentHeight = currentSize[1];
     
-    console.log(`调整悬浮窗高度: 当前=${currentHeight}px, 请求=${height}px, 实际=${newHeight}px, 最大=${maxHeight}px`);
+    console.log(`Resize overlay height: current=${currentHeight}px, requested=${height}px, actual=${newHeight}px, max=${maxHeight}px`);
     
-    // 使用 setBounds 而不是 setSize，更可靠
+    // Use setBounds instead of setSize, more reliable
     const bounds = overlayWindow.getBounds();
     overlayWindow.setBounds({
       x: bounds.x,
@@ -524,12 +524,12 @@ function resizeOverlayWindow(height) {
       height: newHeight
     });
     
-    // 强制刷新窗口
+    // Force refresh window
     overlayWindow.setSize(currentWidth, newHeight);
   }
 }
 
-// 发送消息到所有窗口
+// Send message to all windows
 function sendToWindows(channel, ...args) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, ...args);
@@ -539,7 +539,7 @@ function sendToWindows(channel, ...args) {
   }
 }
 
-// 截屏功能
+// Screenshot function
 async function captureScreen() {
   try {
     const sources = await desktopCapturer.getSources({
@@ -554,13 +554,13 @@ async function captureScreen() {
       const image = sources[0].thumbnail.toPNG();
       const base64Image = image.toString('base64');
       
-      // 🚨 添加 data URL 前缀，让浏览器能识别
+      // 🚨 Add data URL prefix so browser can recognize it
       const dataUrl = `data:image/png;base64,${base64Image}`;
       currentScreenshot = dataUrl;
       
       sendToWindows('screenshot-taken', dataUrl);
       
-      // 聚焦悬浮窗
+      // Focus overlay window
       if (overlayWindow && !overlayWindow.isDestroyed()) {
         overlayWindow.show();
         overlayWindow.focus();
@@ -569,66 +569,66 @@ async function captureScreen() {
       return dataUrl;
     }
   } catch (error) {
-    console.error('截屏失败:', error);
+    console.error('Screenshot failed:', error);
     sendToWindows('screenshot-error', error.message);
   }
   return null;
 }
 
-// 注册全局快捷键
+// Register global shortcuts
 function registerShortcuts() {
-  // Ctrl+H: 截屏
+  // Ctrl+H: Screenshot
   globalShortcut.register('CommandOrControl+H', async () => {
-    console.log('快捷键触发: Ctrl+H (截屏)');
+    console.log('Shortcut triggered: Ctrl+H (Screenshot)');
     await captureScreen();
   });
 
-  // Ctrl+Enter: 发送截图到后端
+  // Ctrl+Enter: Send screenshot to backend
   globalShortcut.register('CommandOrControl+Enter', () => {
-    console.log('快捷键触发: Ctrl+Enter (发送截图)');
+    console.log('Shortcut triggered: Ctrl+Enter (Send screenshot)');
     if (currentScreenshot) {
       sendToWindows('send-screenshot-request', currentScreenshot);
     } else {
-      sendToWindows('screenshot-error', '没有截图可发送，请先按 Ctrl+H 截屏');
+      sendToWindows('screenshot-error', 'No screenshot available, please press Ctrl+H to capture first');
     }
   });
 
-  // Ctrl+B: 切换悬浮窗显示/隐藏
+  // Ctrl+B: Toggle overlay window show/hide
   globalShortcut.register('CommandOrControl+B', () => {
-    console.log('快捷键触发: Ctrl+B (切换悬浮窗)');
+    console.log('Shortcut triggered: Ctrl+B (Toggle overlay)');
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       if (overlayWindow.isVisible()) {
         overlayWindow.hide();
-        console.log('悬浮窗已隐藏');
+        console.log('Overlay window hidden');
       } else {
         overlayWindow.show();
-        console.log('悬浮窗已显示');
+        console.log('Overlay window shown');
       }
     }
   });
 
-  // 🚨 Ctrl+Up/Down: 滚动内容 (只滚动单个回复框的内部内容)
+  // 🚨 Ctrl+Up/Down: Scroll content (only scroll internal content of single reply box)
   const upRegistered = globalShortcut.register('CommandOrControl+Up', () => {
-    console.log('快捷键触发: Ctrl+Up (向上滚动)');
+    console.log('Shortcut triggered: Ctrl+Up (Scroll up)');
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.webContents.executeJavaScript(`
         (function() {
           try {
-            // 🚨 只寻找回复框，不滚动对话历史区域
+            // 🚨 Only find reply box, don't scroll conversation history area
             const el = document.querySelector('.overlay-response');
             
-            if (!el) return '❌ 未找到 .overlay-response';
+            if (!el) return '❌ .overlay-response not found';
             
-            // 检查是否可滚动
+            // Check if scrollable
             if (el.scrollHeight <= el.clientHeight) {
-              return '⚠️ .overlay-response 内容不需要滚动 [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
+              return '⚠️ .overlay-response content does not need scrolling [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
             }
             
             const start = el.scrollTop;
             el.scrollTop -= 100;
             const end = el.scrollTop;
             
-            return '✅ 向上滚动 (.overlay-response): ' + start + ' -> ' + end + 
+            return '✅ Scrolled up (.overlay-response): ' + start + ' -> ' + end + 
                    ' [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
           } catch (e) {
             return '❌ JS Error: ' + e.message;
@@ -637,29 +637,29 @@ function registerShortcuts() {
       `).then(result => console.log(result)).catch(err => console.error('ExecJS Failed:', err));
     }
   });
-  console.log('Ctrl+Up 注册结果:', upRegistered ? '成功' : '失败（可能被占用）');
+  console.log('Ctrl+Up registration result:', upRegistered ? 'Success' : 'Failed (may be occupied)');
 
   const downRegistered = globalShortcut.register('CommandOrControl+Down', () => {
-    console.log('快捷键触发: Ctrl+Down (向下滚动)');
+    console.log('Shortcut triggered: Ctrl+Down (Scroll down)');
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.webContents.executeJavaScript(`
         (function() {
           try {
-            // 🚨 只寻找回复框，不滚动对话历史区域
+            // 🚨 Only find reply box, don't scroll conversation history area
             const el = document.querySelector('.overlay-response');
             
-            if (!el) return '❌ 未找到 .overlay-response';
+            if (!el) return '❌ .overlay-response not found';
             
-            // 检查是否可滚动
+            // Check if scrollable
             if (el.scrollHeight <= el.clientHeight) {
-              return '⚠️ .overlay-response 内容不需要滚动 [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
+              return '⚠️ .overlay-response content does not need scrolling [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
             }
             
             const start = el.scrollTop;
             el.scrollTop += 100;
             const end = el.scrollTop;
             
-            return '✅ 向下滚动 (.overlay-response): ' + start + ' -> ' + end + 
+            return '✅ Scrolled down (.overlay-response): ' + start + ' -> ' + end + 
                    ' [scrollHeight: ' + el.scrollHeight + ', clientHeight: ' + el.clientHeight + ']';
           } catch (e) {
             return '❌ JS Error: ' + e.message;
@@ -668,22 +668,21 @@ function registerShortcuts() {
       `).then(result => console.log(result)).catch(err => console.error('ExecJS Failed:', err));
     }
   });
-  console.log('Ctrl+Down 注册结果:', downRegistered ? '成功' : '失败（可能被占用）');
-  console.log('Ctrl+Down 注册结果:', downRegistered ? '成功' : '失败（可能被占用）');
+  console.log('Ctrl+Down registration result:', downRegistered ? 'Success' : 'Failed (may be occupied)');
 
-  // 移动悬浮窗 (Ctrl + Arrow Keys)
-  const moveStep = 20; // 每次移动 20px
+  // Move overlay window (Ctrl + Arrow Keys)
+  const moveStep = 20; // Move 20px each time
 
   const moveWindow = (dx, dy, name) => {
-    console.log(`尝试移动窗口 (${name}): dx=${dx}, dy=${dy}`);
+    console.log(`Attempting to move window (${name}): dx=${dx}, dy=${dy}`);
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       if (!overlayWindow.isVisible()) {
-        console.log('窗口不可见，强制显示');
+        console.log('Window not visible, forcing show');
         overlayWindow.show();
       }
       
       const bounds = overlayWindow.getBounds();
-      console.log(`当前位置: x=${bounds.x}, y=${bounds.y}`);
+      console.log(`Current position: x=${bounds.x}, y=${bounds.y}`);
       
       overlayWindow.setBounds({
         x: bounds.x + dx,
@@ -691,35 +690,35 @@ function registerShortcuts() {
         width: bounds.width,
         height: bounds.height
       });
-      console.log(`新位置: x=${bounds.x + dx}, y=${bounds.y + dy}`);
+      console.log(`New position: x=${bounds.x + dx}, y=${bounds.y + dy}`);
     } else {
-      console.log('窗口不存在或已销毁');
+      console.log('Window does not exist or has been destroyed');
     }
   };
 
-  // 注册移动快捷键 - 已移除，改为前端监听 (Local Shortcut)
-  // 这样只在悬浮窗获得焦点时生效，不影响系统
+  // Register move shortcuts - removed, changed to frontend listener (Local Shortcut)
+  // This only works when overlay window has focus, doesn't affect system
   /*
-  // 方案 C: Ctrl + Alt + WASD (绝对不冲突)
+  // Option C: Ctrl + Alt + WASD (absolutely no conflict)
   registerMoveKey('CommandOrControl+Alt+W', 0, -moveStep, 'Up');
   registerMoveKey('CommandOrControl+Alt+S', 0, moveStep, 'Down');
   registerMoveKey('CommandOrControl+Alt+A', -moveStep, 0, 'Left');
   registerMoveKey('CommandOrControl+Alt+D', moveStep, 0, 'Right');
   */
 
-  console.log('全局快捷键已注册:');
-  console.log('  Ctrl+H: 截屏');
-  console.log('  Ctrl+Enter: 发送截图分析');
-  console.log('  Ctrl+B: 切换悬浮窗显示/隐藏');
-  console.log('  Ctrl+Up: 向上滚动');
-  console.log('  Ctrl+Down: 向下滚动');
-  console.log('  Ctrl+Left: 向左移动');
-  console.log('  Ctrl+Right: 向右移动');
+  console.log('Global shortcuts registered:');
+  console.log('  Ctrl+H: Screenshot');
+  console.log('  Ctrl+Enter: Send screenshot for analysis');
+  console.log('  Ctrl+B: Toggle overlay window show/hide');
+  console.log('  Ctrl+Up: Scroll up');
+  console.log('  Ctrl+Down: Scroll down');
+  console.log('  Ctrl+Left: Move left');
+  console.log('  Ctrl+Right: Move right');
 }
 
-// 🔒 IPC: 用户登录成功，创建悬浮窗
+// 🔒 IPC: User logged in successfully, create overlay window
 ipcMain.handle('user-logged-in', () => {
-  console.log('🔐 用户已登录，创建悬浮窗');
+  console.log('🔐 User logged in, creating overlay window');
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     createOverlayWindow();
   } else {
@@ -728,9 +727,9 @@ ipcMain.handle('user-logged-in', () => {
   return { success: true };
 });
 
-// 🔒 IPC: 用户登出，关闭悬浮窗
+// 🔒 IPC: User logged out, close overlay window
 ipcMain.handle('user-logged-out', () => {
-  console.log('🚪 用户已登出，关闭悬浮窗');
+  console.log('🚪 User logged out, closing overlay window');
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.close();
     overlayWindow = null;
@@ -738,7 +737,7 @@ ipcMain.handle('user-logged-out', () => {
   return { success: true };
 });
 
-// 辅助函数：在 Node.js 中发送 HTTP 请求
+// Helper function: Send HTTP request in Node.js
 function httpRequest(url, options = {}) {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
@@ -753,21 +752,21 @@ function httpRequest(url, options = {}) {
       headers: options.headers || {}
     };
     
-    console.log('🔐 发送 HTTP 请求:', requestOptions.method, requestOptions.hostname + requestOptions.path);
+    console.log('🔐 Sending HTTP request:', requestOptions.method, requestOptions.hostname + requestOptions.path);
     
     const req = httpModule.request(requestOptions, (res) => {
       let data = '';
       
-      console.log('🔐 收到响应:', res.statusCode, res.statusMessage);
+      console.log('🔐 Received response:', res.statusCode, res.statusMessage);
       
       res.on('data', (chunk) => {
         data += chunk;
       });
       res.on('end', () => {
-        console.log('🔐 响应数据长度:', data.length);
-        console.log('🔐 响应状态码:', res.statusCode);
-        console.log('🔐 响应头:', res.headers);
-        console.log('🔐 响应数据预览:', data.substring(0, Math.min(500, data.length)));
+        console.log('🔐 Response data length:', data.length);
+        console.log('🔐 Response status code:', res.statusCode);
+        console.log('🔐 Response headers:', res.headers);
+        console.log('🔐 Response data preview:', data.substring(0, Math.min(500, data.length)));
         
         try {
           const jsonData = JSON.parse(data);
@@ -778,9 +777,9 @@ function httpRequest(url, options = {}) {
             text: () => Promise.resolve(data) 
           });
         } catch (e) {
-          console.error('🔐 JSON 解析失败:', e.message);
-          console.error('🔐 原始数据:', data);
-          // 即使 JSON 解析失败，也返回响应对象，让调用者处理
+          console.error('🔐 JSON parse failed:', e.message);
+          console.error('🔐 Raw data:', data);
+          // Even if JSON parse fails, return response object for caller to handle
           resolve({ 
             status: res.statusCode, 
             ok: res.statusCode >= 200 && res.statusCode < 300, 
@@ -792,11 +791,11 @@ function httpRequest(url, options = {}) {
     });
     
     req.on('error', (error) => {
-      console.error('🔐 HTTP 请求错误:', error.message);
+      console.error('🔐 HTTP request error:', error.message);
       reject(error);
     });
     
-    // 设置超时
+    // Set timeout
     req.setTimeout(10000, () => {
       req.destroy();
       reject(new Error('Request timeout'));
@@ -810,18 +809,18 @@ function httpRequest(url, options = {}) {
   });
 }
 
-// 处理 OAuth 回调
+// Handle OAuth callback
 function handleOAuthCallback(url, resolve, reject) {
   try {
     const urlObj = new URL(url);
     
-    // 检查是否是回调 URL（包含 code 参数）
+    // Check if it's a callback URL (contains code parameter)
     if (urlObj.pathname.includes('/auth/callback') || urlObj.searchParams.has('code')) {
       const code = urlObj.searchParams.get('code');
       const error = urlObj.searchParams.get('error');
       
       if (error) {
-        console.error('🔐 OAuth 错误:', error);
+        console.error('🔐 OAuth error:', error);
         if (oauthWindow && !oauthWindow.isDestroyed()) {
           oauthWindow.close();
         }
@@ -831,45 +830,45 @@ function handleOAuthCallback(url, resolve, reject) {
       
       if (code) {
         const state = urlObj.searchParams.get('state');
-        console.log('🔐 获取到 OAuth code:', code.substring(0, 20) + '...');
+        console.log('🔐 Got OAuth code:', code.substring(0, 20) + '...');
         if (state) {
-          console.log('🔐 获取到 OAuth state:', state.substring(0, 20) + '...');
+          console.log('🔐 Got OAuth state:', state.substring(0, 20) + '...');
         }
         
-        // 关闭 OAuth 窗口
+        // Close OAuth window
         if (oauthWindow && !oauthWindow.isDestroyed()) {
           oauthWindow.close();
         }
         
-        // 返回 code 和 state 给前端
+        // Return code and state to frontend
         resolve({ code, state: state || undefined, success: true });
       }
     }
   } catch (error) {
-    console.error('🔐 处理 OAuth 回调错误:', error);
-    // 不 reject，因为可能只是中间页面导航
+    console.error('🔐 OAuth callback handling error:', error);
+    // Don't reject, as it might just be intermediate page navigation
   }
 }
 
-// 🔐 IPC: Google OAuth 登录
+// 🔐 IPC: Google OAuth login
 ipcMain.handle('oauth-google', async () => {
   return new Promise(async (resolve, reject) => {
     try {
-      // 获取 OAuth URL（需要从 API 获取）
-      // 桌面版架构：所有 API 请求都直接到 Vercel（不依赖本地后端）
-      // 如果需要使用本地后端，可以通过环境变量 LOCAL_API_URL 指定
+      // Get OAuth URL (needs to be fetched from API)
+      // Desktop architecture: All API requests go directly to Vercel (no local backend dependency)
+      // If local backend is needed, can specify via LOCAL_API_URL environment variable
       const isDev = !app.isPackaged;
       const API_BASE_URL = process.env.LOCAL_API_URL 
         || process.env.VERCEL_API_URL 
         || 'https://www.desktopai.org';
-      // 对于 Electron 桌面应用，使用前端回调 URL
-      // 这样前端可以使用 Supabase JS SDK 处理 PKCE（code_verifier 在浏览器存储中）
-      // 前端处理完回调后，会调用后端 API 设置 session cookie
+      // For Electron desktop app, use frontend callback URL
+      // This allows frontend to use Supabase JS SDK to handle PKCE (code_verifier in browser storage)
+      // After frontend handles callback, it will call backend API to set session cookie
       const redirectTo = isDev 
         ? `http://localhost:5173/auth/callback`
         : 'https://www.desktopai.org/auth/callback';
       const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${encodeURIComponent(redirectTo)}`;
-      console.log('🔐 请求 OAuth URL:', apiUrl);
+      console.log('🔐 Requesting OAuth URL:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
       console.log('🔐 redirectTo:', redirectTo);
       console.log('🔐 isDev:', isDev);
@@ -878,11 +877,11 @@ ipcMain.handle('oauth-google', async () => {
       let response;
       try {
         response = await httpRequest(apiUrl);
-        console.log('🔐 API 响应状态:', response.status, 'OK:', response.ok);
+        console.log('🔐 API response status:', response.status, 'OK:', response.ok);
       } catch (httpError) {
-        console.error('🔐 HTTP 请求失败:', httpError);
-        console.error('🔐 错误详情:', httpError.message);
-        console.error('🔐 错误堆栈:', httpError.stack);
+        console.error('🔐 HTTP request failed:', httpError);
+        console.error('🔐 Error details:', httpError.message);
+        console.error('🔐 Error stack:', httpError.stack);
         throw new Error(`HTTP request failed: ${httpError.message}`);
       }
       
@@ -891,18 +890,18 @@ ipcMain.handle('oauth-google', async () => {
         let errorJson = null;
         try {
           errorText = await response.text();
-          // 尝试解析为 JSON
+          // Try to parse as JSON
           try {
             errorJson = JSON.parse(errorText);
-            console.error('🔐 API 错误响应 (JSON):', JSON.stringify(errorJson, null, 2));
+            console.error('🔐 API error response (JSON):', JSON.stringify(errorJson, null, 2));
           } catch (e) {
-            // 不是 JSON，使用原始文本
-            console.error('🔐 API 错误响应 (文本):', errorText);
+            // Not JSON, use raw text
+            console.error('🔐 API error response (text):', errorText);
           }
         } catch (e) {
-          console.error('🔐 无法读取错误响应:', e);
+          console.error('🔐 Unable to read error response:', e);
         }
-        console.error('🔐 API 错误响应状态:', response.status);
+        console.error('🔐 API error response status:', response.status);
         const errorMessage = errorJson?.detail || errorJson?.error || errorText;
         throw new Error(`Failed to get OAuth URL: HTTP ${response.status} - ${errorMessage}`);
       }
@@ -910,10 +909,10 @@ ipcMain.handle('oauth-google', async () => {
       let data;
       try {
         data = await response.json();
-        console.log('🔐 API 响应数据:', JSON.stringify(data, null, 2));
+        console.log('🔐 API response data:', JSON.stringify(data, null, 2));
       } catch (jsonError) {
         const errorText = await response.text();
-        console.error('🔐 JSON 解析失败，原始响应:', errorText);
+        console.error('🔐 JSON parse failed, raw response:', errorText);
         throw new Error(`Failed to parse API response: ${jsonError.message}. Response: ${errorText.substring(0, 200)}`);
       }
       
@@ -922,13 +921,13 @@ ipcMain.handle('oauth-google', async () => {
       }
       
       if (!data.url) {
-        console.error('🔐 响应中缺少 url 字段，完整响应:', JSON.stringify(data, null, 2));
+        console.error('🔐 Response missing url field, full response:', JSON.stringify(data, null, 2));
         
-        // 检查是否是错误响应
+        // Check if it's an error response
         if (data.error || data.details) {
           const errorMsg = data.details || data.error || 'Unknown error';
-          const errorDetails = data.traceback ? `\n\n详细信息:\n${data.traceback.substring(0, 500)}` : '';
-          throw new Error(`API 返回错误: ${errorMsg}${errorDetails}`);
+          const errorDetails = data.traceback ? `\n\nDetails:\n${data.traceback.substring(0, 500)}` : '';
+          throw new Error(`API returned error: ${errorMsg}${errorDetails}`);
         }
         
         throw new Error(`Invalid response: missing url field. Response keys: ${Object.keys(data).join(', ')}`);
@@ -936,10 +935,10 @@ ipcMain.handle('oauth-google', async () => {
       
       const authUrl = data.url;
       
-      console.log('🔐 打开 Google OAuth 窗口:', authUrl);
+      console.log('🔐 Opening Google OAuth window:', authUrl);
       
-      // 创建 OAuth 窗口
-      // 注意：OAuth 窗口需要加载前端页面，这样前端可以使用 Supabase JS SDK 处理 PKCE
+      // Create OAuth window
+      // Note: OAuth window needs to load frontend page so frontend can use Supabase JS SDK to handle PKCE
       oauthWindow = new BrowserWindow({
         width: 500,
         height: 600,
@@ -949,39 +948,39 @@ ipcMain.handle('oauth-google', async () => {
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
-          preload: path.join(__dirname, 'preload.js'),  // 需要 preload 以便前端可以通信
-          // 在开发环境中禁用 webSecurity 以允许跨域请求（仅用于开发）
-          webSecurity: !isDev // 开发环境禁用，生产环境启用
+          preload: path.join(__dirname, 'preload.js'),  // Need preload so frontend can communicate
+          // Disable webSecurity in development to allow cross-origin requests (development only)
+          webSecurity: !isDev // Disabled in development, enabled in production
         }
       });
       
-      // 监听窗口准备显示
+      // Listen to window ready to show
       oauthWindow.once('ready-to-show', () => {
         oauthWindow.show();
       });
       
-      // 方案：让 OAuth 窗口加载前端页面，前端页面会处理 OAuth 回调
-      // 前端页面会使用 Supabase JS SDK 的 exchangeCodeForSession，可以自动获取 code_verifier
+      // Solution: Let OAuth window load frontend page, frontend page will handle OAuth callback
+      // Frontend page will use Supabase JS SDK's exchangeCodeForSession, can automatically get code_verifier
       if (isDev) {
-        // 开发环境：加载 Vite dev server
+        // Development: load Vite dev server
         const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
         const oauthUrl = `http://localhost:${devPort}/#/auth/callback?oauth_url=${encodeURIComponent(authUrl)}`;
-        console.log('🔐 开发环境：OAuth 窗口加载前端页面:', oauthUrl);
+        console.log('🔐 Development: OAuth window loading frontend page:', oauthUrl);
         oauthWindow.loadURL(oauthUrl);
       } else {
-        // 生产环境：加载本地 dist 文件夹中的前端页面
+        // Production: load frontend page from local dist folder
         const indexHtml = path.join(__dirname, '../dist/index.html');
-        console.log('🔐 生产环境：OAuth 窗口加载前端页面:', indexHtml);
-        // 使用 loadFile 并设置 hash 和 query
+        console.log('🔐 Production: OAuth window loading frontend page:', indexHtml);
+        // Use loadFile and set hash and query
         oauthWindow.loadFile(indexHtml, {
           hash: '/auth/callback',
           query: { oauth_url: authUrl }
         });
       }
       
-      // 监听前端通过 IPC 发送的 OAuth 结果
+      // Listen to OAuth result sent by frontend via IPC
       ipcMain.once('oauth-result', (event, result) => {
-        console.log('🔐 收到前端 OAuth 结果:', result);
+        console.log('🔐 Received frontend OAuth result:', result);
         if (oauthWindow && !oauthWindow.isDestroyed()) {
           oauthWindow.close();
         }
@@ -992,36 +991,36 @@ ipcMain.handle('oauth-google', async () => {
         }
       });
       
-      // 监听窗口关闭
+      // Listen to window close
       oauthWindow.on('closed', () => {
-        console.log('🔐 OAuth 窗口已关闭');
+        console.log('🔐 OAuth window closed');
         oauthWindow = null;
         
-        // 通知主窗口刷新登录状态
-        // 无论登录成功还是失败，都应该重新检查一次
+        // Notify main window to refresh login status
+        // Whether login succeeds or fails, should check again
         if (mainWindow && !mainWindow.isDestroyed()) {
-          console.log('🔐 通知主窗口刷新登录状态');
+          console.log('🔐 Notifying main window to refresh login status');
           mainWindow.webContents.send('auth:refresh');
         }
         
-        // 如果窗口关闭时还没有收到结果，可能是用户取消了
-        // 但不要 reject，因为可能前端还在处理
+        // If window closes without receiving result, user may have cancelled
+        // But don't reject, as frontend might still be processing
       });
       
-      // 监听导航，捕获回调 URL（当 Google 重定向到 callback URL 时）
+      // Listen to navigation, capture callback URL (when Google redirects to callback URL)
       oauthWindow.webContents.on('will-navigate', (event, url) => {
-        console.log('🔐 OAuth 窗口导航到:', url);
-        // 检查是否是回调 URL（包含 code）
+        console.log('🔐 OAuth window navigating to:', url);
+        // Check if it's a callback URL (contains code)
         try {
           const urlObj = new URL(url);
-          console.log('🔐 URL 解析结果:', {
+          console.log('🔐 URL parse result:', {
             hostname: urlObj.hostname,
             pathname: urlObj.pathname,
             hasCode: urlObj.searchParams.has('code'),
             hasError: urlObj.searchParams.has('error')
           });
           
-          // 检查是否是前端回调 URL（localhost:5173 或 www.desktopai.org）
+          // Check if it's frontend callback URL (localhost:5173 or www.desktopai.org)
           const isFrontendCallback = (
             (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
             urlObj.port === '5173' &&
@@ -1037,32 +1036,32 @@ ipcMain.handle('oauth-google', async () => {
             const error = urlObj.searchParams.get('error');
             
             if (code) {
-              // 这是前端回调 URL，阻止导航，让前端处理
-              console.log('🔐 检测到前端 OAuth 回调 URL，阻止导航，让前端处理');
-              console.log('🔐 提取到 OAuth code:', code.substring(0, 20) + '...');
+              // This is frontend callback URL, prevent navigation, let frontend handle
+              console.log('🔐 Detected frontend OAuth callback URL, preventing navigation, letting frontend handle');
+              console.log('🔐 Extracted OAuth code:', code.substring(0, 20) + '...');
               event.preventDefault();
               
-              // 在前端页面中处理回调（更新 URL hash，触发 React Router）
+              // Handle callback in frontend page (update URL hash, trigger React Router)
               const hashParams = new URLSearchParams({ code });
               if (state) hashParams.set('state', state);
               const hash = `#/auth/callback?${hashParams.toString()}`;
-              console.log('🔐 更新前端 hash 为:', hash);
+              console.log('🔐 Updating frontend hash to:', hash);
               
               oauthWindow.webContents.executeJavaScript(`
                 (() => {
-                  console.log('🔐 前端：更新 hash 为', '${hash}');
-                  // 更新 URL hash，React Router 会自动处理
+                  console.log('🔐 Frontend: updating hash to', '${hash}');
+                  // Update URL hash, React Router will handle automatically
                   window.location.hash = '${hash}';
-                  // 触发 hashchange 事件，确保 React Router 响应
+                  // Trigger hashchange event to ensure React Router responds
                   window.dispatchEvent(new Event('hashchange'));
                 })();
               `).catch(err => {
-                console.error('🔐 执行 JavaScript 失败:', err);
-                // 降级：直接使用 handleOAuthCallback
+                console.error('🔐 JavaScript execution failed:', err);
+                // Fallback: directly use handleOAuthCallback
         handleOAuthCallback(url, resolve, reject);
               });
             } else if (error) {
-              console.error('🔐 OAuth 错误:', error);
+              console.error('🔐 OAuth error:', error);
               event.preventDefault();
               if (oauthWindow && !oauthWindow.isDestroyed()) {
                 oauthWindow.close();
@@ -1070,29 +1069,29 @@ ipcMain.handle('oauth-google', async () => {
               reject(new Error(`OAuth error: ${error}`));
             }
           }
-          // 如果是 Supabase 内部回调 URL，不处理，让它继续导航
+          // If it's Supabase internal callback URL, don't handle, let it continue navigation
         } catch (e) {
-          // URL 解析失败，忽略
-          console.error('🔐 URL 解析失败:', e);
+          // URL parse failed, ignore
+          console.error('🔐 URL parse failed:', e);
         }
       });
       
-      // 也监听 did-navigate（某些情况下用这个）
-      // 当 will-navigate 被阻止后，did-navigate 可能不会触发
-      // 但如果 will-navigate 没有捕获到，did-navigate 可以作为备用
+      // Also listen to did-navigate (used in some cases)
+      // When will-navigate is prevented, did-navigate may not trigger
+      // But if will-navigate doesn't catch it, did-navigate can be a fallback
       oauthWindow.webContents.on('did-navigate', (event, url) => {
-        console.log('🔐 OAuth 窗口已导航到:', url);
-        // 检查是否是前端回调 URL
+        console.log('🔐 OAuth window navigated to:', url);
+        // Check if it's frontend callback URL
         try {
           const urlObj = new URL(url);
           const hasCode = urlObj.searchParams.has('code');
-          console.log('🔐 did-navigate URL 解析结果:', {
+          console.log('🔐 did-navigate URL parse result:', {
             hostname: urlObj.hostname,
             pathname: urlObj.pathname,
             hasCode
           });
           
-          // 检查是否是前端回调 URL（localhost:5173 或 www.desktopai.org）
+          // Check if it's frontend callback URL (localhost:5173 or www.desktopai.org)
           const isFrontendCallback = (
             (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
             urlObj.port === '5173' &&
@@ -1104,35 +1103,35 @@ ipcMain.handle('oauth-google', async () => {
           
           if (isFrontendCallback && hasCode) {
             const code = urlObj.searchParams.get('code');
-            console.log('🔐 did-navigate: 检测到前端回调 URL，code:', code?.substring(0, 20) + '...');
+            console.log('🔐 did-navigate: Detected frontend callback URL, code:', code?.substring(0, 20) + '...');
       
-            // ⭐ 1. 先通知主窗口刷新登录状态
+            // ⭐ 1. First notify main window to refresh login status
             if (mainWindow && !mainWindow.isDestroyed()) {
-              console.log('🔐 did-navigate: 向主窗口发送 auth:refresh');
+              console.log('🔐 did-navigate: Sending auth:refresh to main window');
               mainWindow.webContents.send('auth:refresh');
             }
             
-            // ⭐ 2. 关闭 OAuth 窗口（会触发 closed 事件，那里也会发送 auth:refresh）
+            // ⭐ 2. Close OAuth window (will trigger closed event, which also sends auth:refresh)
             if (oauthWindow && !oauthWindow.isDestroyed()) {
-              console.log('🔐 did-navigate: 关闭 OAuth 窗口');
+              console.log('🔐 did-navigate: Closing OAuth window');
               oauthWindow.close();
             }
           }
         } catch (e) {
-          // URL 解析失败，忽略
-          console.error('🔐 did-navigate URL 解析失败:', e);
+          // URL parse failed, ignore
+          console.error('🔐 did-navigate URL parse failed:', e);
         }
       });
       
     } catch (error) {
-      console.error('🔐 OAuth 错误:', error);
-      console.error('🔐 错误堆栈:', error.stack);
+      console.error('🔐 OAuth error:', error);
+      console.error('🔐 Error stack:', error.stack);
       reject(new Error(error.message || 'Failed to initiate Google OAuth'));
     }
   });
 });
 
-// 🎯 IPC 处理器：场景相关
+// 🎯 IPC handlers: Scene related
 ipcMain.handle('get-all-scenes', async () => {
   return await getAllScenes();
 });
@@ -1141,7 +1140,7 @@ ipcMain.handle('select-scenario', async (event, { sceneId, presetId }) => {
   const scenes = await getAllScenes();
   let selectedPrompt = '';
   
-  // 查找场景
+  // Find scene
   const allScenes = [...scenes.builtIn, scenes.general, ...scenes.custom];
   const scene = allScenes.find(s => s.id === sceneId);
   if (scene) {
@@ -1151,7 +1150,7 @@ ipcMain.handle('select-scenario', async (event, { sceneId, presetId }) => {
     }
   }
   
-  // 通知所有窗口场景已选择
+  // Notify all windows that scene has been selected
   if (mainWindow) {
     mainWindow.webContents.send('scenario-selected', {
       sceneId,
@@ -1171,17 +1170,17 @@ ipcMain.handle('select-scenario', async (event, { sceneId, presetId }) => {
 });
 
 ipcMain.on('scenario-updated', async () => {
-  // 当场景更新时，刷新菜单
+  // When scene is updated, refresh menu
   await updateApplicationScenarioMenu();
 });
 
-// IPC 事件处理
+// IPC event handlers
 ipcMain.handle('capture-screen', async () => {
   return await captureScreen();
 });
 
 ipcMain.handle('send-to-backend', async (event, imageBase64) => {
-  // 这里前端会自己调用后端 API，这个 handler 可以用于未来扩展
+  // Frontend will call backend API itself, this handler can be used for future extensions
   return { success: true };
 });
 
@@ -1197,46 +1196,46 @@ ipcMain.on('show-overlay', () => {
   }
 });
 
-// 控制点击穿透（根据鼠标位置动态切换）
+// Control click-through (dynamically switch based on mouse position)
 ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     const winOptions = options || { forward: true };
     overlayWindow.setIgnoreMouseEvents(ignore, winOptions);
-    // console.log(`穿透更新: ${ignore} (forward: ${winOptions.forward})`);
+    // console.log(`Click-through updated: ${ignore} (forward: ${winOptions.forward})`);
   }
 });
 
-// 打开主窗口
+// Open main window
 ipcMain.on('open-main-window', () => {
-  console.log('🔔 收到打开主窗口请求');
-  console.log('当前 mainWindow 状态:', mainWindow ? '存在' : '不存在', mainWindow && !mainWindow.isDestroyed() ? '未销毁' : '已销毁');
+  console.log('🔔 Received open main window request');
+  console.log('Current mainWindow status:', mainWindow ? 'Exists' : 'Does not exist', mainWindow && !mainWindow.isDestroyed() ? 'Not destroyed' : 'Destroyed');
   
   if (mainWindow && !mainWindow.isDestroyed()) {
-    console.log('显示现有主窗口');
+    console.log('Showing existing main window');
     
-    // 🚨 确保窗口可见
+    // 🚨 Ensure window is visible
     if (mainWindow.isMinimized()) {
       mainWindow.restore();
-      console.log('从最小化状态恢复');
+      console.log('Restored from minimized state');
     }
     
     mainWindow.show();
     mainWindow.focus();
-    mainWindow.moveTop(); // 🚨 置于最前
+    mainWindow.moveTop(); // 🚨 Bring to front
     
-    console.log('✅ 主窗口已显示并聚焦');
-    console.log('窗口是否可见:', mainWindow.isVisible());
-    console.log('窗口是否聚焦:', mainWindow.isFocused());
+    console.log('✅ Main window shown and focused');
+    console.log('Window visible:', mainWindow.isVisible());
+    console.log('Window focused:', mainWindow.isFocused());
   } else {
-    console.log('创建新的主窗口');
+    console.log('Creating new main window');
     createMainWindow();
-    console.log('✅ 新主窗口已创建');
+    console.log('✅ New main window created');
   }
 });
 
-// 接收前端的移动请求
+// Receive move request from frontend
 ipcMain.on('move-overlay', (event, { direction, step }) => {
-  console.log(`IPC收到移动请求: direction=${direction}, step=${step}`);
+  console.log(`IPC received move request: direction=${direction}, step=${step}`);
   const moveStep = step || 20;
   let dx = 0;
   let dy = 0;
@@ -1254,38 +1253,38 @@ ipcMain.on('move-overlay', (event, { direction, step }) => {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
     
-    console.log(`屏幕尺寸: ${screenWidth}x${screenHeight}`);
-    console.log(`当前窗口: x=${bounds.x}, y=${bounds.y}, width=${bounds.width}, height=${bounds.height}`);
+    console.log(`Screen size: ${screenWidth}x${screenHeight}`);
+    console.log(`Current window: x=${bounds.x}, y=${bounds.y}, width=${bounds.width}, height=${bounds.height}`);
     
-    // 计算新位置
+    // Calculate new position
     let newX = bounds.x + dx;
     let newY = bounds.y + dy;
     
-    console.log(`计算新位置（边界检查前）: x=${newX}, y=${newY}`);
+    console.log(`Calculated new position (before boundary check): x=${newX}, y=${newY}`);
     
-    // 边界检查：防止窗口移出屏幕
-    // 左边界
+    // Boundary check: prevent window from moving off screen
+    // Left boundary
     if (newX < 0) {
-      console.log(`触碰左边界，限制 x 从 ${newX} 到 0`);
+      console.log(`Hit left boundary, limiting x from ${newX} to 0`);
       newX = 0;
     }
-    // 右边界（窗口右边缘不能超出屏幕右边缘）
+    // Right boundary (window right edge cannot exceed screen right edge)
     if (newX + bounds.width > screenWidth) {
-      console.log(`触碰右边界，限制 x 从 ${newX} 到 ${screenWidth - bounds.width}`);
+      console.log(`Hit right boundary, limiting x from ${newX} to ${screenWidth - bounds.width}`);
       newX = screenWidth - bounds.width;
     }
-    // 上边界
+    // Top boundary
     if (newY < 0) {
-      console.log(`触碰上边界，限制 y 从 ${newY} 到 0`);
+      console.log(`Hit top boundary, limiting y from ${newY} to 0`);
       newY = 0;
     }
-    // 下边界（窗口下边缘不能超出屏幕下边缘）
+    // Bottom boundary (window bottom edge cannot exceed screen bottom edge)
     if (newY + bounds.height > screenHeight) {
-      console.log(`触碰下边界，限制 y 从 ${newY} 到 ${screenHeight - bounds.height}`);
+      console.log(`Hit bottom boundary, limiting y from ${newY} to ${screenHeight - bounds.height}`);
       newY = screenHeight - bounds.height;
     }
     
-    console.log(`最终位置（边界检查后）: x=${newX}, y=${newY}`);
+    console.log(`Final position (after boundary check): x=${newX}, y=${newY}`);
     
     overlayWindow.setBounds({
       x: newX,
@@ -1300,45 +1299,45 @@ ipcMain.on('resize-overlay', (event, height) => {
   resizeOverlayWindow(height);
 });
 
-// 🎤 IPC: 本地语音转文字（使用本地 Whisper）
+// 🎤 IPC: Local speech-to-text (using local Whisper)
 ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh') => {
   try {
-    // 获取 Python 解释器路径
+    // Get Python interpreter path
     const isDev = !app.isPackaged;
     let pythonPath;
     let whisperScriptPath;
     
     if (isDev) {
-      // 开发环境：使用系统 Python 或 venv
+      // Development: use system Python or venv
       pythonPath = process.platform === 'win32' ? 'python' : 'python3';
       whisperScriptPath = path.join(__dirname, 'whisper_local.py');
     } else {
-      // 生产环境：使用打包的 Python（需要配置）
-      // 这里假设 Python 在系统 PATH 中，或者您需要配置具体路径
+      // Production: use packaged Python (needs configuration)
+      // Here assumes Python is in system PATH, or you need to configure specific path
       pythonPath = process.platform === 'win32' ? 'python' : 'python3';
       whisperScriptPath = path.join(process.resourcesPath, 'whisper_local.py');
     }
     
-    // 创建临时音频文件
+    // Create temporary audio file
     const tempDir = require('os').tmpdir();
     const tempAudioPath = path.join(tempDir, `audio_${Date.now()}.webm`);
     
-    // 将 base64 或 Buffer 写入文件
+    // Write base64 or Buffer to file
     let audioBuffer;
     if (typeof audioData === 'string') {
-      // Base64 字符串
+      // Base64 string
       audioBuffer = Buffer.from(audioData, 'base64');
     } else if (Buffer.isBuffer(audioData)) {
       audioBuffer = audioData;
     } else {
-      throw new Error('不支持的音频数据格式');
+      throw new Error('Unsupported audio data format');
     }
     
     await writeFile(tempAudioPath, audioBuffer);
     
-    console.log('🎤 开始本地语音转文字，音频文件:', tempAudioPath);
+    console.log('🎤 Starting local speech-to-text, audio file:', tempAudioPath);
     
-    // 调用 Python 脚本
+    // Call Python script
     return new Promise((resolve, reject) => {
       const pythonProcess = spawn(pythonPath, [whisperScriptPath, tempAudioPath, language], {
         stdio: ['ignore', 'pipe', 'pipe']
@@ -1353,51 +1352,51 @@ ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh')
       
       pythonProcess.stderr.on('data', (data) => {
         stderr += data.toString();
-        // 打印进度信息到控制台
+        // Print progress info to console
         console.log('Whisper:', data.toString().trim());
       });
       
       pythonProcess.on('close', async (code) => {
-        // 清理临时文件
+        // Clean up temporary file
         try {
           await unlink(tempAudioPath);
         } catch (err) {
-          console.error('清理临时文件失败:', err);
+          console.error('Failed to clean up temporary file:', err);
         }
         
         if (code !== 0) {
-          console.error('Whisper 处理失败，退出码:', code);
+          console.error('Whisper processing failed, exit code:', code);
           console.error('stderr:', stderr);
-          reject(new Error(`Whisper 处理失败: ${stderr || '未知错误'}`));
+          reject(new Error(`Whisper processing failed: ${stderr || 'Unknown error'}`));
           return;
         }
         
         try {
-          // 解析 JSON 输出
+          // Parse JSON output
           const result = JSON.parse(stdout.trim());
-          console.log('✅ 本地语音转文字完成:', result);
+          console.log('✅ Local speech-to-text completed:', result);
           resolve(result);
         } catch (err) {
-          console.error('解析 Whisper 输出失败:', err);
+          console.error('Failed to parse Whisper output:', err);
           console.error('stdout:', stdout);
-          reject(new Error('解析 Whisper 输出失败'));
+          reject(new Error('Failed to parse Whisper output'));
         }
       });
       
       pythonProcess.on('error', async (err) => {
-        // 清理临时文件
+        // Clean up temporary file
         try {
           await unlink(tempAudioPath);
         } catch (unlinkErr) {
-          console.error('清理临时文件失败:', unlinkErr);
+          console.error('Failed to clean up temporary file:', unlinkErr);
         }
         
-        console.error('启动 Whisper 进程失败:', err);
-        reject(new Error(`无法启动 Whisper: ${err.message}`));
+        console.error('Failed to start Whisper process:', err);
+        reject(new Error(`Unable to start Whisper: ${err.message}`));
       });
     });
   } catch (error) {
-    console.error('❌ 本地语音转文字失败:', error);
+    console.error('❌ Local speech-to-text failed:', error);
     return {
       success: false,
       error: error.message,
@@ -1408,7 +1407,7 @@ ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh')
   }
 });
 
-// 📁 IPC: 选择文件夹
+// 📁 IPC: Select folder
 ipcMain.handle('select-folder', async (event, options = {}) => {
   try {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -1424,73 +1423,73 @@ ipcMain.handle('select-folder', async (event, options = {}) => {
 
     return { canceled: false, path: result.filePaths[0] };
   } catch (error) {
-    console.error('❌ 选择文件夹失败:', error);
+    console.error('❌ Failed to select folder:', error);
     return { canceled: true, path: null, error: error.message };
   }
 });
 
-// ⚠️ IPC: 显示 Token 使用率警告
+// ⚠️ IPC: Show Token usage warning
 ipcMain.on('show-token-warning', (event, message, usagePercentage) => {
   try {
-    // 使用 Electron 原生通知
+    // Use Electron native notification
     if (Notification.isSupported()) {
       const notification = new Notification({
-        title: '⚠️ Token 使用率警告',
-        body: `您已使用 ${usagePercentage}% 的 Token 配额，剩余配额有限。请合理使用。`,
+        title: '⚠️ Token Usage Warning',
+        body: `You have used ${usagePercentage}% of your Token quota. Remaining quota is limited. Please use wisely.`,
         icon: path.join(__dirname, '../resources/icon.png'),
         urgency: 'normal',
-        timeoutType: 'never' // 不自动消失，让用户手动关闭
+        timeoutType: 'never' // Don't auto-dismiss, let user close manually
       });
 
       notification.show();
 
-      // 可选：点击通知时聚焦主窗口
+      // Optional: Focus main window when notification is clicked
       notification.on('click', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.focus();
         }
       });
     } else {
-      // 降级到对话框
+      // Fallback to dialog
       const win = BrowserWindow.fromWebContents(event.sender);
       dialog.showMessageBox(win || mainWindow, {
         type: 'warning',
-        title: '⚠️ Token 使用率警告',
-        message: `您已使用 ${usagePercentage}% 的 Token 配额`,
+        title: '⚠️ Token Usage Warning',
+        message: `You have used ${usagePercentage}% of your Token quota`,
         detail: message,
-        buttons: ['知道了'],
+        buttons: ['Got it'],
         defaultId: 0
       });
     }
     
-    console.warn('⚠️ Token 使用率警告:', message);
+    console.warn('⚠️ Token usage warning:', message);
   } catch (error) {
-    console.error('❌ 显示 Token 警告失败:', error);
+    console.error('❌ Failed to show Token warning:', error);
   }
 });
 
-// 全局错误处理
+// Global error handling
 process.on('uncaughtException', (error) => {
-  console.error('🚨 未捕获的异常:', error);
+  console.error('🚨 Uncaught exception:', error);
   logStream.end();
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('🚨 未处理的 Promise 拒绝:', reason);
+  console.error('🚨 Unhandled Promise rejection:', reason);
   logStream.end();
 });
 
 app.whenReady().then(async () => {
   createMainWindow();
-  // 🔒 不要自动创建悬浮窗，等待主窗口通知用户已登录
+  // 🔒 Don't auto-create overlay window, wait for main window to notify user is logged in
   // createOverlayWindow();
-  await createMenu(); // 🔑 创建菜单
+  await createMenu(); // 🔑 Create menu
   registerShortcuts();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
-      // 🔒 不要自动创建悬浮窗
+      // 🔒 Don't auto-create overlay window
       // createOverlayWindow();
     }
   });
@@ -1503,14 +1502,14 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  // 注销所有快捷键
+  // Unregister all shortcuts
   globalShortcut.unregisterAll();
-  // 关闭日志流
+  // Close log stream
   logStream.end();
-  console.log('📝 日志已保存到:', logFile);
+  console.log('📝 Log saved to:', logFile);
 });
 
 app.on('before-quit', () => {
-  console.log('🛑 应用即将退出');
+  console.log('🛑 App is about to quit');
 });
 

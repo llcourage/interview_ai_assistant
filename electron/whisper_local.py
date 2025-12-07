@@ -1,6 +1,6 @@
 """
-本地 Whisper 语音转文字服务
-在 Electron 主进程中运行，不依赖云端
+Local Whisper speech-to-text service
+Runs in Electron main process, no cloud dependency
 """
 import sys
 import json
@@ -9,15 +9,15 @@ import os
 from pathlib import Path
 from faster_whisper import WhisperModel
 
-# 全局模型实例
+# Global model instance
 _model = None
 _model_name = os.getenv("WHISPER_MODEL", "base")  # tiny, base, small, medium, large
 
 def get_model():
-    """获取或初始化 Whisper 模型（单例模式）"""
+    """Get or initialize Whisper model (singleton pattern)"""
     global _model
     if _model is None:
-        print(f"🤖 加载本地 Whisper 模型: {_model_name}", file=sys.stderr)
+        print(f"🤖 Loading local Whisper model: {_model_name}", file=sys.stderr)
         device = "cuda" if os.getenv("USE_GPU", "false").lower() == "true" else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
         
@@ -27,16 +27,16 @@ def get_model():
             compute_type=compute_type,
             download_root=None
         )
-        print(f"✅ Whisper 模型加载完成", file=sys.stderr)
+        print(f"✅ Whisper model loaded", file=sys.stderr)
     return _model
 
 def transcribe_audio_file(audio_path: str, language: str = "zh") -> dict:
     """
-    转写音频文件
+    Transcribe audio file
     
     Args:
-        audio_path: 音频文件路径
-        language: 语言代码，默认为中文 "zh"，"auto" 为自动检测
+        audio_path: Audio file path
+        language: Language code, default is Chinese "zh", "auto" for auto detection
         
     Returns:
         dict: {
@@ -50,7 +50,7 @@ def transcribe_audio_file(audio_path: str, language: str = "zh") -> dict:
     try:
         model = get_model()
         
-        print(f"🎤 开始本地转写音频，语言: {language}", file=sys.stderr)
+        print(f"🎤 Starting local transcription, language: {language}", file=sys.stderr)
         
         segments, info = model.transcribe(
             audio_path,
@@ -65,7 +65,7 @@ def transcribe_audio_file(audio_path: str, language: str = "zh") -> dict:
         
         full_text = " ".join(text_parts).strip()
         
-        print(f"✅ 转写完成: {len(full_text)} 字符", file=sys.stderr)
+        print(f"✅ Transcription completed: {len(full_text)} characters", file=sys.stderr)
         
         return {
             "text": full_text,
@@ -76,7 +76,7 @@ def transcribe_audio_file(audio_path: str, language: str = "zh") -> dict:
         }
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ 本地语音转文字失败: {error_msg}", file=sys.stderr)
+        print(f"❌ Local speech-to-text failed: {error_msg}", file=sys.stderr)
         return {
             "text": "",
             "language": "",
@@ -86,11 +86,11 @@ def transcribe_audio_file(audio_path: str, language: str = "zh") -> dict:
         }
 
 if __name__ == "__main__":
-    # 从命令行参数读取
+    # Read from command line arguments
     if len(sys.argv) < 2:
         print(json.dumps({
             "success": False,
-            "error": "缺少参数: 需要音频文件路径"
+            "error": "Missing parameter: audio file path required"
         }))
         sys.exit(1)
     
