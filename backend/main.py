@@ -708,6 +708,7 @@ async def exchange_oauth_code(request: Request):
     try:
         body = await request.json()
         code = body.get("code")
+        state = body.get("state")  # Get state to extract flow_state_id
         code_verifier = body.get("code_verifier")  # Optional, for PKCE
         
         print(f"🔐 /api/auth/exchange-code: Processing code exchange (code length: {len(code) if code else 0})")
@@ -716,6 +717,32 @@ async def exchange_oauth_code(request: Request):
         
         if not code:
             raise HTTPException(status_code=400, detail="Missing code parameter")
+        
+        # If code_verifier not provided, try to retrieve from storage using flow_state_id
+        if not code_verifier and state:
+            try:
+                # Decode state JWT to get flow_state_id
+                # Supabase state JWT format: base64url(header).base64url(payload).signature
+                import base64
+                parts = state.split('.')
+                if len(parts) >= 2:
+                    # Decode payload (second part)
+                    payload_b64 = parts[1]
+                    # Add padding if needed
+                    payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                    payload_bytes = base64.urlsafe_b64decode(payload_b64)
+                    payload = json.loads(payload_bytes)
+                    flow_state_id = payload.get('flow_state_id')
+                    if flow_state_id:
+                        from backend.auth_supabase import _pkce_storage
+                        stored_verifier = _pkce_storage.get(flow_state_id)
+                        if stored_verifier:
+                            code_verifier = stored_verifier
+                            print(f"🔐 Retrieved code_verifier from storage using flow_state_id: {flow_state_id[:20]}...")
+                        else:
+                            print(f"⚠️ No code_verifier found in storage for flow_state_id: {flow_state_id[:20]}...")
+            except Exception as e:
+                print(f"⚠️ Failed to extract flow_state_id from state: {e}")
         
         if not code_verifier:
             print(f"⚠️ /api/auth/exchange-code: WARNING - code_verifier is missing!")

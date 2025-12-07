@@ -8,9 +8,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from backend.db_supabase import get_supabase
+import base64
+import json
 
 # HTTP Bearer token
 security = HTTPBearer()
+
+# In-memory storage for PKCE code_verifier (keyed by flow_state_id)
+# In production, use Redis or database instead
+_pkce_storage: dict[str, str] = {}
 
 
 class UserRegister(BaseModel):
@@ -344,10 +350,40 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
             
             print(f"🔐 Original URL from SDK: {url[:150]}...")
             
-            # Verify URL contains our code_challenge (it should if SDK used query_params)
+            # Extract flow_state_id from state JWT in URL to store code_verifier
             from urllib.parse import urlparse, parse_qs
             parsed = urlparse(url)
             query_params = parse_qs(parsed.query)
+            state_param = query_params.get('state', [None])[0]
+            
+            flow_state_id = None
+            if state_param:
+                try:
+                    # Decode JWT to get flow_state_id
+                    # Supabase state JWT format: base64url(header).base64url(payload).signature
+                    # We can decode without verification since we just need the payload
+                    import base64
+                    parts = state_param.split('.')
+                    if len(parts) >= 2:
+                        # Decode payload (second part)
+                        payload_b64 = parts[1]
+                        # Add padding if needed
+                        payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+                        payload = json.loads(payload_bytes)
+                        flow_state_id = payload.get('flow_state_id')
+                        print(f"🔐 Extracted flow_state_id from state: {flow_state_id}")
+                except Exception as e:
+                    print(f"⚠️ Failed to decode state JWT: {e}")
+            
+            # Store code_verifier with flow_state_id for later retrieval
+            if flow_state_id:
+                _pkce_storage[flow_state_id] = code_verifier
+                print(f"🔐 Stored code_verifier for flow_state_id: {flow_state_id[:20]}...")
+            else:
+                print(f"⚠️ WARNING: Could not extract flow_state_id, code_verifier will be returned directly")
+            
+            # Verify URL contains our code_challenge (it should if SDK used query_params)
             url_code_challenge = query_params.get('code_challenge', [None])[0]
             
             if url_code_challenge != code_challenge:
