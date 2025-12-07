@@ -239,12 +239,12 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
         # 前端会从浏览器存储中获取 code_verifier
         print(f"🔐 准备调用 Supabase OAuth，provider: google, redirect_to: {callback_url}")
         try:
-        response = supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {
-                "redirect_to": callback_url
-            }
-        })
+            response = supabase.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": callback_url
+                }
+            })
             print(f"🔐 Supabase OAuth 响应类型: {type(response)}")
             print(f"🔐 Supabase OAuth 响应内容: {response}")
             
