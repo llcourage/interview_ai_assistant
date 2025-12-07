@@ -753,24 +753,44 @@ async def exchange_oauth_code(request: Request):
             print(f"🔐 Calling Supabase REST API directly for PKCE exchange")
             async with httpx.AsyncClient() as client:
                 token_url = f"{supabase_url}/auth/v1/token?grant_type=pkce"
+                
+                # Supabase PKCE token exchange requires form-data format, not JSON
                 token_data = {
                     "code": code,
                     "code_verifier": code_verifier
                 }
                 print(f"🔐 Token URL: {token_url}")
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
-                print(f"🔐 Code length: {len(token_data['code'])}")
-                print(f"🔐 Code verifier length: {len(token_data['code_verifier'])}")
+                print(f"🔐 Code: {code[:20]}... (length: {len(code)})")
+                print(f"🔐 Code verifier: {code_verifier[:20]}... (length: {len(code_verifier)})")
+                print(f"🔐 Code verifier is empty: {not code_verifier or len(code_verifier.strip()) == 0}")
+                print(f"🔐 Code is empty: {not code or len(code.strip()) == 0}")
                 
-                token_response = await client.post(
-                    token_url,
-                    json=token_data,
-                    headers={
-                        "apikey": supabase_anon_key,
-                        "Content-Type": "application/json"
-                    },
-                    timeout=30.0
-                )
+                # Try form-data format first (Supabase typically expects this)
+                try:
+                    token_response = await client.post(
+                        token_url,
+                        data=token_data,  # Use data instead of json for form-data
+                        headers={
+                            "apikey": supabase_anon_key,
+                            "Content-Type": "application/x-www-form-urlencoded"
+                        },
+                        timeout=30.0
+                    )
+                    print(f"🔐 Supabase REST API response status (form-data): {token_response.status_code}")
+                except Exception as form_error:
+                    print(f"⚠️ Form-data request failed: {form_error}, trying JSON format")
+                    # Fallback to JSON format
+                    token_response = await client.post(
+                        token_url,
+                        json=token_data,
+                        headers={
+                            "apikey": supabase_anon_key,
+                            "Content-Type": "application/json"
+                        },
+                        timeout=30.0
+                    )
+                    print(f"🔐 Supabase REST API response status (JSON): {token_response.status_code}")
                 
                 print(f"🔐 Supabase REST API response status: {token_response.status_code}")
                 
