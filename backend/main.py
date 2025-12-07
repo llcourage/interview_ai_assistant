@@ -767,6 +767,8 @@ async def exchange_oauth_code(request: Request):
                 print(f"🔐 Token URL: {token_url}")
                 print(f"🔐 Code (after strip): {code[:20]}... (length: {len(code)}, type: {type(code)})")
                 print(f"🔐 Code verifier (after strip): {code_verifier[:20]}... (length: {len(code_verifier)}, type: {type(code_verifier)})")
+                print(f"🔐 FULL Code value: {code}")
+                print(f"🔐 FULL Code verifier value: {code_verifier}")
                 
                 # Supabase PKCE token exchange requires "code" parameter (not "auth_code")
                 # Based on Supabase GoTrue API documentation
@@ -775,9 +777,15 @@ async def exchange_oauth_code(request: Request):
                     "code_verifier": code_verifier
                 }
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
+                print(f"🔐 Request body (full JSON): {json.dumps(token_data, indent=2)}")
                 print(f"🔐 Request body preview: {json.dumps({k: (v[:20] + '...' if isinstance(v, str) and len(v) > 20 else v) for k, v in token_data.items()})}")
                 
                 # Supabase PKCE token exchange requires JSON format with "code" parameter
+                # Log the actual request body that will be sent
+                request_body_json = json.dumps(token_data)
+                print(f"🔐 Request body JSON (that will be sent): {request_body_json}")
+                print(f"🔐 Request body JSON length: {len(request_body_json)}")
+                
                 token_response = await client.post(
                     token_url,
                     json=token_data,
@@ -788,6 +796,7 @@ async def exchange_oauth_code(request: Request):
                     timeout=30.0
                 )
                 print(f"🔐 Supabase REST API response status: {token_response.status_code}")
+                print(f"🔐 Supabase REST API response text: {token_response.text[:500]}")
                 
                 if token_response.status_code != 200:
                     error_text = token_response.text
