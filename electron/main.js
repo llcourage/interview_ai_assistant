@@ -982,8 +982,22 @@ ipcMain.handle('oauth-google', async () => {
       // Listen for postMessage from OAuth callback page
       console.log('🔐 Setting up postMessage listener for OAuth callback...');
       
-      // Listen for IPC message from main window's preload script
-      // Main window receives postMessage from OAuth callback page and forwards via IPC
+      // Inject script into OAuth window after callback page loads
+      // Callback page will extract tokens from hash and send via postMessage
+      oauthWindow.webContents.on('did-finish-load', () => {
+        const currentUrl = oauthWindow.webContents.getURL();
+        console.log('🔐 OAuth window loaded:', currentUrl.substring(0, 100) + '...');
+        
+        // Check if we're on the callback page
+        if (currentUrl.includes('/api/auth/callback')) {
+          console.log('🔐 Detected callback page, callback HTML should handle postMessage');
+          // Backend HTML already has script to extract tokens and send postMessage
+          // Main window's preload script will receive it and forward via IPC
+        }
+      });
+      
+      // Listen for IPC message from OAuth window's preload script
+      // OAuth window receives postMessage from callback page and forwards via IPC
       ipcMain.once('oauth-desktop-success', (event, data) => {
         console.log('🔐 Received OAuth success from callback page:', {
           hasAccessToken: !!data.access_token,

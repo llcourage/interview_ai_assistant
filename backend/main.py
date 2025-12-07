@@ -488,22 +488,127 @@ async def get_google_oauth_url_endpoint(
 
 
 @app.get("/api/auth/callback", tags=["Authentication"])
-async def oauth_callback(code: str, state: Optional[str] = None, platform: Optional[str] = None, http_request: Request = None):
+async def oauth_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None, platform: Optional[str] = None):
     """
     Handle OAuth callback from Supabase
-    Uses service key to exchange code for session (standard OAuth flow, no PKCE)
-    Supports both Web browser and Electron desktop app
+    Supports both Web browser (code in query) and Electron desktop app (tokens in hash)
     """
-    print(f"🔍 /api/auth/callback received request: code={code[:20] if code else 'None'}..., state={state}, platform={platform}")
+    # Read platform from query params (not from function signature default)
+    platform = request.query_params.get("platform", platform)
+    code = request.query_params.get("code", code)
+    state = request.query_params.get("state", state)
     
-    # If desktop version, forward to Vercel
-    is_desktop = getattr(sys, 'frozen', False)
-    if is_desktop:
+    print(f"🔍 /api/auth/callback received request: platform={platform}, has_code={bool(code)}, has_state={bool(state)}")
+    
+    # CRITICAL FIX: For desktop platform, Supabase redirects with tokens in hash, not code in query
+    # Return HTML that extracts tokens from hash and sends via postMessage
+    if platform == "desktop":
+        print(f"🔍 Desktop platform detected: returning HTML to extract tokens from hash")
+        # Desktop callback HTML: extracts tokens from window.location.hash and sends via postMessage
+        desktop_callback_html = """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Desktop OAuth Callback</title>
+  </head>
+  <body>
+    <script>
+      (function () {
+        // Extract tokens from hash (#access_token=...&refresh_token=...)
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        
+        // Parse hash parameters (format: #access_token=xxx&refresh_token=yyy&type=bearer&expires_in=...)
+        const hashParams = {};
+        if (hash.startsWith('#')) {
+          const hashPart = hash.substring(1);
+          hashPart.split('&').forEach(param => {
+            const [key, value] = param.split('=');
+            if (key && value) {
+              hashParams[decodeURIComponent(key)] = decodeURIComponent(value);
+            }
+          });
+        }
+        
+        // Parse search parameters (?platform=desktop&state=...)
+        const searchParams = {};
+        if (search.startsWith('?')) {
+          const searchPart = search.substring(1);
+          searchPart.split('&').forEach(param => {
+            const [key, value] = param.split('=');
+            if (key && value) {
+              searchParams[decodeURIComponent(key)] = decodeURIComponent(value);
+            }
+          });
+        }
+        
+        // Prepare message for Electron
+        const message = {
+          type: 'desktop-oauth-success',
+          hash: hash,
+          search: search,
+          // Extract specific tokens if available
+          access_token: hashParams.access_token || null,
+          refresh_token: hashParams.refresh_token || null,
+          token_type: hashParams.type || 'bearer',
+          expires_in: hashParams.expires_in || null,
+          provider_token: hashParams.provider_token || null,
+          provider_refresh_token: hashParams.provider_refresh_token || null,
+          // Include raw hash/search for fallback parsing
+          _raw: {
+            hash: hash,
+            search: search
+          }
+        };
+        
+        console.log('🔐 Desktop OAuth callback: Extracted tokens from hash', {
+          hasAccessToken: !!message.access_token,
+          hasRefreshToken: !!message.refresh_token,
+          hashLength: hash.length
+        });
+        
+        // Send message to opener (Electron OAuth window's opener)
+        try {
+          if (window.opener) {
+            window.opener.postMessage(message, '*');
+            console.log('🔐 Desktop OAuth callback: Message sent to window.opener');
+          } else if (window.parent && window.parent !== window) {
+            window.parent.postMessage(message, '*');
+            console.log('🔐 Desktop OAuth callback: Message sent to window.parent');
+          } else {
+            console.error('❌ Desktop OAuth callback: No window.opener or window.parent found');
+            document.body.innerHTML = '<p>OAuth completed. You can close this window.</p>';
+            return;
+          }
+        } catch (e) {
+          console.error('❌ Desktop OAuth callback: postMessage error', e);
+          document.body.innerHTML = '<p>Error sending OAuth data. You can close this window.</p>';
+          return;
+        }
+        
+        // Close window after a short delay (give Electron time to receive message)
+        setTimeout(() => {
+          window.close();
+        }, 500);
+      })();
+    </script>
+    <p>登录成功，可以关闭此窗口。</p>
+  </body>
+</html>
+"""
+        return HTMLResponse(content=desktop_callback_html)
+    
+    # If desktop version (local FastAPI), forward to Vercel
+    is_desktop_local = getattr(sys, 'frozen', False)
+    if is_desktop_local:
         import httpx
         vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
         async with httpx.AsyncClient() as http_client:
             try:
-                params = {"code": code, "platform": platform or "web"}
+                params = {"platform": platform or "web"}
+                if code:
+                    params["code"] = code
                 if state:
                     params["state"] = state
                 response = await http_client.get(
@@ -518,7 +623,14 @@ async def oauth_callback(code: str, state: Optional[str] = None, platform: Optio
                 print(f"❌ Desktop version forwarding failed: {e}")
                 raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # Non-desktop version: normal processing
+    # Web browser callback: requires code parameter for exchange
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing code parameter. For desktop platform, use platform=desktop query parameter."
+        )
+    
+    # Non-desktop version: normal processing with code exchange
     try:
         from supabase import create_client
         import os
@@ -554,85 +666,45 @@ async def oauth_callback(code: str, state: Optional[str] = None, platform: Optio
         
         print(f"✅ OAuth callback successful, User ID: {user.id}, Email: {user.email}")
         
-        # Check if this is an Electron request (platform=desktop in query params)
-        is_electron = platform == "desktop"
+        # For Web browser: set cookie and redirect to success page
+        frontend_url_env = os.getenv("FRONTEND_URL")
+        frontend_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
+        redirect_url = f"{frontend_url}/auth/success"
         
-        if is_electron:
-            # For Electron: return HTML that posts message to opener window and closes
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>OAuth Success</title>
-            </head>
-            <body>
-                <script>
-                    // Send token data to Electron main window via postMessage
-                    (function() {{
-                        var payload = {{
-                            type: 'desktop-oauth-success',
-                            access_token: {json.dumps(access_token)},
-                            refresh_token: {json.dumps(refresh_token)},
-                            user: {{
-                                id: {json.dumps(user.id)},
-                                email: {json.dumps(user.email)},
-                                created_at: {json.dumps(user.created_at if hasattr(user, 'created_at') else None)}
-                            }}
-                        }};
-                        if (window.opener) {{
-                            window.opener.postMessage(payload, '*');
-                            window.close();
-                        }} else {{
-                            console.error('No window.opener found');
-                            document.body.innerHTML = '<p>OAuth completed. You can close this window.</p>';
-                        }}
-                    }})();
-                </script>
-                <p>OAuth completed. This window should close automatically.</p>
-            </body>
-            </html>
-            """
-            return HTMLResponse(content=html_content)
+        # Create redirect response and set session cookie
+        response_obj = RedirectResponse(url=redirect_url, status_code=302)
+        
+        # Set session cookie
+        origin = request.headers.get("Origin", "") if request else ""
+        is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
+        
+        if is_localhost:
+            # Development environment: don't set domain, allow localhost use
+            response_obj.set_cookie(
+                key="da_session",
+                value=access_token,
+                httponly=True,
+                secure=False,  # Development environment may use http
+                samesite="lax",  # localhost uses lax
+                max_age=60 * 60 * 24 * 7,  # 7 days
+                path="/",
+            )
         else:
-            # For Web browser: set cookie and redirect to success page
-            frontend_url_env = os.getenv("FRONTEND_URL")
-            frontend_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
-            redirect_url = f"{frontend_url}/auth/success"
-            
-            # Create redirect response and set session cookie
-            response_obj = RedirectResponse(url=redirect_url, status_code=302)
-            
-            # Set session cookie
-            origin = http_request.headers.get("Origin", "") if http_request else ""
-            is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
-            
-            if is_localhost:
-                # Development environment: don't set domain, allow localhost use
-                response_obj.set_cookie(
-                    key="da_session",
-                    value=access_token,
-                    httponly=True,
-                    secure=False,  # Development environment may use http
-                    samesite="lax",  # localhost uses lax
-                    max_age=60 * 60 * 24 * 7,  # 7 days
-                    path="/",
-                )
-            else:
-                # Production environment: set domain
-                response_obj.set_cookie(
-                    key="da_session",
-                    value=access_token,
-                    httponly=True,
-                    secure=True,
-                    samesite="none",
-                    domain=".desktopai.org",
-                    max_age=60 * 60 * 24 * 7,  # 7 days
-                    path="/",
-                )
-            
-            print(f"✅ Session cookie set (origin: {origin}, is_localhost: {is_localhost}), redirecting to: {redirect_url}")
-            
-            return response_obj
+            # Production environment: set domain
+            response_obj.set_cookie(
+                key="da_session",
+                value=access_token,
+                httponly=True,
+                secure=True,
+                samesite="none",
+                domain=".desktopai.org",
+                max_age=60 * 60 * 24 * 7,  # 7 days
+                path="/",
+            )
+        
+        print(f"✅ Session cookie set (origin: {origin}, is_localhost: {is_localhost}), redirecting to: {redirect_url}")
+        
+        return response_obj
             
     except HTTPException:
         raise
