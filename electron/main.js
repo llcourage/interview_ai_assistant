@@ -859,21 +859,13 @@ ipcMain.handle('oauth-google', async () => {
       const API_BASE_URL = clean(process.env.LOCAL_API_URL) 
         || clean(process.env.VERCEL_API_URL) 
         || clean('https://www.desktopai.org');
-      // For Electron desktop app, use frontend callback URL
-      // This allows frontend to use Supabase JS SDK to handle PKCE (code_verifier in browser storage)
-      // After frontend handles callback, it will call backend API to set session cookie
-      // In dev mode, use hash route (#/auth/callback) to allow natural navigation without interception
-      const redirectTo = clean(isDev 
-        ? `http://localhost:5173/#/auth/callback`
-        : 'https://www.desktopai.org/auth/callback');
-      const redirectToEncoded = encodeURIComponent(redirectTo);
-      console.log('🔐 redirect_to raw:', redirectTo);
-      console.log('🔐 redirect_to decoded:', decodeURIComponent(redirectToEncoded));
-      console.log('🔐 redirect_to encoded:', redirectToEncoded);
-      const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${redirectToEncoded}`;
-      console.log('🔐 Requesting OAuth URL:', apiUrl);
+      // NEW ARCHITECTURE: Desktop platform always uses Vercel backend callback
+      // Backend will automatically set redirect_to to Vercel /api/auth/callback?platform=desktop
+      // No need to pass redirect_to - backend handles it based on platform parameter
+      const apiUrl = `${API_BASE_URL}/api/auth/google/url?platform=desktop`;
+      console.log('🔐 Requesting OAuth URL for desktop platform:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
-      console.log('🔐 redirectTo:', redirectTo);
+      console.log('🔐 Platform: desktop (backend will set correct callback URL)');
       console.log('🔐 isDev:', isDev);
       console.log('🔐 isPackaged:', app.isPackaged);
       

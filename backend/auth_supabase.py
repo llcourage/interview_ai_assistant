@@ -273,19 +273,28 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
         
         # Build callback URL - point to backend /api/auth/callback
         # Backend will handle OAuth callback using service key (no PKCE needed)
-        # Extract base URL from redirect_to or use environment variable
-        if redirect_to:
-            u = urlparse(redirect_to)
-            base_url = f"{u.scheme}://{u.netloc}"
+        # 
+        # IMPORTANT: If redirect_to already contains platform=desktop (from main.py),
+        # we should use it directly. Otherwise, extract base URL and construct callback URL.
+        if redirect_to and "platform=desktop" in redirect_to:
+            # redirect_to is already set to backend callback URL with platform=desktop
+            # Use it directly as the backend_callback_url
+            backend_callback_url = redirect_to
+            print(f"🔐 Using provided backend callback URL (already contains platform=desktop): {backend_callback_url}")
         else:
-            frontend_url_env = os.getenv("FRONTEND_URL")
-            base_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
-        
-        # Add platform=desktop parameter to distinguish Electron from web browser
-        # For Electron, backend will return HTML with postMessage instead of redirect
-        backend_callback_url = f"{base_url}/api/auth/callback?platform=desktop"
-        
-        print(f"🔐 Using backend callback URL: {backend_callback_url}")
+            # Extract base URL from redirect_to or use environment variable
+            if redirect_to:
+                u = urlparse(redirect_to)
+                base_url = f"{u.scheme}://{u.netloc}"
+            else:
+                frontend_url_env = os.getenv("FRONTEND_URL")
+                base_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
+            
+            # For web platform: use frontend callback URL
+            # For desktop platform: this path should not be reached (handled above)
+            backend_callback_url = f"{base_url}/api/auth/callback"
+            
+            print(f"🔐 Constructed backend callback URL: {backend_callback_url}")
         
         # Call Supabase REST API /auth/v1/authorize (standard OAuth flow, no PKCE)
         print(f"🔐 Calling Supabase REST API /auth/v1/authorize (standard OAuth flow)")

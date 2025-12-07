@@ -363,43 +363,64 @@ def require_clean_url(name: str, s: str | None) -> str:
     return v
 
 @app.get("/api/auth/google/url", tags=["Authentication"])
-async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_request: Request = None):
+async def get_google_oauth_url_endpoint(
+    redirect_to: Optional[str] = None, 
+    platform: Optional[str] = None,
+    http_request: Request = None
+):
     """Get Google OAuth authorization URL"""
     from backend.auth_supabase import get_google_oauth_url
     from urllib.parse import urlparse
     
-    # Force normalization: clean all URL-related values
-    try:
-        # Clean FRONTEND_URL fallback
-        frontend_url_fallback = require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
-        
-        # Clean redirect_to from request
-        if redirect_to is not None:
-            redirect_to = require_clean_url("redirect_to parameter", redirect_to)
-            # Reverse validation: parse redirect_to origin
-            u = urlparse(redirect_to)
-            if u.scheme not in ("http", "https") or not u.netloc:
-                raise ValueError(f"Invalid redirect_to: {redirect_to}")
-        
-        # Clean FRONTEND_URL environment variable
-        frontend_url_env = os.getenv("FRONTEND_URL")
-        if frontend_url_env:
-            frontend_url_env = require_clean_url("FRONTEND_URL env", frontend_url_env)
-    except ValueError as e:
-        print(f"❌ URL validation error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    # CRITICAL FIX: For desktop platform, always use Vercel backend callback URL
+    # Desktop OAuth callback must go to Vercel backend, not localhost
+    is_desktop_platform = platform == "desktop"
     
-    # If desktop version, forward to Vercel
-    is_desktop = getattr(sys, 'frozen', False)
-    if is_desktop:
+    if is_desktop_platform:
+        # Force desktop platform to use Vercel backend callback URL
+        vercel_base_url = require_clean_url("VERCEL_API_URL fallback", os.getenv("VERCEL_API_URL", "https://www.desktopai.org"))
+        redirect_to = f"{vercel_base_url}/api/auth/callback?platform=desktop"
+        print(f"🔐 Desktop platform detected: forcing redirect_to to Vercel backend: {redirect_to}")
+    else:
+        # Force normalization: clean all URL-related values for web platform
+        try:
+            # Clean FRONTEND_URL fallback
+            frontend_url_fallback = require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
+            
+            # Clean redirect_to from request
+            if redirect_to is not None:
+                redirect_to = require_clean_url("redirect_to parameter", redirect_to)
+                # Reverse validation: parse redirect_to origin
+                u = urlparse(redirect_to)
+                if u.scheme not in ("http", "https") or not u.netloc:
+                    raise ValueError(f"Invalid redirect_to: {redirect_to}")
+            
+            # Clean FRONTEND_URL environment variable
+            frontend_url_env = os.getenv("FRONTEND_URL")
+            if frontend_url_env:
+                frontend_url_env = require_clean_url("FRONTEND_URL env", frontend_url_env)
+        except ValueError as e:
+            print(f"❌ URL validation error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        
+        # If redirect_to is not provided, use request origin
+        if not redirect_to and http_request:
+            origin = http_request.headers.get("Origin") or http_request.headers.get("Referer", "").rsplit("/", 1)[0]
+            redirect_to = origin if origin else None
+            if redirect_to:
+                redirect_to = require_clean_url("redirect_to from request", redirect_to)
+    
+    # If desktop version (local FastAPI), forward to Vercel
+    is_desktop_local = getattr(sys, 'frozen', False)
+    if is_desktop_local:
         import httpx
         vercel_api_url = require_clean_url("VERCEL_API_URL", os.getenv("VERCEL_API_URL", "https://www.desktopai.org"))
         async with httpx.AsyncClient() as http_client:
             try:
-                params = {}
+                params = {"platform": "desktop"}  # Always pass platform=desktop
                 if redirect_to:
                     params["redirect_to"] = redirect_to
                 response = await http_client.get(
@@ -450,14 +471,7 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
                 print(f"❌ Unable to connect to Vercel API: {e}")
                 raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # Non-desktop version: normal processing
-    # If redirect_to is not provided, use request origin
-    if not redirect_to and http_request:
-        origin = http_request.headers.get("Origin") or http_request.headers.get("Referer", "").rsplit("/", 1)[0]
-        redirect_to = origin if origin else None
-        if redirect_to:
-            redirect_to = require_clean_url("redirect_to from request", redirect_to)
-    
+    # Vercel backend processing: use the redirect_to we set above
     result = await get_google_oauth_url(redirect_to)
     
     # Also return Supabase configuration for frontend OAuth callback use
