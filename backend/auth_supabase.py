@@ -333,16 +333,32 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
             print(f"🔐 Calling: {authorize_url}")
             print(f"🔐 Params: response_type=code, provider=google, redirect_uri={supabase_callback_url[:50]}..., redirect_to={callback_url[:50]}..., code_challenge={code_challenge[:20]}...")
             
-            # Make GET request - Supabase will create flow state and return redirect URL
+            # Try POST request first (some OAuth endpoints require POST)
+            # If that fails, fall back to GET
             async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
-                response = await client.get(
-                    authorize_url,
-                    params=authorize_params,
-                    headers={
-                        "apikey": supabase_anon_key,
-                        "Accept": "application/json"
-                    }
-                )
+                # First try POST with JSON body
+                try:
+                    response = await client.post(
+                        authorize_url,
+                        json=authorize_params,
+                        headers={
+                            "apikey": supabase_anon_key,
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }
+                    )
+                    print(f"🔐 POST request response status: {response.status_code}")
+                except Exception as post_error:
+                    print(f"⚠️ POST request failed: {post_error}, trying GET...")
+                    # Fall back to GET request
+                    response = await client.get(
+                        authorize_url,
+                        params=authorize_params,
+                        headers={
+                            "apikey": supabase_anon_key,
+                            "Accept": "application/json"
+                        }
+                    )
                 
                 print(f"🔐 Response status: {response.status_code}")
                 print(f"🔐 Response headers: {dict(response.headers)}")
