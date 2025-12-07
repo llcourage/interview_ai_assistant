@@ -644,39 +644,32 @@ async def logout_endpoint(http_request: Request):
     response_obj = JSONResponse({"success": True, "message": "Logged out successfully"})
     
     # 根据请求来源确定 cookie domain
-    # 如果是 localhost 或开发环境，不设置 domain（让浏览器使用默认）
-    # 如果是生产环境，使用 .desktopai.org
     origin = http_request.headers.get("Origin", "")
-    is_localhost = "localhost" in origin or "127.0.0.1" in origin
+    is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
     
-    cookie_kwargs = {
-        "key": "da_session",
-        "value": "",
-        "httponly": True,
-        "secure": True,
-        "samesite": "none",
-        "max_age": 0,  # 立即过期
-        "path": "/",  # 确保路径正确
-    }
+    # 清除 session cookie - 尝试多种方式确保清除
+    # 1. 清除带 domain 的 cookie（生产环境）
+    response_obj.set_cookie(
+        key="da_session",
+        value="",
+        httponly=True,
+        secure=True,
+        samesite="none",
+        domain=".desktopai.org",
+        max_age=0,
+        path="/",
+    )
     
-    # 只在生产环境设置 domain
-    if not is_localhost:
-        cookie_kwargs["domain"] = ".desktopai.org"
-    
-    # 清除 session cookie
-    response_obj.set_cookie(**cookie_kwargs)
-    
-    # 也尝试清除不带 domain 的 cookie（用于开发环境）
-    if not is_localhost:
-        response_obj.set_cookie(
-            key="da_session",
-            value="",
-            httponly=True,
-            secure=False,  # 开发环境可能使用 http
-            samesite="lax",
-            max_age=0,
-            path="/",
-        )
+    # 2. 清除不带 domain 的 cookie（开发环境）
+    response_obj.set_cookie(
+        key="da_session",
+        value="",
+        httponly=True,
+        secure=False,  # 开发环境可能使用 http
+        samesite="lax",
+        max_age=0,
+        path="/",
+    )
     
     print(f"✅ 已清除 session cookie (origin: {origin}, is_localhost: {is_localhost})")
     return response_obj
@@ -720,20 +713,9 @@ async def read_users_me(http_request: Request):
             if user:
                 print(f"✅ /api/me: Cookie session 验证成功，用户: {user.email}")
                 return user
-            else:
-                # Token 验证返回 None，说明 token 无效
-                print(f"❌ /api/me: Cookie session token 验证返回 None，token 无效")
-                # 清除无效的 cookie 并抛出 401
-                # 注意：不能在 HTTPException 中设置 cookie，需要在响应中设置
-                # 但这里我们直接抛出异常，让 FastAPI 处理
-                raise HTTPException(status_code=401, detail="Invalid session token")
-        except HTTPException:
-            # 重新抛出 HTTPException
-            raise
         except Exception as e:
             print(f"❌ /api/me: Cookie session 验证失败: {e}")
-            # Cookie 无效，返回 401
-            raise HTTPException(status_code=401, detail=f"Session verification failed: {str(e)}")
+            # Cookie 无效，继续尝试 Authorization header
     
     # 如果没有 Cookie 或 Cookie 无效，尝试从 Authorization header 获取 token
     auth_header = http_request.headers.get("Authorization", "")

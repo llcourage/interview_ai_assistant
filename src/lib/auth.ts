@@ -231,23 +231,19 @@ export const isAuthenticated = async (): Promise<boolean> => {
     
     if (response.ok) {
       const user = await response.json();
-      console.log('🔑 isAuthenticated: 服务器返回响应:', JSON.stringify(user, null, 2));
       
-      // 检查响应是否包含有效的用户信息
-      // User 模型必须有 id 字段，email 是必需的但可能为空字符串
-      if (user && typeof user === 'object' && user.id) {
+      // 检查用户对象是否有效（必须有 id）
+      if (user && user.id) {
         console.log('🔑 isAuthenticated: 服务器返回已登录用户:', user.email || user.id);
-        
         // 如果服务器返回用户信息，保存到 localStorage（可选，用于后续请求）
         // 注意：这里不保存完整的 token，因为服务器使用 Cookie 管理会话
         // 但可以保存用户信息
         localStorage.setItem(USER_KEY, JSON.stringify(user));
-        
         return true;
       } else {
         // 响应成功但没有有效的用户信息，说明未登录
         console.log('🔑 isAuthenticated: 服务器返回 200 但无有效用户信息，视为未登录');
-        console.log('🔑 isAuthenticated: 用户对象类型:', typeof user, '内容:', user);
+        console.log('🔑 isAuthenticated: 用户对象:', user);
         return false;
       }
     } else {
@@ -304,12 +300,10 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
   }
   
   const data = await response.json();
-  console.log('🔐 getGoogleOAuthUrl: API 返回的数据:', JSON.stringify(data, null, 2));
   
   // 确保返回的数据包含必要的字段
   if (!data.url) {
-    console.error('🔐 getGoogleOAuthUrl: API 返回的数据中缺少 url 字段，完整响应:', data);
-    throw new Error(`API 返回的数据中缺少 url 字段。响应数据: ${JSON.stringify(data)}`);
+    throw new Error('API 返回的数据中缺少 url 字段');
   }
   
   return {
