@@ -329,7 +329,7 @@ export const loginWithGoogle = async (): Promise<void> => {
       const result = await (window as any).aiShot.loginWithGoogle();
       if (result.success && result.code) {
         // 使用 code 和 state 交换 token
-        const token = await handleOAuthCallback(result.code, result.state);
+        await handleOAuthCallback(result.code, result.state);
         // 触发认证状态变化事件
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         // 重定向到主页面
@@ -355,18 +355,10 @@ export const loginWithGoogle = async (): Promise<void> => {
         console.error('🔐 动态导入 Supabase SDK 失败:', importError);
         // 如果动态导入失败，降级到使用后端 API 获取 OAuth URL
         console.log('🔐 降级：使用后端 API 获取 OAuth URL');
-        try {
-          const { supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
-          if (supabaseUrl && supabaseAnonKey) {
-            localStorage.setItem('supabase_url', supabaseUrl);
-            localStorage.setItem('supabase_anon_key', supabaseAnonKey);
-          }
-          // 重新尝试导入
-          const supabaseModule = await import('@supabase/supabase-js');
-          createClient = supabaseModule.createClient;
-        } catch (retryError: any) {
-          throw new Error(`无法加载 Supabase SDK: ${importError.message || importError}. 请检查网络连接或刷新页面重试。`);
-        }
+        const { url } = await getGoogleOAuthUrl(redirectTo);
+        // 直接跳转到后端返回的 OAuth URL
+        window.location.href = url;
+        return;
       }
       
       // 获取 Supabase 配置
@@ -394,10 +386,10 @@ export const loginWithGoogle = async (): Promise<void> => {
       
       // 如果还是没有，使用环境变量或默认值
       if (!supabaseUrl) {
-        supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
+        supabaseUrl = (import.meta.env as any).VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
       }
       if (!supabaseAnonKey) {
-        supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        supabaseAnonKey = (import.meta.env as any).VITE_SUPABASE_ANON_KEY || '';
       }
       
       if (!supabaseAnonKey) {
@@ -475,17 +467,17 @@ export const handleOAuthCallback = async (code: string, state?: string): Promise
   
   // 如果还是没有，使用环境变量或默认值
   if (!supabaseUrl) {
-    supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
+    supabaseUrl = (import.meta.env as any).VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
   }
   
   if (!supabaseAnonKey) {
-    supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    supabaseAnonKey = (import.meta.env as any).VITE_SUPABASE_ANON_KEY || '';
   }
   
   if (!supabaseAnonKey) {
     console.error('❌ Supabase 配置获取失败:', {
       fromLocalStorage: !!localStorage.getItem('supabase_anon_key'),
-      fromEnv: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+      fromEnv: !!(import.meta.env as any).VITE_SUPABASE_ANON_KEY,
       supabaseUrl,
       supabaseAnonKey: supabaseAnonKey ? '***' : '(empty)'
     });
