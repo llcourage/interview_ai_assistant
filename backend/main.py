@@ -635,6 +635,29 @@ async def set_session(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to set session: {str(e)}")
 
 
+@app.post("/api/auth/logout", tags=["认证"])
+async def logout_endpoint(http_request: Request):
+    """用户登出，清除 session cookie"""
+    from fastapi.responses import JSONResponse
+    
+    # 创建响应
+    response_obj = JSONResponse({"success": True, "message": "Logged out successfully"})
+    
+    # 清除 session cookie
+    response_obj.set_cookie(
+        key="da_session",
+        value="",
+        httponly=True,
+        secure=True,
+        samesite="none",
+        domain=".desktopai.org",
+        max_age=0,  # 立即过期
+    )
+    
+    print("✅ 已清除 session cookie")
+    return response_obj
+
+
 @app.get("/api/me", response_model=User, tags=["认证"])
 async def read_users_me(http_request: Request):
     """获取当前用户信息"""
@@ -741,7 +764,7 @@ async def get_plan(http_request: Request):
     # Start plan 没有订阅信息（一次性购买）
     subscription_info = None
     if user_plan.plan != PlanType.START:
-    subscription_info = await get_subscription_info(current_user.id)
+        subscription_info = await get_subscription_info(current_user.id)
     
     # 支持周度配额和终身配额
     weekly_token_limit = limits.get("weekly_token_limit")

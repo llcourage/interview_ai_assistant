@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { logout } from '../../lib/auth';
+import { isElectron } from '../../utils/isElectron';
 import './TopNav.css';
 
 export const TopNav: React.FC = () => {
@@ -9,7 +10,13 @@ export const TopNav: React.FC = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
+    // 登出后，在 Electron 环境中导航到 /login，在 Web 环境中导航到 /
+    // 这样可以避免 ElectronDefaultPage 的认证检查延迟
+    if (isElectron()) {
+      navigate('/login', { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
   };
 
   return (

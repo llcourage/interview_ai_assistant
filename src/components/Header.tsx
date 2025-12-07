@@ -39,7 +39,8 @@ export const Header: React.FC = () => {
     await logout();
     setAuthStatus(false);
     setUserEmail(null);
-    navigate('/');
+    // 登出后导航到登录页面或首页
+    navigate('/', { replace: true });
   };
 
   return (

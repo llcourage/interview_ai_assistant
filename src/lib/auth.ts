@@ -110,7 +110,33 @@ export const login = async (email: string, password: string): Promise<AuthToken>
  * 用户登出
  */
 export const logout = async (): Promise<void> => {
+  // 清除本地 token
   clearToken();
+  
+  // 尝试清除服务器端的 session cookie
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: 'POST',
+      credentials: 'include', // 携带 Cookie
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      console.log('✅ 服务器 session cookie 已清除');
+    } else {
+      console.warn('⚠️ 清除服务器 session cookie 失败，但继续登出流程');
+    }
+  } catch (error) {
+    console.warn('⚠️ 清除服务器 session cookie 时出错，但继续登出流程:', error);
+    // 即使清除服务器 cookie 失败，也继续登出流程
+  }
+  
+  // 触发认证状态变化事件，通知其他组件
+  window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: false } }));
+  
+  console.log('🚪 用户已登出');
 };
 
 /**
