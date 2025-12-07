@@ -384,9 +384,12 @@ export const loginWithGoogle = async (): Promise<void> => {
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         console.log('🔐 Electron: Triggered auth-state-changed event (from IPC)');
         
-        // Redirect to main page
-        console.log('🔐 Electron: Redirecting to main page (from IPC)');
-        window.location.href = '/';
+        // Force reload to ensure AppRouter re-checks auth status and navigates correctly
+        // This simulates "closing and reopening the app" behavior
+        console.log('🔐 Electron: Reloading page to refresh auth state (from IPC)');
+        setTimeout(() => {
+          window.location.reload();
+        }, 50);
       };
       
       // Register IPC listener
@@ -435,9 +438,12 @@ export const loginWithGoogle = async (): Promise<void> => {
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         console.log('🔐 Electron: Triggered auth-state-changed event (from promise)');
         
-        // Redirect to main page
-        console.log('🔐 Electron: Redirecting to main page (from promise)');
-        window.location.href = '/';
+        // Force reload to ensure AppRouter re-checks auth status and navigates correctly
+        // This simulates "closing and reopening the app" behavior
+        console.log('🔐 Electron: Reloading page to refresh auth state (from promise)');
+        setTimeout(() => {
+          window.location.reload();
+        }, 50);
         return;
       } else if (!result.success && !ipcTokenReceived) {
         const errorMsg = result.error || 'Failed to get OAuth token from Electron';
