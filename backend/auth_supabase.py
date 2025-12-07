@@ -341,6 +341,28 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                     # The flow_state_id is embedded in the state parameter of the redirect URL
                     if url:
                         print(f"🔐 Flow state should be initialized by Supabase with our code_challenge")
+                        # Extract state from URL to verify flow_state_id
+                        from urllib.parse import urlparse, parse_qs
+                        parsed = urlparse(url)
+                        query_params = parse_qs(parsed.query)
+                        state = query_params.get('state', [None])[0]
+                        if state:
+                            print(f"🔐 State parameter found in redirect URL (length: {len(state)})")
+                            # Decode state JWT to see flow_state_id
+                            try:
+                                import base64
+                                import json
+                                # JWT format: header.payload.signature
+                                parts = state.split('.')
+                                if len(parts) >= 2:
+                                    # Decode payload (add padding if needed)
+                                    payload_b64 = parts[1]
+                                    payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                                    payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+                                    flow_state_id = payload.get('flow_state_id')
+                                    print(f"🔐 Flow state ID from state JWT: {flow_state_id}")
+                            except Exception as e:
+                                print(f"⚠️ Could not decode state JWT: {e}")
                 elif response.status_code == 200:
                     # Try to extract URL from response body
                     try:
