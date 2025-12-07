@@ -14,16 +14,49 @@ export const AuthCallback: React.FC = () => {
     const processCallback = async () => {
       console.log('🔐 AuthCallback: 开始处理回调');
       console.log('🔐 AuthCallback: 当前 URL:', window.location.href);
+      console.log('🔐 AuthCallback: window.location.search:', window.location.search);
+      console.log('🔐 AuthCallback: window.location.hash:', window.location.hash);
+      
+      // 对于 Web 环境（BrowserRouter），参数在 search 中
+      // 对于 Electron 环境（HashRouter），参数可能在 hash 中
+      let code: string | null = null;
+      let state: string | null = null;
+      let errorParam: string | null = null;
+      let oauthUrl: string | null = null;
+      
+      if (isElectron()) {
+        // Electron 使用 HashRouter，参数在 hash 中
+        // hash 格式可能是: #/auth/callback?code=xxx&state=yyy
+        const hashMatch = window.location.hash.match(/\?([^#]+)/);
+        if (hashMatch) {
+          const hashParams = new URLSearchParams(hashMatch[1]);
+          code = hashParams.get('code');
+          state = hashParams.get('state');
+          errorParam = hashParams.get('error');
+          oauthUrl = hashParams.get('oauth_url');
+        }
+        // 也尝试从 searchParams 获取（如果 React Router 已经解析了）
+        if (!code) code = searchParams.get('code');
+        if (!state) state = searchParams.get('state');
+        if (!errorParam) errorParam = searchParams.get('error');
+        if (!oauthUrl) oauthUrl = searchParams.get('oauth_url');
+      } else {
+        // Web 使用 BrowserRouter，参数在 search 中
+        code = searchParams.get('code');
+        state = searchParams.get('state');
+        errorParam = searchParams.get('error');
+        oauthUrl = searchParams.get('oauth_url');
+      }
+      
       console.log('🔐 AuthCallback: URL params:', {
-        oauth_url: searchParams.get('oauth_url') ? 'present' : 'missing',
-        code: searchParams.get('code') ? 'present' : 'missing',
-        state: searchParams.get('state') ? 'present' : 'missing',
-        error: searchParams.get('error') ? 'present' : 'missing',
+        oauth_url: oauthUrl ? 'present' : 'missing',
+        code: code ? 'present' : 'missing',
+        state: state ? 'present' : 'missing',
+        error: errorParam ? 'present' : 'missing',
         isElectron: isElectron()
       });
       
       // 检查是否是 Electron OAuth 窗口（有 oauth_url 参数）
-      const oauthUrl = searchParams.get('oauth_url');
       if (oauthUrl && isElectron()) {
         // Electron OAuth 窗口：跳转到 OAuth URL
         console.log('🔐 Electron OAuth 窗口：检测到 oauth_url 参数，跳转到 OAuth URL');
@@ -31,8 +64,19 @@ export const AuthCallback: React.FC = () => {
         
         // 保存 Supabase 配置到 localStorage（如果 API 返回了的话）
         // 这些配置会在 handleOAuthCallback 中使用
-        const supabaseUrl = searchParams.get('supabase_url');
-        const supabaseAnonKey = searchParams.get('supabase_anon_key');
+        // 对于 Electron，参数可能在 hash 中
+        let supabaseUrl: string | null = null;
+        let supabaseAnonKey: string | null = null;
+        if (isElectron()) {
+          const hashMatch = window.location.hash.match(/\?([^#]+)/);
+          if (hashMatch) {
+            const hashParams = new URLSearchParams(hashMatch[1]);
+            supabaseUrl = hashParams.get('supabase_url');
+            supabaseAnonKey = hashParams.get('supabase_anon_key');
+          }
+        }
+        if (!supabaseUrl) supabaseUrl = searchParams.get('supabase_url');
+        if (!supabaseAnonKey) supabaseAnonKey = searchParams.get('supabase_anon_key');
         if (supabaseUrl && supabaseAnonKey) {
           localStorage.setItem('supabase_url', supabaseUrl);
           localStorage.setItem('supabase_anon_key', supabaseAnonKey);
@@ -60,9 +104,7 @@ export const AuthCallback: React.FC = () => {
         return;
       }
 
-      const code = searchParams.get('code');
-      const state = searchParams.get('state');
-      const errorParam = searchParams.get('error');
+      // code, state, errorParam 已经在上面获取了
 
       if (errorParam) {
         const errorMsg = `OAuth error: ${errorParam}`;
