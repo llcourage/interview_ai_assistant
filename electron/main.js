@@ -246,7 +246,10 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      // 在开发环境中禁用 webSecurity 以允许跨域请求（仅用于开发）
+      // ⚠️ 注意：这仅用于开发环境，生产环境应该保持 webSecurity 启用
+      webSecurity: !isDev // 开发环境禁用，生产环境启用
     },
     icon: path.join(__dirname, '../resources/icon.png')
   });
@@ -405,7 +408,9 @@ function createOverlayWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      // 在开发环境中禁用 webSecurity 以允许跨域请求（仅用于开发）
+      webSecurity: !isDev // 开发环境禁用，生产环境启用
     },
     show: false
   });
@@ -944,7 +949,9 @@ ipcMain.handle('oauth-google', async () => {
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
-          preload: path.join(__dirname, 'preload.js')  // 需要 preload 以便前端可以通信
+          preload: path.join(__dirname, 'preload.js'),  // 需要 preload 以便前端可以通信
+          // 在开发环境中禁用 webSecurity 以允许跨域请求（仅用于开发）
+          webSecurity: !isDev // 开发环境禁用，生产环境启用
         }
       });
       
