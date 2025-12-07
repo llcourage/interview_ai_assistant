@@ -740,17 +740,73 @@ async def exchange_oauth_code(request: Request):
         supabase = create_client(supabase_url, supabase_anon_key)
         
         print(f"🔐 Exchanging OAuth code for session (code: {code[:20]}...)")
+        if code_verifier:
+            print(f"🔐 Using PKCE flow with code_verifier (length: {len(code_verifier)})")
+        else:
+            print(f"🔐 Using non-PKCE flow (no code_verifier)")
         
         # Exchange code for session
-        # Note: Supabase Python SDK handles PKCE automatically if code_verifier is provided
+        # Note: Supabase Python SDK may have issues with PKCE, so we'll try direct REST API call
         if code_verifier:
-            # Use PKCE flow
-            response = supabase.auth.exchange_code_for_session({
-                "code": code,
-                "code_verifier": code_verifier
-            })
+            # Use PKCE flow - try direct REST API call instead of SDK
+            import httpx
+            print(f"🔐 Calling Supabase REST API directly for PKCE exchange")
+            async with httpx.AsyncClient() as client:
+                token_url = f"{supabase_url}/auth/v1/token?grant_type=pkce"
+                token_data = {
+                    "code": code,
+                    "code_verifier": code_verifier
+                }
+                print(f"🔐 Token URL: {token_url}")
+                print(f"🔐 Token data keys: {list(token_data.keys())}")
+                print(f"🔐 Code length: {len(token_data['code'])}")
+                print(f"🔐 Code verifier length: {len(token_data['code_verifier'])}")
+                
+                token_response = await client.post(
+                    token_url,
+                    json=token_data,
+                    headers={
+                        "apikey": supabase_anon_key,
+                        "Content-Type": "application/json"
+                    },
+                    timeout=30.0
+                )
+                
+                print(f"🔐 Supabase REST API response status: {token_response.status_code}")
+                
+                if token_response.status_code != 200:
+                    error_text = token_response.text
+                    print(f"❌ Supabase REST API error: {error_text}")
+                    raise HTTPException(
+                        status_code=token_response.status_code,
+                        detail=f"Failed to exchange code: {error_text}"
+                    )
+                
+                token_json = token_response.json()
+                print(f"🔐 Supabase REST API response keys: {list(token_json.keys())}")
+                
+                # Convert REST API response to match SDK response format
+                if "access_token" in token_json and "user" in token_json:
+                    # Create a mock response object
+                    class MockResponse:
+                        def __init__(self, data):
+                            self.session = type('Session', (), {
+                                'access_token': data.get('access_token'),
+                                'refresh_token': data.get('refresh_token'),
+                                'expires_in': data.get('expires_in'),
+                                'token_type': data.get('token_type', 'bearer')
+                            })()
+                            self.user = type('User', (), data.get('user', {}))()
+                    
+                    response = MockResponse(token_json)
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid response from Supabase: missing access_token or user"
+                    )
         else:
-            # Try non-PKCE flow (may not work if OAuth URL was generated with PKCE)
+            # Try non-PKCE flow using SDK (may not work if OAuth URL was generated with PKCE)
+            print(f"🔐 Using Supabase Python SDK for non-PKCE exchange")
             response = supabase.auth.exchange_code_for_session({
                 "code": code
             })
