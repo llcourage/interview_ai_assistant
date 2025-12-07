@@ -18,7 +18,7 @@ if not is_production:
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -474,13 +474,13 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
 
 
 @app.get("/api/auth/callback", tags=["Authentication"])
-async def oauth_callback(code: str, state: Optional[str] = None, http_request: Request = None):
+async def oauth_callback(code: str, state: Optional[str] = None, platform: Optional[str] = None, http_request: Request = None):
     """
-    Handle OAuth callback
-    Note: This endpoint is now mainly used for Web environment
-    Electron environment OAuth callback should point to frontend page (/auth/callback), handled by frontend
+    Handle OAuth callback from Supabase
+    Uses service key to exchange code for session (standard OAuth flow, no PKCE)
+    Supports both Web browser and Electron desktop app
     """
-    print(f"🔍 /api/auth/callback received request: code={code[:20] if code else 'None'}..., state={state}")
+    print(f"🔍 /api/auth/callback received request: code={code[:20] if code else 'None'}..., state={state}, platform={platform}")
     
     # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
@@ -489,7 +489,7 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
         vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
         async with httpx.AsyncClient() as http_client:
             try:
-                params = {"code": code}
+                params = {"code": code, "platform": platform or "web"}
                 if state:
                     params["state"] = state
                 response = await http_client.get(
@@ -498,90 +498,87 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                     timeout=30.0
                 )
                 response.raise_for_status()
-                return response.json()
+                # Return HTML for Electron, or response content for web
+                return HTMLResponse(content=response.text) if platform == "desktop" else response
             except httpx.HTTPError as e:
                 print(f"❌ Desktop version forwarding failed: {e}")
                 raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
     # Non-desktop version: normal processing
-    # Note: Since Supabase uses PKCE, backend cannot directly handle OAuth callback
-    # This endpoint is now mainly for backward compatibility, should actually be handled by frontend
-    print("⚠️ /api/auth/callback: Backend cannot handle PKCE OAuth callback, should be handled by frontend")
-    print("⚠️ Suggestion: OAuth callback should point to frontend page (/auth/callback), not backend API")
-    
     try:
-        # Use Supabase REST API to directly handle OAuth callback, avoid Python SDK PKCE issues
+        from supabase import create_client
         import os
-        import httpx
         
         supabase_url = os.getenv("SUPABASE_URL", "")
-        supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+        supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
         
-        if not supabase_url or not supabase_anon_key:
+        if not supabase_url or not supabase_service_key:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Supabase configuration missing: SUPABASE_URL or SUPABASE_ANON_KEY not set"
+                detail="Supabase configuration missing: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set"
             )
         
-        # Use Supabase REST API to exchange code
-        # Note: If OAuth URL uses PKCE, need to provide code_verifier here
-        # But since we cannot share code_verifier across different requests, we try not to use PKCE
-        print(f"🔍 Preparing to exchange code: {code[:20]}...")
+        # Create Supabase client with SERVICE_ROLE_KEY (bypasses RLS and can exchange code)
+        supabase = create_client(supabase_url, supabase_service_key)
         
-        # Build Supabase Auth API endpoint
-        auth_url = f"{supabase_url}/auth/v1/token?grant_type=authorization_code"
+        print(f"🔍 Exchanging OAuth code for session using service key: {code[:20]}...")
         
-        # Prepare request data
-        data = {
-            "code": code,
-            "grant_type": "authorization_code"
-        }
+        # Use Supabase SDK to exchange code for session (works with service key, no PKCE needed)
+        response = supabase.auth.exchange_code_for_session({
+            "code": code
+        })
         
-        headers = {
-            "apikey": supabase_anon_key,
-            "Content-Type": "application/json"
-        }
-        
-        # Send request to Supabase REST API
-        async with httpx.AsyncClient() as http_client:
-            response = await http_client.post(
-                auth_url,
-                json=data,
-                headers=headers,
-                timeout=30.0
+        if not response or not response.session or not response.user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth callback failed: Unable to get session or user information from Supabase"
             )
-            
-            if response.status_code != 200:
-                error_text = response.text
-                print(f"❌ Supabase OAuth callback failed: {response.status_code} - {error_text}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"OAuth callback processing failed: {error_text}"
-                )
-            
-            token_data = response.json()
-            
-            # Parse response
-            if not token_data.get("access_token") or not token_data.get("user"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="OAuth callback failed: Unable to get token or user information"
-                )
-            
-            user_data = token_data["user"]
-            user_id = user_data["id"]
-            user_email = user_data.get("email", "")
-            
-            print(f"✅ OAuth callback successful, User ID: {user_id}, Email: {user_email}")
-            
-            # Generate own session token (use Supabase access_token as session token)
-            # Note: Simplified handling here, directly use Supabase access_token as session token
-            # If more security is needed, can use JWT to generate own token
-            session_token = token_data["access_token"]
-            
-            # Build redirect URL (redirect to frontend success page)
-            # For Electron, this redirect will be captured by Electron, so URL doesn't matter
-            # For Web, redirect to frontend page
+        
+        user = response.user
+        access_token = response.session.access_token
+        refresh_token = response.session.refresh_token
+        
+        print(f"✅ OAuth callback successful, User ID: {user.id}, Email: {user.email}")
+        
+        # Check if this is an Electron request (platform=desktop in query params)
+        is_electron = platform == "desktop"
+        
+        if is_electron:
+            # For Electron: return HTML that posts message to opener window and closes
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>OAuth Success</title>
+            </head>
+            <body>
+                <script>
+                    // Send token data to Electron main window via postMessage
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'oauth-success',
+                            data: {{
+                                access_token: {json.dumps(access_token)},
+                                refresh_token: {json.dumps(refresh_token)},
+                                user: {{
+                                    id: {json.dumps(user.id)},
+                                    email: {json.dumps(user.email)}
+                                }}
+                            }}
+                        }}, '*');
+                        window.close();
+                    }} else {{
+                        console.error('No window.opener found');
+                        document.body.innerHTML = '<p>OAuth completed. You can close this window.</p>';
+                    }}
+                </script>
+                <p>OAuth completed. This window should close automatically.</p>
+            </body>
+            </html>
+            """
+            return HTMLResponse(content=html_content)
+        else:
+            # For Web browser: set cookie and redirect to success page
             frontend_url_env = os.getenv("FRONTEND_URL")
             frontend_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
             redirect_url = f"{frontend_url}/auth/success"
@@ -590,8 +587,6 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             response_obj = RedirectResponse(url=redirect_url, status_code=302)
             
             # Set session cookie
-            # Use Supabase access_token as session token
-            # Determine cookie domain based on request origin
             origin = http_request.headers.get("Origin", "") if http_request else ""
             is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
             
@@ -599,7 +594,7 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                 # Development environment: don't set domain, allow localhost use
                 response_obj.set_cookie(
                     key="da_session",
-                    value=session_token,
+                    value=access_token,
                     httponly=True,
                     secure=False,  # Development environment may use http
                     samesite="lax",  # localhost uses lax
@@ -610,7 +605,7 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                 # Production environment: set domain
                 response_obj.set_cookie(
                     key="da_session",
-                    value=session_token,
+                    value=access_token,
                     httponly=True,
                     secure=True,
                     samesite="none",
@@ -622,6 +617,18 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             print(f"✅ Session cookie set (origin: {origin}, is_localhost: {is_localhost}), redirecting to: {redirect_url}")
             
             return response_obj
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ OAuth callback error: {e}")
+        print(f"❌ Error traceback:\n{error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OAuth callback processing failed: {str(e)}"
+        )
         
         # Debug logs
         print(f"🔍 OAuth callback response type: {type(response)}")

@@ -271,51 +271,35 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                 detail=str(e)
             )
         
-        # Build callback URL
-        # Note: For both Electron and Web, OAuth callback should point to frontend page (/auth/callback)
-        # Frontend will use Supabase JS SDK to handle PKCE, then call backend API to set session cookie
-        # Don't change to /api/auth/callback, because backend cannot handle PKCE (no code_verifier)
-        if redirect_to.endswith("/auth/callback"):
-            callback_url = redirect_to
+        # Build callback URL - point to backend /api/auth/callback
+        # Backend will handle OAuth callback using service key (no PKCE needed)
+        # Extract base URL from redirect_to or use environment variable
+        if redirect_to:
+            u = urlparse(redirect_to)
+            base_url = f"{u.scheme}://{u.netloc}"
         else:
-            # If redirect_to doesn't include /auth/callback, add it
-            callback_url = f"{redirect_to}/auth/callback" if not redirect_to.endswith("/") else f"{redirect_to}auth/callback"
+            frontend_url_env = os.getenv("FRONTEND_URL")
+            base_url = require_clean_url("FRONTEND_URL env", frontend_url_env) if frontend_url_env else require_clean_url("FRONTEND_URL fallback", "https://www.desktopai.org")
         
-        # Generate PKCE parameters manually for Electron environment
-        # Electron needs code_verifier to exchange code for session
-        import secrets
-        import base64
-        import hashlib
+        # Add platform=desktop parameter to distinguish Electron from web browser
+        # For Electron, backend will return HTML with postMessage instead of redirect
+        backend_callback_url = f"{base_url}/api/auth/callback?platform=desktop"
         
-        # Generate code_verifier (43-128 characters, URL-safe base64)
-        code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+        print(f"🔐 Using backend callback URL: {backend_callback_url}")
         
-        # Generate code_challenge (SHA256 hash of code_verifier)
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode('utf-8')).digest()
-        ).decode('utf-8').rstrip('=')
-        
-        print(f"🔐 Generated PKCE parameters:")
-        print(f"   - code_verifier length: {len(code_verifier)}")
-        print(f"   - code_challenge length: {len(code_challenge)}")
-        
-        # Directly call Supabase REST API /auth/v1/authorize to initialize flow state with our PKCE
-        # This ensures the flow state stored on Supabase server uses our code_challenge
-        print(f"🔐 Calling Supabase REST API /auth/v1/authorize to initialize flow state with our PKCE")
-        print(f"🔐 Using code_challenge: {code_challenge[:20]}...")
-        print(f"🔐 Using code_verifier: {code_verifier[:20]}...")
+        # Call Supabase REST API /auth/v1/authorize (standard OAuth flow, no PKCE)
+        print(f"🔐 Calling Supabase REST API /auth/v1/authorize (standard OAuth flow)")
         
         try:
             import httpx
             
             # Call Supabase REST API /auth/v1/authorize endpoint
-            # This will create flow state on Supabase server with our code_challenge
+            # Use standard OAuth flow (no PKCE) - backend will handle callback with service key
             # According to Supabase GoTrue API docs, we need:
             # - response_type=code (for OAuth code flow)
             # - provider=google (OAuth provider)
             # - redirect_uri (where to redirect after OAuth, Supabase's callback URL)
-            # - redirect_to (where Supabase should redirect after processing, our callback URL)
-            # - code_challenge and code_challenge_method (for PKCE)
+            # - redirect_to (where Supabase should redirect after processing, our backend callback URL)
             authorize_url = f"{supabase_url}/auth/v1/authorize"
             
             # Get Supabase's callback URL (where OAuth provider redirects to)
@@ -325,13 +309,11 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                 "response_type": "code",
                 "provider": "google",
                 "redirect_uri": supabase_callback_url,  # Where OAuth provider redirects to
-                "redirect_to": callback_url,  # Where Supabase redirects to after processing
-                "code_challenge": code_challenge,
-                "code_challenge_method": "S256"
+                "redirect_to": backend_callback_url  # Where Supabase redirects to after processing (backend endpoint)
             }
             
             print(f"🔐 Calling: {authorize_url}")
-            print(f"🔐 Params: response_type=code, provider=google, redirect_uri={supabase_callback_url[:50]}..., redirect_to={callback_url[:50]}..., code_challenge={code_challenge[:20]}...")
+            print(f"🔐 Params: response_type=code, provider=google, redirect_uri={supabase_callback_url[:50]}..., redirect_to={backend_callback_url[:50]}...")
             
             # Try POST request first (some OAuth endpoints require POST)
             # If that fails with 405, fall back to GET
@@ -408,61 +390,6 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                 url = f"{authorize_url}?{urlencode(authorize_params)}"
                 print(f"⚠️ No URL from response, building directly: {url[:150]}...")
             
-            # Extract flow_state_id from state JWT in URL to store code_verifier
-            from urllib.parse import urlparse, parse_qs
-            parsed = urlparse(url)
-            query_params = parse_qs(parsed.query)
-            state_param = query_params.get('state', [None])[0]
-            
-            flow_state_id = None
-            if state_param:
-                try:
-                    # Decode JWT to get flow_state_id
-                    # Supabase state JWT format: base64url(header).base64url(payload).signature
-                    parts = state_param.split('.')
-                    if len(parts) >= 2:
-                        # Decode payload (second part)
-                        payload_b64 = parts[1]
-                        # Add padding if needed
-                        payload_b64 += '=' * (4 - len(payload_b64) % 4)
-                        payload_bytes = base64.urlsafe_b64decode(payload_b64)
-                        payload = json.loads(payload_bytes)
-                        flow_state_id = payload.get('flow_state_id')
-                        print(f"🔐 Extracted flow_state_id from state: {flow_state_id}")
-                except Exception as e:
-                    print(f"⚠️ Failed to decode state JWT: {e}")
-            
-            # Store code_verifier with flow_state_id for later retrieval
-            if flow_state_id:
-                _pkce_storage[flow_state_id] = code_verifier
-                print(f"🔐 Stored code_verifier for flow_state_id: {flow_state_id[:20]}...")
-            else:
-                print(f"⚠️ WARNING: Could not extract flow_state_id, code_verifier will be returned directly")
-            
-            # Verify URL contains our code_challenge
-            url_code_challenge = query_params.get('code_challenge', [None])[0]
-            if url_code_challenge != code_challenge:
-                print(f"⚠️ WARNING: URL code_challenge ({url_code_challenge[:20] if url_code_challenge else 'None'}...) does not match ours ({code_challenge[:20]}...)")
-                print(f"🔐 Overriding code_challenge in URL to ensure match")
-                # Override to ensure match
-                from urllib.parse import urlencode, urlunparse
-                query_params['code_challenge'] = [code_challenge]
-                query_params['code_challenge_method'] = ['S256']
-                new_query = urlencode(query_params, doseq=True)
-                url = urlunparse((
-                    parsed.scheme,
-                    parsed.netloc,
-                    parsed.path,
-                    parsed.params,
-                    new_query,
-                    parsed.fragment
-                ))
-                print(f"🔐 Final URL with our code_challenge: {url[:150]}...")
-            else:
-                print(f"✅ URL code_challenge matches ours")
-            
-            final_url = url
-            
             if not url:
                 error_detail = f"Failed to build Google OAuth URL"
                 print(f"❌ {error_detail}")
@@ -471,13 +398,11 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                     detail=error_detail
                 )
             
-            final_url = url
-            print(f"✅ Successfully built Google OAuth URL with PKCE: {final_url[:150]}...")
+            print(f"✅ Successfully built Google OAuth URL: {url[:150]}...")
             
-            # Return both URL and code_verifier for Electron to use
+            # Return OAuth URL (no code_verifier needed for non-PKCE flow)
             return {
-                "url": final_url,
-                "code_verifier": code_verifier
+                "url": url
             }
         except HTTPException:
             # Re-raise HTTP exceptions
