@@ -293,116 +293,38 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
         print(f"   - code_verifier length: {len(code_verifier)}")
         print(f"   - code_challenge length: {len(code_challenge)}")
         
-        # Get Google OAuth URL
-        # Note: We need to manually add PKCE parameters to the OAuth URL
-        # because Supabase Python SDK doesn't return code_verifier
-        print(f"🔐 Preparing to call Supabase OAuth, provider: google, redirect_to: {callback_url}")
+        # Build OAuth URL directly instead of using Supabase SDK
+        # This ensures we use our own PKCE parameters and flow state matches
+        print(f"🔐 Building OAuth URL directly with our PKCE parameters")
+        print(f"🔐 Using code_challenge: {code_challenge[:20]}...")
+        print(f"🔐 Using code_verifier: {code_verifier[:20]}...")
+        
         try:
-            # Call Supabase OAuth API (this will generate its own PKCE, but we'll override)
-            response = supabase.auth.sign_in_with_oauth({
+            # Build OAuth URL directly
+            from urllib.parse import urlencode
+            oauth_params = {
                 "provider": "google",
-                "options": {
-                    "redirect_to": callback_url,
-                    "query_params": {
-                        "code_challenge": code_challenge,
-                        "code_challenge_method": "S256"
-                    }
-                }
-            })
+                "redirect_to": callback_url,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256"
+            }
+            oauth_url = f"{supabase_url}/auth/v1/authorize?{urlencode(oauth_params)}"
             
-            print(f"🔐 Supabase OAuth response type: {type(response)}")
-            print(f"🔐 Supabase OAuth response attributes: {dir(response) if hasattr(response, '__dict__') else 'N/A'}")
+            print(f"🔐 Built OAuth URL directly: {oauth_url[:150]}...")
             
-            if not response:
-                print(f"❌ Supabase OAuth returned None or empty response")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to get Google OAuth URL: Supabase returned empty response"
-                )
-            
-            # Supabase Python SDK may return different formats
-            # Try multiple ways to extract URL
-            url = None
-            
-            # Method 1: Check if response is a dict
-            if isinstance(response, dict):
-                url = response.get("url") or response.get("data", {}).get("url")
-                print(f"🔐 Response is dict, extracted URL: {'Found' if url else 'Not found'}")
-            
-            # Method 2: Check if response has url attribute directly
-            if not url and hasattr(response, "url"):
-                try:
-                    url = response.url
-                    print(f"🔐 Response has url attribute: {'Found' if url else 'None'}")
-                except Exception as e:
-                    print(f"⚠️ Error accessing response.url: {e}")
-            
-            # Method 3: Check if response has data attribute
-            if not url and hasattr(response, "data"):
-                try:
-                    data = response.data
-                    if isinstance(data, dict):
-                        url = data.get("url")
-                    elif hasattr(data, "url"):
-                        url = data.url
-                    print(f"🔐 Response has data attribute, extracted URL: {'Found' if url else 'Not found'}")
-                except Exception as e:
-                    print(f"⚠️ Error accessing response.data: {e}")
-            
-            # Method 4: Try to access as a response object with model attribute
-            if not url and hasattr(response, "model"):
-                try:
-                    model = response.model
-                    if hasattr(model, "url"):
-                        url = model.url
-                    print(f"🔐 Response has model attribute, extracted URL: {'Found' if url else 'Not found'}")
-                except Exception as e:
-                    print(f"⚠️ Error accessing response.model: {e}")
-            
-            # If still not found, log full response for debugging
-            if not url:
-                response_str = str(response)
-                response_repr = repr(response)
-                print(f"❌ No URL found in Supabase OAuth response")
-                print(f"🔐 Response string (first 500 chars): {response_str[:500]}")
-                print(f"🔐 Response repr (first 500 chars): {response_repr[:500]}")
-                
-                # Try to extract URL from string representation (last resort)
-                import re
-                url_match = re.search(r'url[=:]\s*["\']?([^"\'\s]+)["\']?', response_str, re.IGNORECASE)
-                if url_match:
-                    url = url_match.group(1)
-                    print(f"🔐 Extracted URL from string representation: {url[:100]}...")
+            # Use the directly built URL
+            url = oauth_url
             
             if not url:
-                error_detail = f"Failed to get Google OAuth URL: No URL in Supabase response. Response type: {type(response)}, Response content: {str(response)[:200]}"
+                error_detail = f"Failed to build Google OAuth URL"
                 print(f"❌ {error_detail}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=error_detail
                 )
             
-            # Ensure the URL contains our code_challenge (in case Supabase SDK overrides it)
-            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-            parsed = urlparse(url)
-            query_params = parse_qs(parsed.query)
-            
-            # Add/override PKCE parameters
-            query_params['code_challenge'] = [code_challenge]
-            query_params['code_challenge_method'] = ['S256']
-            
-            # Rebuild URL with PKCE parameters
-            new_query = urlencode(query_params, doseq=True)
-            final_url = urlunparse((
-                parsed.scheme,
-                parsed.netloc,
-                parsed.path,
-                parsed.params,
-                new_query,
-                parsed.fragment
-            ))
-            
-            print(f"✅ Successfully got Google OAuth URL with PKCE: {final_url[:100]}...")
+            final_url = url
+            print(f"✅ Successfully built Google OAuth URL with PKCE: {final_url[:150]}...")
             
             # Return both URL and code_verifier for Electron to use
             return {
