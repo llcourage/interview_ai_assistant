@@ -293,27 +293,79 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
         print(f"   - code_verifier length: {len(code_verifier)}")
         print(f"   - code_challenge length: {len(code_challenge)}")
         
-        # Build OAuth URL directly instead of using Supabase SDK
-        # This ensures we use our own PKCE parameters and flow state matches
-        print(f"🔐 Building OAuth URL directly with our PKCE parameters")
+        # Use Supabase SDK to initialize flow state, but ensure it uses our code_challenge
+        # The SDK will create the flow state in Supabase, which is required for token exchange
+        print(f"🔐 Using Supabase SDK to initialize flow state with our PKCE parameters")
         print(f"🔐 Using code_challenge: {code_challenge[:20]}...")
         print(f"🔐 Using code_verifier: {code_verifier[:20]}...")
         
         try:
-            # Build OAuth URL directly
-            from urllib.parse import urlencode
-            oauth_params = {
+            # Use Supabase SDK to get OAuth URL - this will initialize flow state
+            # Pass our code_challenge via query_params to ensure it's used
+            response = supabase.auth.sign_in_with_oauth({
                 "provider": "google",
-                "redirect_to": callback_url,
-                "code_challenge": code_challenge,
-                "code_challenge_method": "S256"
-            }
-            oauth_url = f"{supabase_url}/auth/v1/authorize?{urlencode(oauth_params)}"
+                "options": {
+                    "redirect_to": callback_url,
+                    "query_params": {
+                        "code_challenge": code_challenge,
+                        "code_challenge_method": "S256"
+                    }
+                }
+            })
             
-            print(f"🔐 Built OAuth URL directly: {oauth_url[:150]}...")
+            print(f"🔐 Supabase OAuth response type: {type(response)}")
             
-            # Use the directly built URL
-            url = oauth_url
+            # Extract URL from response
+            url = None
+            if isinstance(response, dict):
+                url = response.get("url") or response.get("data", {}).get("url")
+            elif hasattr(response, "url"):
+                url = response.url
+            elif hasattr(response, "data"):
+                data = response.data
+                if isinstance(data, dict):
+                    url = data.get("url")
+                elif hasattr(data, "url"):
+                    url = data.url
+            
+            if not url:
+                # Try to extract from string representation
+                response_str = str(response)
+                import re
+                url_match = re.search(r'url[=:]\s*["\']?([^"\'\s]+)["\']?', response_str, re.IGNORECASE)
+                if url_match:
+                    url = url_match.group(1)
+            
+            if not url:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to get Google OAuth URL: No URL in Supabase response"
+                )
+            
+            # Ensure the URL contains our code_challenge (override if SDK generated different one)
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+            parsed = urlparse(url)
+            query_params = parse_qs(parsed.query)
+            
+            # Override with our code_challenge to ensure it matches our code_verifier
+            query_params['code_challenge'] = [code_challenge]
+            query_params['code_challenge_method'] = ['S256']
+            
+            # Rebuild URL with our PKCE parameters
+            new_query = urlencode(query_params, doseq=True)
+            final_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+            
+            print(f"🔐 Original URL from SDK: {url[:150]}...")
+            print(f"🔐 Final URL with our code_challenge: {final_url[:150]}...")
+            
+            url = final_url
             
             if not url:
                 error_detail = f"Failed to build Google OAuth URL"
