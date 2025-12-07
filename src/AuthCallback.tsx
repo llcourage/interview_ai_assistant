@@ -19,10 +19,23 @@ export const AuthCallback: React.FC = () => {
       
       // 对于 Web 环境（BrowserRouter），参数在 search 中
       // 对于 Electron 环境（HashRouter），参数可能在 hash 中
+      // Supabase OAuth 回调可能返回 access_token 在 hash 中（URL hash 模式）
       let code: string | null = null;
       let state: string | null = null;
       let errorParam: string | null = null;
       let oauthUrl: string | null = null;
+      let accessToken: string | null = null;
+      let refreshToken: string | null = null;
+      
+      // 首先检查 hash 中是否有 access_token（Supabase URL hash 回调模式）
+      if (window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        accessToken = hashParams.get('access_token');
+        refreshToken = hashParams.get('refresh_token');
+        if (accessToken) {
+          console.log('🔐 AuthCallback: 检测到 URL hash 中的 access_token（Supabase 直接回调模式）');
+        }
+      }
       
       if (isElectron()) {
         // Electron 使用 HashRouter，参数在 hash 中
@@ -30,10 +43,10 @@ export const AuthCallback: React.FC = () => {
         const hashMatch = window.location.hash.match(/\?([^#]+)/);
         if (hashMatch) {
           const hashParams = new URLSearchParams(hashMatch[1]);
-          code = hashParams.get('code');
-          state = hashParams.get('state');
-          errorParam = hashParams.get('error');
-          oauthUrl = hashParams.get('oauth_url');
+          if (!code) code = hashParams.get('code');
+          if (!state) state = hashParams.get('state');
+          if (!errorParam) errorParam = hashParams.get('error');
+          if (!oauthUrl) oauthUrl = hashParams.get('oauth_url');
         }
         // 也尝试从 searchParams 获取（如果 React Router 已经解析了）
         if (!code) code = searchParams.get('code');
@@ -42,10 +55,10 @@ export const AuthCallback: React.FC = () => {
         if (!oauthUrl) oauthUrl = searchParams.get('oauth_url');
       } else {
         // Web 使用 BrowserRouter，参数在 search 中
-        code = searchParams.get('code');
-        state = searchParams.get('state');
-        errorParam = searchParams.get('error');
-        oauthUrl = searchParams.get('oauth_url');
+        if (!code) code = searchParams.get('code');
+        if (!state) state = searchParams.get('state');
+        if (!errorParam) errorParam = searchParams.get('error');
+        if (!oauthUrl) oauthUrl = searchParams.get('oauth_url');
       }
       
       console.log('🔐 AuthCallback: URL params:', {
@@ -126,8 +139,89 @@ export const AuthCallback: React.FC = () => {
         return;
       }
 
+      // 如果 hash 中有 access_token，直接使用（Supabase URL hash 回调模式）
+      if (accessToken) {
+        console.log('🔐 AuthCallback: 使用 URL hash 中的 access_token');
+        try {
+          // 直接使用 access_token 创建 session
+          const session = {
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+            token_type: 'bearer',
+            user: null as any // 稍后从 token 中解析
+          };
+          
+          // 解析 JWT token 获取用户信息
+          try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            session.user = {
+              id: payload.sub,
+              email: payload.email || ''
+            };
+          } catch (e) {
+            console.warn('无法解析 JWT token，稍后从 API 获取用户信息');
+          }
+          
+          // 保存 token
+          const { saveToken } = await import('./lib/auth');
+          saveToken(session);
+          
+          // 调用后端 API 设置 session cookie
+          try {
+            console.log('🔐 AuthCallback: 调用后端 API 设置 session cookie');
+            const { API_BASE_URL } = await import('./lib/api');
+            const response = await fetch(`${API_BASE_URL}/api/auth/set-session`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                access_token: accessToken,
+              }),
+            });
+            
+            if (response.ok) {
+              console.log('🔐 AuthCallback: 后端 session cookie 设置成功');
+            } else {
+              console.warn('🔐 AuthCallback: 后端 session cookie 设置失败，但继续流程');
+            }
+          } catch (e) {
+            console.error('🔐 AuthCallback: 设置 session cookie 失败:', e);
+          }
+          
+          // 触发认证状态变化事件
+          window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
+          
+          // 检查是否有待处理的 plan 和 redirect
+          const pendingPlan = localStorage.getItem('pendingPlan');
+          const pendingRedirect = localStorage.getItem('pendingRedirect');
+
+          if (pendingPlan && pendingRedirect) {
+            localStorage.removeItem('pendingPlan');
+            localStorage.removeItem('pendingRedirect');
+            navigate(`${pendingRedirect}?plan=${pendingPlan}`);
+          } else {
+            if (isElectron()) {
+              navigate('/app');
+            } else {
+              navigate('/profile');
+            }
+          }
+          return;
+        } catch (err: any) {
+          console.error('处理 access_token 失败:', err);
+          setError(err.message || 'Failed to process authentication');
+          setLoading(false);
+          setTimeout(() => {
+            navigate('/login');
+          }, 3000);
+          return;
+        }
+      }
+      
       if (!code) {
-        const errorMsg = 'No authorization code received';
+        const errorMsg = 'No authorization code or access_token received';
         setError(errorMsg);
         setLoading(false);
         

@@ -318,7 +318,27 @@ export const loginWithGoogle = async (): Promise<void> => {
       console.log('🔐 Web 环境：使用 Supabase JS SDK 生成 OAuth URL');
       
       // 动态导入 Supabase 客户端
-      const { createClient } = await import('@supabase/supabase-js');
+      let createClient: any;
+      try {
+        const supabaseModule = await import('@supabase/supabase-js');
+        createClient = supabaseModule.createClient;
+      } catch (importError: any) {
+        console.error('🔐 动态导入 Supabase SDK 失败:', importError);
+        // 如果动态导入失败，尝试从后端 API 获取 OAuth URL
+        console.log('🔐 降级：使用后端 API 获取 OAuth URL');
+        const { supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
+        if (supabaseUrl && supabaseAnonKey) {
+          localStorage.setItem('supabase_url', supabaseUrl);
+          localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+        }
+        // 重新尝试导入
+        try {
+          const supabaseModule = await import('@supabase/supabase-js');
+          createClient = supabaseModule.createClient;
+        } catch (retryError: any) {
+          throw new Error(`无法加载 Supabase SDK: ${importError.message || importError}. 请检查网络连接或刷新页面重试。`);
+        }
+      }
       
       // 获取 Supabase 配置
       let supabaseUrl = localStorage.getItem('supabase_url');
@@ -393,7 +413,14 @@ export const loginWithGoogle = async (): Promise<void> => {
  */
 export const handleOAuthCallback = async (code: string, state?: string): Promise<AuthToken> => {
   // 动态导入 Supabase 客户端
-  const { createClient } = await import('@supabase/supabase-js');
+  let createClient: any;
+  try {
+    const supabaseModule = await import('@supabase/supabase-js');
+    createClient = supabaseModule.createClient;
+  } catch (importError: any) {
+    console.error('🔐 动态导入 Supabase SDK 失败:', importError);
+    throw new Error(`无法加载 Supabase SDK: ${importError.message || importError}. 请检查网络连接或刷新页面重试。`);
+  }
   
   // 从 localStorage 获取 Supabase 配置（如果之前保存过）
   let supabaseUrl = localStorage.getItem('supabase_url');
