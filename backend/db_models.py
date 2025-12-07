@@ -1,6 +1,6 @@
 """
-数据库模型定义
-支持用户Plan、API Keys、Usage统计
+Database model definitions
+Supports user Plan, API Keys, Usage statistics
 """
 from enum import Enum
 from typing import Optional
@@ -9,15 +9,15 @@ from pydantic import BaseModel
 
 
 class PlanType(str, Enum):
-    """用户订阅计划类型"""
-    START = "start"      # 入门计划 - 100k tokens 终身，不重置，gpt-4o-mini
-    NORMAL = "normal"    # 付费计划 $19.9/week
-    HIGH = "high"        # 付费计划 $39/week
-    ULTRA = "ultra"      # 高级计划 $69/week - 使用 gpt-4o
+    """User subscription plan types"""
+    START = "start"      # Starter plan - 100k tokens lifetime, no reset, gpt-4o-mini
+    NORMAL = "normal"    # Paid plan $19.9/week
+    HIGH = "high"        # Paid plan $39/week
+    ULTRA = "ultra"      # Premium plan $69/week - uses gpt-4o
 
 
 class UserPlan(BaseModel):
-    """用户订阅计划"""
+    """User subscription plan"""
     user_id: str
     plan: PlanType = PlanType.NORMAL
     stripe_customer_id: Optional[str] = None
@@ -28,11 +28,11 @@ class UserPlan(BaseModel):
     updated_at: datetime
 
 
-# 已移除 UserApiKey - 所有用户使用服务器的 API Key
+# UserApiKey removed - all users use server API Key
 
 
 class UsageLog(BaseModel):
-    """API 调用记录"""
+    """API call log"""
     user_id: str
     plan: PlanType
     api_endpoint: str  # /api/chat, /api/vision_query, etc
@@ -40,18 +40,18 @@ class UsageLog(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
-    cost: float = 0.0  # 成本（美元）
+    cost: float = 0.0  # Cost (USD)
     success: bool = True
     error_message: Optional[str] = None
     created_at: datetime
 
 
 class UsageQuota(BaseModel):
-    """用户配额管理"""
+    """User quota management"""
     user_id: str
     plan: PlanType
-    weekly_tokens_used: int = 0  # 本周已用 tokens
-    quota_reset_date: datetime  # 配额重置日期
+    weekly_tokens_used: int = 0  # Tokens used this week
+    quota_reset_date: datetime  # Quota reset date
     created_at: datetime
     updated_at: datetime
 
@@ -60,32 +60,32 @@ class UsageQuota(BaseModel):
 PLAN_LIMITS = {
     PlanType.START: {
         "lifetime_token_limit": 100_000,  # 100k tokens lifetime, no reset
-        "is_lifetime": True,  # 标识为终身配额，不进行月度重置
+        "is_lifetime": True,  # Marked as lifetime quota, no monthly reset
         "models": ["gpt-4o-mini"],  # Only mini model
         "features": ["basic_chat", "image_analysis"]
     },
     PlanType.NORMAL: {
         "weekly_token_limit": 1_000_000,  # 1M tokens per week
-        "is_lifetime": False,  # 周度配额，每周重置
+        "is_lifetime": False,  # Weekly quota, resets weekly
         "models": ["gpt-4o-mini"],  # Great Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.HIGH: {
         "weekly_token_limit": 1_000_000,  # 1M tokens per week
-        "is_lifetime": False,  # 周度配额，每周重置
+        "is_lifetime": False,  # Weekly quota, resets weekly
         "models": ["gpt-5-mini"],  # Exceptional Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
     },
     PlanType.ULTRA: {
         "weekly_token_limit": 1_000_000,  # 1M tokens per week
-        "is_lifetime": False,  # 周度配额，每周重置
+        "is_lifetime": False,  # Weekly quota, resets weekly
         "models": ["gpt-4o"],  # State of the Art Model
         "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "advanced_reasoning"]
     }
 }
 
 
-# Model 价格定义（输入/输出 per 1K tokens）
+# Model pricing definitions (input/output per 1K tokens)
 MODEL_PRICING = {
     "gpt-4o": {"input": 0.0025, "output": 0.01},
     "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},

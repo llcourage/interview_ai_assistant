@@ -1,8 +1,8 @@
 -- ========================================
--- 查看所有可用的 plan 值
+-- View all available plan values
 -- ========================================
 
--- 查看 user_plans 表中所有不同的 plan 值及其数量
+-- View all different plan values and their counts in user_plans table
 SELECT 
     plan, 
     COUNT(*) as user_count,
@@ -12,7 +12,7 @@ FROM user_plans
 GROUP BY plan
 ORDER BY plan;
 
--- 查看每个 plan 的详细信息（如果需要看具体用户）
+-- View detailed information for each plan (if need to see specific users)
 SELECT 
     id,
     user_id,

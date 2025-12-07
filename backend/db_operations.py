@@ -1,6 +1,6 @@
 """
-数据库操作
-提供用户Plan、API Keys、Usage的CRUD操作
+Database operations
+Provides CRUD operations for user Plan, API Keys, Usage
 """
 import os
 from typing import Optional, Dict, Any
@@ -8,16 +8,16 @@ from datetime import datetime, timedelta
 from backend.db_supabase import get_supabase
 from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
 
-# 已移除加密相关代码 - 所有用户使用服务器 API Key
+# Encryption related code removed - all users use server API Key
 
 
 def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """兼容旧数据：将 'starter' plan 转换为 'normal'，将 monthly_tokens_used 映射到 weekly_tokens_used"""
+    """Compatible with old data: convert 'starter' plan to 'normal', map monthly_tokens_used to weekly_tokens_used"""
     if isinstance(data, dict):
-        data = data.copy()  # 创建副本，避免修改原始数据
+        data = data.copy()  # Create copy to avoid modifying original data
         if data.get('plan') == 'starter':
             data['plan'] = 'normal'
-        # 兼容旧数据库列名：将 monthly_tokens_used 映射到 weekly_tokens_used
+        # Compatible with old database column names: map monthly_tokens_used to weekly_tokens_used
         if 'monthly_tokens_used' in data and 'weekly_tokens_used' not in data:
             data['weekly_tokens_used'] = data['monthly_tokens_used']
         if 'monthly_token_limit' in data and 'weekly_token_limit' not in data:
@@ -28,17 +28,17 @@ def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
 # ========== User Plan Operations ==========
 
 async def get_user_plan(user_id: str) -> UserPlan:
-    """获取用户的Plan"""
+    """Get user Plan"""
     try:
         supabase = get_supabase()
-        # 使用 maybe_single() 而不是 single()，避免在没有记录时抛出异常
+        # Use maybe_single() instead of single() to avoid exceptions when no record exists
         response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
         
         if response.data:
             plan_data = normalize_plan_data(response.data)
             return UserPlan(**plan_data)
         else:
-            # 如果没有记录，先尝试直接查询（不使用 maybe_single）
+            # If no record, try direct query first (without maybe_single)
             direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
             
             if direct_response.data and len(direct_response.data) > 0:
@@ -49,13 +49,13 @@ async def get_user_plan(user_id: str) -> UserPlan:
             print(f"User {user_id} has no plan record, creating default NORMAL plan")
             return await create_user_plan(user_id)
     except Exception as e:
-        print(f"⚠️ 获取用户Plan失败: {e}")
-        # 如果创建失败，尝试返回内存中的对象（但这不是持久化的）
+        print(f"⚠️ Failed to get user Plan: {e}")
+        # If creation fails, try returning in-memory object (but this is not persistent)
         try:
             return await create_user_plan(user_id)
         except Exception as create_error:
-            print(f"❌ 创建用户Plan也失败: {create_error}")
-            # 最后返回一个临时对象（不推荐，但至少不会崩溃）
+            print(f"❌ Failed to create user Plan: {create_error}")
+            # Finally return a temporary object (not recommended, but at least won't crash)
             return UserPlan(
                 user_id=user_id,
                 plan=PlanType.NORMAL,
@@ -65,7 +65,7 @@ async def get_user_plan(user_id: str) -> UserPlan:
 
 
 async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> UserPlan:
-    """创建用户Plan"""
+    """Create user Plan"""
     try:
         supabase = get_supabase()
         now = datetime.now()
@@ -79,16 +79,16 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> Us
         
         response = supabase.table("user_plans").insert(plan_data).execute()
         
-        # 防御性检查：确保 response 和 response.data 都存在
+        # Defensive check: ensure response and response.data exist
         if response is None:
-            print(f"❌ Supabase insert 返回 None")
-            raise Exception("创建Plan失败：数据库操作返回空响应")
+            print(f"❌ Supabase insert returned None")
+            raise Exception("Failed to create Plan: Database operation returned empty response")
         
         if not hasattr(response, 'data') or not response.data:
-            print(f"❌ Supabase insert 返回的 response.data 为空: {response}")
-            raise Exception("创建Plan失败：数据库操作未返回数据")
+            print(f"❌ Supabase insert returned empty response.data: {response}")
+            raise Exception("Failed to create Plan: Database operation did not return data")
         
-        # 确保 data 是列表且不为空
+        # Ensure data is list and not empty
         if isinstance(response.data, list) and len(response.data) > 0:
             plan_data = normalize_plan_data(response.data[0])
             return UserPlan(**plan_data)
@@ -96,10 +96,10 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> Us
             plan_data = normalize_plan_data(response.data)
             return UserPlan(**plan_data)
         else:
-            print(f"❌ Supabase insert 返回的数据格式异常: {response.data}")
-            raise Exception("创建Plan失败：返回的数据格式不正确")
+            print(f"❌ Supabase insert returned unexpected data format: {response.data}")
+            raise Exception("Failed to create Plan: Returned data format incorrect")
     except Exception as e:
-        print(f"❌ 创建用户Plan失败: {e}")
+        print(f"❌ Failed to create user Plan: {e}")
         import traceback
         traceback.print_exc()
         raise
@@ -113,47 +113,47 @@ async def update_user_plan(
     subscription_status: Optional[str] = None,
     plan_expires_at: Optional[datetime] = None
 ) -> UserPlan:
-    """更新用户Plan（如果记录不存在则创建）- 使用 upsert 避免 204 错误
+    """Update user Plan (create if record doesn't exist) - use upsert to avoid 204 error
     
-    如果从 start plan 升级到其他 plan，会自动重置 quota
+    If upgrading from start plan to other plan, will automatically reset quota
     """
     try:
         from postgrest.exceptions import APIError
         
         supabase = get_supabase()
         
-        # 如果 plan 要更新，检查是否需要重置 quota（从 start 升级到其他 plan）
+        # If plan is to be updated, check if quota needs to be reset (upgrading from start to other plan)
         should_reset_quota = False
         old_plan = None
         if plan is not None:
-            # 获取旧的 plan
+            # Get old plan
             try:
                 old_plan_response = supabase.table("user_plans").select("plan").eq("user_id", user_id).maybe_single().execute()
                 if old_plan_response.data:
                     old_plan_value = old_plan_response.data.get("plan")
                     if old_plan_value:
                         old_plan = PlanType(old_plan_value)
-                        # 如果从 start plan 升级到 normal/high plan，需要重置 quota
+                        # If upgrading from start plan to normal/high plan, need to reset quota
                         if old_plan == PlanType.START and plan != PlanType.START:
                             should_reset_quota = True
-                            print(f"🔄 用户 {user_id} 从 start plan 升级到 {plan.value} plan，将重置 quota")
+                            print(f"🔄 User {user_id} upgrading from start plan to {plan.value} plan, will reset quota")
             except Exception as e:
-                print(f"⚠️ 检查旧 plan 失败（可能是新用户）: {e}")
+                print(f"⚠️ Failed to check old plan (may be new user): {e}")
         
-        # 构建数据字典
+        # Build data dictionary
         now = datetime.now()
         data = {
             "user_id": user_id,
             "updated_at": now.isoformat()
         }
         
-        # 只有非 None 的值才添加到 data 中（避免覆盖已有值为 NULL）
-        # 注意：如果是新记录创建（通过 webhook），plan 总是会被传入
-        # 如果是部分更新（plan 为 None），则只更新其他字段
+        # Only add non-None values to data (avoid overwriting existing values with NULL)
+        # Note: If creating new record (via webhook), plan will always be passed
+        # If partial update (plan is None), only update other fields
         if plan is not None:
             data["plan"] = plan.value
         
-        # 这些字段只在有值时才更新
+        # These fields are only updated when they have values
         if stripe_customer_id is not None:
             data["stripe_customer_id"] = stripe_customer_id
         if stripe_subscription_id is not None:
@@ -163,14 +163,14 @@ async def update_user_plan(
         if plan_expires_at is not None:
             data["plan_expires_at"] = plan_expires_at.isoformat()
         
-        # 使用 upsert，以 user_id 为唯一键
-        # 如果记录不存在则插入，存在则更新
+        # Use upsert, with user_id as unique key
+        # Insert if record doesn't exist, update if exists
         try:
-            # 尝试标准 upsert
+            # Try standard upsert
             response = supabase.table("user_plans").upsert(data).execute()
             
         except Exception as upsert_error:
-            # 如果标准 upsert 失败，尝试指定 on_conflict
+            # If standard upsert fails, try specifying on_conflict
             try:
                 response = supabase.table("user_plans").upsert(
                     data,
@@ -180,7 +180,7 @@ async def update_user_plan(
                 print(f"Upsert failed: {e2}")
                 raise
         
-        # 防御性检查：确保 response 和 response.data 都存在
+        # Defensive check: ensure response and response.data exist
         if response is None:
             print(f"Supabase upsert returned None")
             raise Exception("Update plan failed: Database operation returned empty response")
@@ -189,7 +189,7 @@ async def update_user_plan(
             print(f"Supabase upsert returned empty response.data: {response}")
             raise Exception("Update plan failed: Database operation did not return data")
         
-        # 处理返回的数据
+        # Process returned data
         if isinstance(response.data, list) and len(response.data) > 0:
             plan_data = normalize_plan_data(response.data[0])
             result = UserPlan(**plan_data)
@@ -199,29 +199,29 @@ async def update_user_plan(
         else:
             raise Exception("Update plan failed: Unexpected response format")
         
-        # 如果需要重置 quota（从 start 升级到其他 plan）
+        # If need to reset quota (upgrading from start to other plan)
         if should_reset_quota and plan is not None:
             try:
                 now = datetime.now()
                 quota_update_data = {
                     "weekly_tokens_used": 0,
                     "quota_reset_date": now.isoformat(),
-                    "plan": plan.value,  # 同时更新 quota 中的 plan
+                    "plan": plan.value,  # Also update plan in quota
                     "updated_at": now.isoformat()
                 }
                 quota_response = supabase.table("usage_quotas").update(quota_update_data).eq("user_id", user_id).execute()
                 if quota_response.data:
-                    print(f"✅ 已重置用户 {user_id} 的 quota（从 start plan 升级到 {plan.value}）")
+                    print(f"✅ Reset user {user_id} quota (upgraded from start plan to {plan.value})")
                 else:
-                    # Quota 记录可能不存在，尝试创建
+                    # Quota record may not exist, try to create
                     try:
                         await create_user_quota(user_id)
-                        print(f"✅ 已创建用户 {user_id} 的新 quota 记录")
+                        print(f"✅ Created new quota record for user {user_id}")
                     except Exception as create_error:
-                        print(f"⚠️ 创建 quota 记录失败: {create_error}")
+                        print(f"⚠️ Failed to create quota record: {create_error}")
             except Exception as quota_error:
-                print(f"⚠️ 重置 quota 时出错: {quota_error}")
-                # 不抛出异常，因为 plan 更新已经成功了
+                print(f"⚠️ Error resetting quota: {quota_error}")
+                # Don't raise exception, because plan update already succeeded
         
         return result
             
@@ -237,8 +237,8 @@ async def update_user_plan(
         raise
 
 
-# ========== User API Key Operations 已移除 ==========
-# 所有用户都使用服务器的 API Key，不需要存储用户的 Key
+# ========== User API Key Operations removed ==========
+# All users use server API Key, no need to store user keys
 
 
 # ========== Usage Logging ==========
@@ -253,11 +253,11 @@ async def log_usage(
     success: bool = True,
     error_message: Optional[str] = None
 ) -> UsageLog:
-    """记录API使用"""
+    """Log API usage"""
     try:
         from backend.db_models import MODEL_PRICING
         
-        # 计算成本
+        # Calculate cost
         pricing = MODEL_PRICING.get(model_used, {"input": 0, "output": 0})
         cost = (input_tokens / 1000) * pricing["input"] + (output_tokens / 1000) * pricing["output"]
         
@@ -282,42 +282,42 @@ async def log_usage(
         if response.data:
             return UsageLog(**response.data[0])
         else:
-            raise Exception("记录Usage失败")
+            raise Exception("Failed to log Usage")
     except Exception as e:
-        print(f"❌ 记录Usage失败: {e}")
+        print(f"❌ Failed to log Usage: {e}")
         raise
 
 
 # ========== Usage Quota Management ==========
 
 async def get_user_quota(user_id: str) -> UsageQuota:
-    """获取用户配额"""
+    """Get user quota"""
     try:
         supabase = get_supabase()
-        # 使用 maybe_single() 而不是 single()，避免在没有记录时抛出异常
+        # Use maybe_single() instead of single() to avoid exceptions when no record exists
         response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
         
         if response and response.data:
-            # 保存原始 plan 值，用于检查是否需要更新数据库
+            # Save original plan value to check if database needs updating
             original_plan = response.data.get('plan')
             
             quota_data = normalize_plan_data(response.data)
-            # 确保 weekly_tokens_used 字段存在（兼容旧数据）
+            # Ensure weekly_tokens_used field exists (compatible with old data)
             if 'weekly_tokens_used' not in quota_data:
                 quota_data['weekly_tokens_used'] = 0
             quota = UsageQuota(**quota_data)
             
-            # 如果从 'starter' 转换而来，更新数据库
+            # If converted from 'starter', update database
             if original_plan == 'starter':
                 try:
                     supabase = get_supabase()
                     supabase.table("usage_quotas").update({"plan": "normal"}).eq("user_id", user_id).execute()
-                    print(f"✅ 已将用户 {user_id} 的 quota plan 从 'starter' 更新为 'normal'")
+                    print(f"✅ Updated user {user_id} quota plan from 'starter' to 'normal'")
                 except Exception as update_error:
-                    print(f"⚠️ 更新 quota plan 失败: {update_error}")
+                    print(f"⚠️ Failed to update quota plan: {update_error}")
             
-            # 检查是否需要重置配额（按自然月重置）
-            # 对于终身配额（start plan），跳过重置
+            # Check if quota needs to be reset (reset by calendar month)
+            # For lifetime quota (start plan), skip reset
             user_plan = await get_user_plan(user_id)
             limits = PLAN_LIMITS.get(user_plan.plan, {})
             is_lifetime = limits.get("is_lifetime", False)
@@ -325,25 +325,25 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             now = datetime.now()
             should_reset_monthly = False
             
-            # 终身配额不重置
+            # Lifetime quota doesn't reset
             if not is_lifetime:
                 if quota.quota_reset_date:
                     reset_date = quota.quota_reset_date
                     if isinstance(reset_date, str):
                         reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
                     
-                    # quota_reset_date 是"上次重置时间"，如果当前年月 ≠ 上次重置的年月，则需要重置
+                    # quota_reset_date is "last reset time", if current year/month ≠ last reset year/month, need to reset
                     reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
                     should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
                 else:
-                    # 如果没有重置日期，视为需要重置
+                    # If no reset date, treat as need to reset
                     should_reset_monthly = True
             
             if should_reset_monthly:
-                # 直接在这里重置，避免调用 reset_user_quota 造成递归
+                # Reset directly here to avoid calling reset_user_quota causing recursion
                 update_data = {
                     "weekly_tokens_used": 0,
-                    "quota_reset_date": now.isoformat(),  # 设置为当前时间（上次重置时间）
+                    "quota_reset_date": now.isoformat(),  # Set to current time (last reset time)
                     "updated_at": now.isoformat()
                 }
                 
@@ -353,66 +353,66 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 if response.data:
                     quota_data = normalize_plan_data(response.data[0])
                     quota = UsageQuota(**quota_data)
-                    print(f"📅 重置用户 {user_id} 的周度 token 配额（按周重置）")
+                    print(f"📅 Reset user {user_id} weekly token quota (reset by week)")
                 else:
-                    # 如果更新失败，至少更新内存中的对象
+                    # If update fails, at least update in-memory object
                     quota.weekly_tokens_used = 0
                     quota.quota_reset_date = now
             
             return quota
         else:
-            # 如果没有记录，创建新配额
-            print(f"📝 用户 {user_id} 没有配额记录，创建新配额")
+            # If no record, create new quota
+            print(f"📝 User {user_id} has no quota record, creating new quota")
             return await create_user_quota(user_id)
     except Exception as e:
-        print(f"⚠️ 获取用户配额失败: {e}")
+        print(f"⚠️ Failed to get user quota: {e}")
         import traceback
         traceback.print_exc()
-        # 返回默认配额
+        # Return default quota
         try:
             user_plan = await get_user_plan(user_id)
             limits = PLAN_LIMITS[user_plan.plan]
             
             now = datetime.now()
-            # quota_reset_date 是"上次重置时间"，设置为当前时间
+            # quota_reset_date is "last reset time", set to current time
             return UsageQuota(
                 user_id=user_id,
                 plan=user_plan.plan,
                 weekly_tokens_used=0,
-                quota_reset_date=now,  # 上次重置时间 = 当前时间
+                quota_reset_date=now,  # Last reset time = current time
                 created_at=now,
                 updated_at=now
             )
         except Exception as fallback_error:
-            print(f"❌ 创建默认配额也失败: {fallback_error}")
-            # 最后返回一个基本的配额对象
+            print(f"❌ Failed to create default quota: {fallback_error}")
+            # Finally return a basic quota object
             # Fallback to NORMAL plan limits
             now = datetime.now()
-            # quota_reset_date 是"上次重置时间"，设置为当前时间
+            # quota_reset_date is "last reset time", set to current time
             return UsageQuota(
                 user_id=user_id,
                 plan=PlanType.NORMAL,
                 weekly_tokens_used=0,
-                quota_reset_date=now,  # 上次重置时间 = 当前时间
+                quota_reset_date=now,  # Last reset time = current time
                 created_at=now,
                 updated_at=now
             )
 
 
 async def create_user_quota(user_id: str) -> UsageQuota:
-    """创建用户配额"""
+    """Create user quota"""
     try:
         supabase = get_supabase()
         
         user_plan = await get_user_plan(user_id)
         
         now = datetime.now()
-        # quota_reset_date 是"上次重置时间"，设置为当前时间
+        # quota_reset_date is "last reset time", set to current time
         quota_data = {
             "user_id": user_id,
             "plan": user_plan.plan.value,
             "weekly_tokens_used": 0,
-            "quota_reset_date": now.isoformat(),  # 上次重置时间 = 当前时间
+            "quota_reset_date": now.isoformat(),  # Last reset time = current time
             "created_at": now.isoformat(),
             "updated_at": now.isoformat()
         }
@@ -423,18 +423,18 @@ async def create_user_quota(user_id: str) -> UsageQuota:
             quota_data = normalize_plan_data(response.data[0])
             return UsageQuota(**quota_data)
         else:
-            raise Exception("创建配额失败")
+            raise Exception("Failed to create quota")
     except Exception as e:
-        print(f"❌ 创建用户配额失败: {e}")
+        print(f"❌ Failed to create user quota: {e}")
         raise
 
 
 async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota:
-    """增加用户 token 使用量
+    """Increment user token usage
     
     Args:
-        user_id: 用户ID
-        tokens_used: 本次使用的 token 数量（必须提供，默认为0）
+        user_id: User ID
+        tokens_used: Number of tokens used in this request (must be provided, default 0)
     """
     try:
         quota = await get_user_quota(user_id)
@@ -445,13 +445,13 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
             "updated_at": datetime.now().isoformat()
         }
         
-        # 添加 token 使用量到 weekly_tokens_used
+        # Add token usage to weekly_tokens_used
         if tokens_used > 0:
             current_tokens = getattr(quota, 'weekly_tokens_used', 0)
             update_data["weekly_tokens_used"] = current_tokens + tokens_used
         
-        # 向后兼容：同时写入 monthly_tokens_used（如果数据库列名还没改）
-        update_data = denormalize_quota_data(update_data)
+        # Backward compatible: also write to monthly_tokens_used (if database column name hasn't changed)
+        # Note: denormalize_quota_data function removed, directly use weekly_tokens_used
         
         response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
@@ -468,27 +468,27 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
 
 
 async def reset_user_quota(user_id: str) -> UsageQuota:
-    """重置用户配额（按周重置 weekly_tokens_used）
+    """Reset user quota (reset weekly_tokens_used by week)
     
-    注意：quota_reset_date 定义为"上次重置时间"（last_reset_at），不是"下次重置时间"
-    是否重置的判断：当前周 ≠ quota_reset_date 的周 → 重置（按 ISO 周计算）
+    Note: quota_reset_date is defined as "last reset time" (last_reset_at), not "next reset time"
+    Reset judgment: current week ≠ quota_reset_date week → reset (calculated by ISO week)
     """
     try:
         supabase = get_supabase()
         
-        # 直接查询数据库，避免调用 get_user_quota 造成递归
+        # Query database directly to avoid calling get_user_quota causing recursion
         response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
         
         now = datetime.now()
         
         if not response or not response.data:
-            # 没有记录就创建一条
+            # If no record, create one
             user_plan = await get_user_plan(user_id)
             quota_data = {
                 "user_id": user_id,
                 "plan": user_plan.plan.value,
                 "weekly_tokens_used": 0,
-                "quota_reset_date": now.isoformat(),  # 上次重置时间 = 当前时间
+                "quota_reset_date": now.isoformat(),  # Last reset time = current time
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat()
             }
@@ -498,14 +498,14 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
                 quota_data = normalize_plan_data(insert_response.data[0])
                 return UsageQuota(**quota_data)
             else:
-                raise Exception("创建配额失败")
+                raise Exception("Failed to create quota")
         
-        # 解析现有配额
+        # Parse existing quota
         quota_raw = normalize_plan_data(response.data[0])
         quota = UsageQuota(**quota_raw)
         
-        # 检查是否需要每周重置：按 ISO 周重置
-        # quota_reset_date 是"上次重置时间"，如果当前周 ≠ 上次重置的周，则需要重置
+        # Check if weekly reset is needed: reset by ISO week
+        # quota_reset_date is "last reset time", if current week ≠ last reset week, need to reset
         should_reset_weekly = False
         
         if quota.quota_reset_date:
@@ -515,23 +515,23 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
             
             reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
             
-            # 使用 ISO 周计算（年 + ISO 周数）
+            # Use ISO week calculation (year + ISO week number)
             now_year, now_week, _ = now.isocalendar()
             reset_year, reset_week, _ = reset_date_no_tz.isocalendar()
             should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
         else:
-            # 如果没有重置日期，视为需要重置
+            # If no reset date, treat as need to reset
             should_reset_weekly = True
         
         update_data = {
             "updated_at": now.isoformat()
         }
         
-        # 如果需要重置周度配额
+        # If need to reset weekly quota
         if should_reset_weekly:
             update_data["weekly_tokens_used"] = 0
-            update_data["quota_reset_date"] = now.isoformat()  # 更新为当前时间（上次重置时间）
-            print(f"📅 重置用户 {user_id} 的月度 token 配额（自然月重置）")
+            update_data["quota_reset_date"] = now.isoformat()  # Update to current time (last reset time)
+            print(f"📅 Reset user {user_id} monthly token quota (reset by calendar month)")
         
         update_response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
@@ -539,59 +539,59 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
             quota_data = normalize_plan_data(update_response.data[0])
             return UsageQuota(**quota_data)
         else:
-            raise Exception("重置配额失败")
+            raise Exception("Failed to reset quota")
     except Exception as e:
-        print(f"❌ 重置用户配额失败: {e}")
+        print(f"❌ Failed to reset user quota: {e}")
         raise
 
 
 async def check_rate_limit(user_id: str, estimated_tokens: int = 0) -> tuple[bool, str]:
-    """检查用户是否超过 token 配额限制
+    """Check if user exceeds token quota limit
     
     Args:
-        user_id: 用户ID
-        estimated_tokens: 预估的本次请求将使用的 tokens 数量（可选，用于提前检查）
+        user_id: User ID
+        estimated_tokens: Estimated number of tokens that will be used for this request (optional, for pre-check)
     
     Returns:
-        (bool, str): (是否允许, 错误信息)
+        (bool, str): (whether allowed, error message)
     """
     try:
         user_plan = await get_user_plan(user_id)
         quota = await get_user_quota(user_id)
         limits = PLAN_LIMITS[user_plan.plan]
         
-        # 检查 token 限制（考虑预估的 tokens）
-        # 支持两种配额类型：周度配额（weekly_token_limit）和终身配额（lifetime_token_limit）
+        # Check token limit (considering estimated tokens)
+        # Support two quota types: weekly quota (weekly_token_limit) and lifetime quota (lifetime_token_limit)
         weekly_token_limit = limits.get("weekly_token_limit")
         lifetime_token_limit = limits.get("lifetime_token_limit")
         is_lifetime = limits.get("is_lifetime", False)
         
         weekly_tokens_used = getattr(quota, 'weekly_tokens_used', 0)
         
-        # 检查终身配额（start plan）
+        # Check lifetime quota (start plan)
         if is_lifetime and lifetime_token_limit is not None:
             if weekly_tokens_used + estimated_tokens > lifetime_token_limit:
                 remaining = lifetime_token_limit - weekly_tokens_used
                 if remaining <= 0:
-                    return False, f"终身 tokens 已用完：{weekly_tokens_used:,}/{lifetime_token_limit:,}。请升级Plan。"
+                    return False, f"Lifetime tokens exhausted: {weekly_tokens_used:,}/{lifetime_token_limit:,}. Please upgrade Plan."
                 else:
-                    return False, f"终身 tokens 配额不足：已使用 {weekly_tokens_used:,}/{lifetime_token_limit:,}，剩余 {remaining:,}，但预估需要 {estimated_tokens:,}。请升级Plan。"
+                    return False, f"Insufficient lifetime tokens quota: Used {weekly_tokens_used:,}/{lifetime_token_limit:,}, remaining {remaining:,}, but estimated need {estimated_tokens:,}. Please upgrade Plan."
         
-        # 检查周度配额（normal/high plan）
+        # Check weekly quota (normal/high plan)
         if weekly_token_limit is not None:
-            # 检查当前已使用的 tokens 加上预估的 tokens 是否会超过限制
+            # Check if current used tokens plus estimated tokens will exceed limit
             if weekly_tokens_used + estimated_tokens > weekly_token_limit:
                 remaining = weekly_token_limit - weekly_tokens_used
                 if remaining <= 0:
-                    return False, f"本周 tokens 已用完：{weekly_tokens_used:,}/{weekly_token_limit:,}。请下周再试或升级Plan。"
+                    return False, f"This week's tokens exhausted: {weekly_tokens_used:,}/{weekly_token_limit:,}. Please try again next week or upgrade Plan."
                 else:
-                    return False, f"本周 tokens 配额不足：已使用 {weekly_tokens_used:,}/{weekly_token_limit:,}，剩余 {remaining:,}，但预估需要 {estimated_tokens:,}。请下周再试或升级Plan。"
+                    return False, f"Insufficient weekly tokens quota: Used {weekly_tokens_used:,}/{weekly_token_limit:,}, remaining {remaining:,}, but estimated need {estimated_tokens:,}. Please try again next week or upgrade Plan."
         
         return True, ""
     except Exception as e:
         print(f"Check rate limit failed: {e}")
         import traceback
         traceback.print_exc()
-        # 出错时允许请求，避免阻塞
+        # On error, allow request to avoid blocking
         return True, ""
 

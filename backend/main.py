@@ -1,20 +1,20 @@
-# ========== 必须在所有导入之前加载环境变量 ==========
+# ========== Must load environment variables before all imports ==========
 from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-# 只在开发环境（本地）加载 .env 文件
-# 在生产环境（Vercel）中，应该从系统环境变量读取
+# Only load .env file in development environment (local)
+# In production environment (Vercel), should read from system environment variables
 is_production = os.getenv("VERCEL") or os.getenv("ENVIRONMENT") == "production"
 if not is_production:
-    # 明确指定 .env 文件路径，确保无论从哪里启动都能找到
+    # Explicitly specify .env file path to ensure it can be found regardless of where it's started
     backend_dir = Path(__file__).parent.resolve()
     env_path = backend_dir / ".env"
-    # 不使用 override，优先使用系统环境变量（Vercel 环境变量）
+    # Don't use override, prioritize system environment variables (Vercel environment variables)
     if env_path.exists():
         load_dotenv(dotenv_path=str(env_path), override=False)
 
-# ========== 现在可以导入其他模块 ==========
+# ========== Now can import other modules ==========
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -27,20 +27,20 @@ import json
 import platform
 from typing import Optional, Union
 from datetime import datetime
-import stripe  # 导入 stripe 用于错误处理
+import stripe  # Import stripe for error handling
 
-# 导入现有模块 - 使用绝对导入（backend 作为包）
+# Import existing modules - use absolute imports (backend as package)
 from backend.vision import analyze_image
 from backend.token_estimator import estimate_tokens_for_request
 from openai import AsyncOpenAI
 
-# 导入认证模块
+# Import authentication module
 from backend.auth_supabase import (
     User, UserRegister, UserLogin, Token,
     register_user, login_user, get_current_active_user, verify_token
 )
 
-# 导入新的数据库模块
+# Import new database modules
 from backend.db_models import PlanType, PLAN_LIMITS, MODEL_PRICING
 from backend.db_operations import (
     get_user_plan, get_user_quota, increment_user_quota, check_rate_limit, log_usage
@@ -55,70 +55,70 @@ from backend.payment_stripe import (
 
 app = FastAPI(
     title="Desktop AI API",
-    description="Desktop AI 后端服务 - Your AI assistant for daily usage, interviews, and productivity",
+    description="Desktop AI Backend Service - Your AI assistant for daily usage, interviews, and productivity",
     version="2.0.0"
 )
 
-# 添加启动时的日志
+# Add startup logs
 @app.on_event("startup")
 async def startup_event():
     import os
     is_vercel = os.getenv("VERCEL")
-    is_desktop = getattr(sys, 'frozen', False)  # 检测是否为打包后的桌面版
+    is_desktop = getattr(sys, 'frozen', False)  # Detect if it's a packaged desktop version
     
     print("=" * 60)
-    print("🚀 FastAPI 应用启动")
+    print("🚀 FastAPI application starting")
     if is_vercel:
-        print(f"   环境: Vercel (云端)")
-        print(f"   ✅ 所有 API Key 在云端")
+        print(f"   Environment: Vercel (Cloud)")
+        print(f"   ✅ All API Keys in cloud")
     elif is_desktop:
-        print(f"   环境: Desktop (桌面版)")
-        print(f"   ⚠️  桌面版模式：不包含任何配置和 API Key")
-        print(f"   ✅ 所有 API 请求将转发到 Vercel（包括认证、数据库、AI、支付）")
+        print(f"   Environment: Desktop (Desktop version)")
+        print(f"   ⚠️  Desktop mode: No configuration or API Keys included")
+        print(f"   ✅ All API requests will be forwarded to Vercel (including auth, database, AI, payment)")
         vercel_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
-        print(f"   云端 API: {vercel_url}")
-        print(f"   ✅ 桌面版不直接连接 Supabase 或任何外部服务")
+        print(f"   Cloud API: {vercel_url}")
+        print(f"   ✅ Desktop version does not directly connect to Supabase or any external services")
     else:
-        print(f"   环境: Local (本地开发)")
-        print(f"   OPENAI_API_KEY 已配置: {bool(os.getenv('OPENAI_API_KEY'))}")
+        print(f"   Environment: Local (Local development)")
+        print(f"   OPENAI_API_KEY configured: {bool(os.getenv('OPENAI_API_KEY'))}")
     print("=" * 60)
 
-# 配置 CORS
-# 注意：当 allow_credentials=True 时，不能使用 allow_origins=["*"]
-# 必须明确指定允许的源，否则浏览器会拒绝携带 Cookie 的跨域请求
+# Configure CORS
+# Note: When allow_credentials=True, cannot use allow_origins=["*"]
+# Must explicitly specify allowed origins, otherwise browser will reject cross-origin requests with cookies
 origins = [
     "http://localhost:5173",      # Vite dev server
     "http://127.0.0.1:5173",     # Vite dev server (alternative)
     "https://www.desktopai.org", # Production web
-    "http://localhost:3000",      # 备用开发端口
+    "http://localhost:3000",      # Alternative development port
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        # ⭐ 不能再用 "*"，必须明确指定
-    allow_credentials=True,       # ⭐ 必须 True，才能带 Cookie
+    allow_origins=origins,        # ⭐ Cannot use "*", must explicitly specify
+    allow_credentials=True,       # ⭐ Must be True to allow cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ========== 静态文件服务（桌面版）==========
-# 仅在桌面版模式下提供静态文件服务
+# ========== Static file service (Desktop version) ==========
+# Only provide static file service in desktop mode
 
 def find_ui_directory():
-    """查找 UI 目录"""
+    """Find UI directory"""
     import sys
     possible_dirs = []
     
-    # 如果是打包后的 exe，UI 可能在多个位置
+    # If it's a packaged exe, UI may be in multiple locations
     if getattr(sys, 'frozen', False):
         exe_dir = Path(sys.executable).parent.resolve()
-        # 1. exe 同目录的 ui/ 文件夹
+        # 1. ui/ folder in same directory as exe
         possible_dirs.append(exe_dir / "ui")
-        # 2. 父目录的 ui/ 文件夹（用于 release_root 结构）
+        # 2. ui/ folder in parent directory (for release_root structure)
         parent_dir = exe_dir.parent.resolve()
         possible_dirs.append(parent_dir / "ui")
     else:
-        # 开发环境
+        # Development environment
         backend_dir = Path(__file__).parent.resolve()
         project_root = backend_dir.parent.resolve()
         possible_dirs.append(project_root / "dist")
@@ -129,39 +129,39 @@ def find_ui_directory():
             return dir_path
     return None
 
-# 查找并设置 UI 目录
+# Find and set UI directory
 ui_directory = find_ui_directory()
 if ui_directory:
-    print(f"📁 检测到 UI 目录: {ui_directory}")
+    print(f"📁 Detected UI directory: {ui_directory}")
     
-    # 挂载静态资源目录
+    # Mount static resources directory
     assets_dir = ui_directory / "assets"
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
-        print(f"✅ 已挂载静态资源: /assets")
+        print(f"✅ Mounted static resources: /assets")
 else:
-    print("ℹ️  未检测到 UI 目录，仅提供 API 服务")
+    print("ℹ️  UI directory not detected, API service only")
 
 # ========== Request/Response Models ==========
 
 class ChatRequest(BaseModel):
-    """统一的 Chat 请求模型"""
-    user_input: Optional[str] = None  # 文字输入
-    image_base64: Optional[Union[str, list[str]]] = None  # 图片输入（单张或多张）
-    context: Optional[str] = None  # 对话上下文
-    prompt: Optional[str] = None  # 自定义提示词（用于图片分析）
+    """Unified Chat request model"""
+    user_input: Optional[str] = None  # Text input
+    image_base64: Optional[Union[str, list[str]]] = None  # Image input (single or multiple)
+    context: Optional[str] = None  # Conversation context
+    prompt: Optional[str] = None  # Custom prompt (for image analysis)
 
 
 class ChatResponse(BaseModel):
-    """统一的 Chat 响应模型"""
+    """Unified Chat response model"""
     answer: str
     success: bool = True
     error: Optional[str] = None
-    usage: Optional[dict] = None  # Token使用情况
+    usage: Optional[dict] = None  # Token usage
 
 
 class PlanResponse(BaseModel):
-    """用户Plan信息"""
+    """User Plan information"""
     plan: str
     weekly_token_limit: Optional[int] = None
     weekly_tokens_used: Optional[int] = None
@@ -170,13 +170,13 @@ class PlanResponse(BaseModel):
 
 
 class ApiKeyRequest(BaseModel):
-    """API Key 请求"""
+    """API Key request"""
     api_key: str
     provider: str = "openai"
 
 
 class CheckoutRequest(BaseModel):
-    """创建支付会话请求"""
+    """Create payment session request"""
     plan: str
     success_url: str
     cancel_url: str
@@ -185,15 +185,15 @@ class CheckoutRequest(BaseModel):
 # ========== Helper Functions ==========
 
 async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOpenAI, str]:
-    """根据用户Plan获取对应的OpenAI客户端和模型
+    """Get corresponding OpenAI client and model based on user Plan
     
-    Note: 此函数仅在非桌面版（Vercel/本地开发）环境下调用
-    桌面版的所有请求都会直接转发到 Vercel API，不会调用此函数
+    Note: This function is only called in non-desktop environments (Vercel/local development)
+    All desktop version requests will be directly forwarded to Vercel API, this function won't be called
     
     Returns:
         (AsyncOpenAI, model_name)
     """
-    # 所有Plan都使用服务器的 API Key
+    # All plans use server API Key
     server_api_key = os.getenv("OPENAI_API_KEY")
     if not server_api_key:
         raise HTTPException(
@@ -229,8 +229,8 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
 
 @app.get("/")
 async def root():
-    """根路径 - 健康检查或返回 UI"""
-    # 尝试查找 UI 目录
+    """Root path - health check or return UI"""
+    # Try to find UI directory
     ui_dir = None
     if getattr(sys, 'frozen', False):
         exe_dir = Path(sys.executable).parent.resolve()
@@ -243,7 +243,7 @@ async def root():
     if ui_dir and (ui_dir / "index.html").exists():
         return FileResponse(str(ui_dir / "index.html"))
     else:
-        # 否则返回 API 信息
+        # Otherwise return API information
         return {
             "status": "running",
             "message": "Desktop AI API v2.0",
@@ -252,9 +252,9 @@ async def root():
 
 
 @app.get("/health")
-@app.get("/api/health")  # 同时支持 /health 和 /api/health
+@app.get("/api/health")  # Support both /health and /api/health
 async def health_check():
-    """健康检查接口 - 包含环境变量状态"""
+    """Health check endpoint - includes environment variable status"""
     is_vercel = os.getenv("VERCEL")
     env_status = {
         "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
@@ -276,12 +276,12 @@ async def health_check():
     }
 
 
-# ========== 认证相关 API ==========
+# ========== Authentication related API ==========
 
-@app.post("/api/register", response_model=Token, tags=["认证"])
+@app.post("/api/register", response_model=Token, tags=["Authentication"])
 async def register(user_data: UserRegister, http_request: Request):
-    """用户注册"""
-    # 如果是桌面版，转发到 Vercel
+    """User registration"""
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -297,16 +297,16 @@ async def register(user_data: UserRegister, http_request: Request):
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
+    # Non-desktop version: normal processing
     return await register_user(user_data.email, user_data.password)
 
 
-@app.post("/api/login", response_model=Token, tags=["认证"])
+@app.post("/api/login", response_model=Token, tags=["Authentication"])
 async def login(user_data: UserLogin, http_request: Request):
-    """用户登录"""
-    # 如果是桌面版，转发到 Vercel
+    """User login"""
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -322,22 +322,22 @@ async def login(user_data: UserLogin, http_request: Request):
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
+    # Non-desktop version: normal processing
     return await login_user(user_data.email, user_data.password)
 
 
-@app.get("/api/config/supabase", tags=["配置"])
+@app.get("/api/config/supabase", tags=["Configuration"])
 async def get_supabase_config():
-    """获取 Supabase 配置（供前端 OAuth 使用）"""
+    """Get Supabase configuration (for frontend OAuth use)"""
     supabase_url = os.getenv("SUPABASE_URL", "")
     supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
     
     if not supabase_url or not supabase_anon_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase 配置缺失"
+            detail="Supabase configuration missing"
         )
     
     return {
@@ -346,12 +346,12 @@ async def get_supabase_config():
     }
 
 
-@app.get("/api/auth/google/url", tags=["认证"])
+@app.get("/api/auth/google/url", tags=["Authentication"])
 async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_request: Request = None):
-    """获取 Google OAuth 授权 URL"""
+    """Get Google OAuth authorization URL"""
     from backend.auth_supabase import get_google_oauth_url
     
-    # 如果是桌面版，转发到 Vercel
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -368,25 +368,25 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
                 )
                 response.raise_for_status()
                 data = response.json()
-                # 验证返回的数据格式
+                # Verify returned data format
                 if not isinstance(data, dict) or 'url' not in data:
                     raise HTTPException(
                         status_code=502, 
-                        detail=f"云端 API 返回格式错误: {data}"
+                        detail=f"Cloud API returned invalid format: {data}"
                     )
                 return data
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
-    # 如果没有提供 redirect_to，使用请求来源
+    # Non-desktop version: normal processing
+    # If redirect_to is not provided, use request origin
     if not redirect_to and http_request:
         origin = http_request.headers.get("Origin") or http_request.headers.get("Referer", "").rsplit("/", 1)[0]
         redirect_to = origin if origin else None
     
     url = await get_google_oauth_url(redirect_to)
     
-    # 同时返回 Supabase 配置，供前端 OAuth 回调使用
+    # Also return Supabase configuration for frontend OAuth callback use
     supabase_url = os.getenv("SUPABASE_URL", "")
     supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
     
@@ -397,16 +397,16 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
     }
 
 
-@app.get("/api/auth/callback", tags=["认证"])
+@app.get("/api/auth/callback", tags=["Authentication"])
 async def oauth_callback(code: str, state: Optional[str] = None, http_request: Request = None):
     """
-    处理 OAuth 回调
-    注意：这个端点现在主要用于 Web 环境
-    Electron 环境的 OAuth 回调应该指向前端页面（/auth/callback），由前端处理
+    Handle OAuth callback
+    Note: This endpoint is now mainly used for Web environment
+    Electron environment OAuth callback should point to frontend page (/auth/callback), handled by frontend
     """
-    print(f"🔍 /api/auth/callback 收到请求: code={code[:20] if code else 'None'}..., state={state}")
+    print(f"🔍 /api/auth/callback received request: code={code[:20] if code else 'None'}..., state={state}")
     
-    # 如果是桌面版，转发到 Vercel
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -424,17 +424,17 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                print(f"❌ 桌面版转发失败: {e}")
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                print(f"❌ Desktop version forwarding failed: {e}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
-    # 注意：由于 Supabase 使用 PKCE，后端无法直接处理 OAuth 回调
-    # 这个端点现在主要用于向后兼容，实际应该由前端处理
-    print("⚠️ /api/auth/callback: 后端无法处理 PKCE OAuth 回调，应该由前端处理")
-    print("⚠️ 建议：OAuth 回调应该指向前端页面（/auth/callback），而不是后端 API")
+    # Non-desktop version: normal processing
+    # Note: Since Supabase uses PKCE, backend cannot directly handle OAuth callback
+    # This endpoint is now mainly for backward compatibility, should actually be handled by frontend
+    print("⚠️ /api/auth/callback: Backend cannot handle PKCE OAuth callback, should be handled by frontend")
+    print("⚠️ Suggestion: OAuth callback should point to frontend page (/auth/callback), not backend API")
     
     try:
-        # 使用 Supabase REST API 直接处理 OAuth 回调，避免 Python SDK 的 PKCE 问题
+        # Use Supabase REST API to directly handle OAuth callback, avoid Python SDK PKCE issues
         import os
         import httpx
         
@@ -444,18 +444,18 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
         if not supabase_url or not supabase_anon_key:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Supabase 配置缺失: SUPABASE_URL 或 SUPABASE_ANON_KEY 未设置"
+                detail="Supabase configuration missing: SUPABASE_URL or SUPABASE_ANON_KEY not set"
             )
         
-        # 使用 Supabase REST API 交换 code
-        # 注意：如果 OAuth URL 使用了 PKCE，这里需要提供 code_verifier
-        # 但由于我们无法在不同请求间共享 code_verifier，我们尝试不使用 PKCE
-        print(f"🔍 准备交换 code: {code[:20]}...")
+        # Use Supabase REST API to exchange code
+        # Note: If OAuth URL uses PKCE, need to provide code_verifier here
+        # But since we cannot share code_verifier across different requests, we try not to use PKCE
+        print(f"🔍 Preparing to exchange code: {code[:20]}...")
         
-        # 构建 Supabase Auth API 端点
+        # Build Supabase Auth API endpoint
         auth_url = f"{supabase_url}/auth/v1/token?grant_type=authorization_code"
         
-        # 准备请求数据
+        # Prepare request data
         data = {
             "code": code,
             "grant_type": "authorization_code"
@@ -466,7 +466,7 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             "Content-Type": "application/json"
         }
         
-        # 发送请求到 Supabase REST API
+        # Send request to Supabase REST API
         async with httpx.AsyncClient() as http_client:
             response = await http_client.post(
                 auth_url,
@@ -477,60 +477,60 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             
             if response.status_code != 200:
                 error_text = response.text
-                print(f"❌ Supabase OAuth 回调失败: {response.status_code} - {error_text}")
+                print(f"❌ Supabase OAuth callback failed: {response.status_code} - {error_text}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"OAuth 回调处理失败: {error_text}"
+                    detail=f"OAuth callback processing failed: {error_text}"
                 )
             
             token_data = response.json()
             
-            # 解析响应
+            # Parse response
             if not token_data.get("access_token") or not token_data.get("user"):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="OAuth 回调失败：无法获取 token 或用户信息"
+                    detail="OAuth callback failed: Unable to get token or user information"
                 )
             
             user_data = token_data["user"]
             user_id = user_data["id"]
             user_email = user_data.get("email", "")
             
-            print(f"✅ OAuth 回调成功，用户 ID: {user_id}, Email: {user_email}")
+            print(f"✅ OAuth callback successful, User ID: {user_id}, Email: {user_email}")
             
-            # 生成自己的 session token（使用 Supabase access_token 作为 session token）
-            # 注意：这里简化处理，直接使用 Supabase access_token 作为 session token
-            # 如果需要更安全，可以使用 JWT 生成自己的 token
+            # Generate own session token (use Supabase access_token as session token)
+            # Note: Simplified handling here, directly use Supabase access_token as session token
+            # If more security is needed, can use JWT to generate own token
             session_token = token_data["access_token"]
             
-            # 构建重定向 URL（重定向到前端成功页面）
-            # 对于 Electron，这个重定向会被 Electron 捕获，所以 URL 不重要
-            # 对于 Web，重定向到前端页面
+            # Build redirect URL (redirect to frontend success page)
+            # For Electron, this redirect will be captured by Electron, so URL doesn't matter
+            # For Web, redirect to frontend page
             frontend_url = os.getenv("FRONTEND_URL", "https://www.desktopai.org")
             redirect_url = f"{frontend_url}/auth/success"
             
-            # 创建重定向响应，并设置 session cookie
+            # Create redirect response and set session cookie
             response_obj = RedirectResponse(url=redirect_url, status_code=302)
             
-            # 设置 session cookie
-            # 使用 Supabase access_token 作为 session token
-            # 根据请求来源确定 cookie domain
+            # Set session cookie
+            # Use Supabase access_token as session token
+            # Determine cookie domain based on request origin
             origin = http_request.headers.get("Origin", "") if http_request else ""
             is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
             
             if is_localhost:
-                # 开发环境：不设置 domain，允许 localhost 使用
+                # Development environment: don't set domain, allow localhost use
                 response_obj.set_cookie(
                     key="da_session",
                     value=session_token,
                     httponly=True,
-                    secure=False,  # 开发环境可能使用 http
-                    samesite="lax",  # localhost 使用 lax
-                    max_age=60 * 60 * 24 * 7,  # 7 天
+                    secure=False,  # Development environment may use http
+                    samesite="lax",  # localhost uses lax
+                    max_age=60 * 60 * 24 * 7,  # 7 days
                     path="/",
                 )
             else:
-                # 生产环境：设置 domain
+                # Production environment: set domain
                 response_obj.set_cookie(
                     key="da_session",
                     value=session_token,
@@ -538,32 +538,32 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                     secure=True,
                     samesite="none",
                     domain=".desktopai.org",
-                    max_age=60 * 60 * 24 * 7,  # 7 天
+                    max_age=60 * 60 * 24 * 7,  # 7 days
                     path="/",
                 )
             
-            print(f"✅ 已设置 session cookie (origin: {origin}, is_localhost: {is_localhost})，重定向到: {redirect_url}")
+            print(f"✅ Session cookie set (origin: {origin}, is_localhost: {is_localhost}), redirecting to: {redirect_url}")
             
             return response_obj
         
-        # 调试日志
-        print(f"🔍 OAuth 回调响应类型: {type(response)}")
+        # Debug logs
+        print(f"🔍 OAuth callback response type: {type(response)}")
         
         if not response.user:
-            print(f"❌ OAuth 回调失败：response.user 为空")
+            print(f"❌ OAuth callback failed: response.user is empty")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OAuth 回调失败：无法获取用户信息"
+                detail="OAuth callback failed: Unable to get user information"
             )
         
         if not response.session:
-            print(f"❌ OAuth 回调失败：response.session 为空")
+            print(f"❌ OAuth callback failed: response.session is empty")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OAuth 回调失败：无法获取会话信息"
+                detail="OAuth callback failed: Unable to get session information"
             )
         
-        # 返回 token 信息 - 使用与 login_user 相同的方式
+        # Return token information - use same method as login_user
         token = Token(
             access_token=response.session.access_token,
             refresh_token=response.session.refresh_token,
@@ -579,28 +579,28 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
     except AttributeError as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ OAuth 回调属性错误: {e}")
-        print(f"错误堆栈:\n{error_trace}")
+        print(f"❌ OAuth callback attribute error: {e}")
+        print(f"Error stack:\n{error_trace}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OAuth 回调处理失败：响应格式不正确 - {str(e)}"
+            detail=f"OAuth callback processing failed: Response format incorrect - {str(e)}"
         )
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ OAuth 回调处理错误: {e}")
-        print(f"错误类型: {type(e)}")
-        print(f"错误堆栈:\n{error_trace}")
+        print(f"❌ OAuth callback processing error: {e}")
+        print(f"Error type: {type(e)}")
+        print(f"Error stack:\n{error_trace}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OAuth 回调处理失败: {str(e)}"
+            detail=f"OAuth callback processing failed: {str(e)}"
         )
 
 
-@app.post("/api/auth/set-session", tags=["认证"])
+@app.post("/api/auth/set-session", tags=["Authentication"])
 async def set_session(request: Request):
-    """设置 session cookie（由前端 OAuth 回调后调用）"""
-    # 如果是桌面版，转发到 Vercel
+    """Set session cookie (called by frontend after OAuth callback)"""
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -615,45 +615,45 @@ async def set_session(request: Request):
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
+    # Non-desktop version: normal processing
     try:
-        # 从请求体获取 access_token
+        # Get access_token from request body
         body = await request.json()
         access_token = body.get("access_token")
         if not access_token:
             raise HTTPException(status_code=400, detail="Missing access_token")
         
-        # 验证 token
+        # Verify token
         from backend.auth_supabase import verify_token
         user = await verify_token(access_token)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # 创建响应并设置 cookie
+        # Create response and set cookie
         from fastapi.responses import JSONResponse
         response_obj = JSONResponse({"success": True, "user": {"id": user.id, "email": user.email}})
         
-        # 根据请求来源确定 cookie domain
+        # Determine cookie domain based on request origin
         origin = request.headers.get("Origin", "")
         is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
         
-        # 设置 session cookie
+        # Set session cookie
         if is_localhost:
-            # 开发环境：不设置 domain，允许 localhost 使用
+            # Development environment: don't set domain, allow localhost use
             response_obj.set_cookie(
                 key="da_session",
                 value=access_token,
                 httponly=True,
-                secure=False,  # 开发环境可能使用 http
-                samesite="lax",  # localhost 使用 lax
-                max_age=60 * 60 * 24 * 7,  # 7 天
+                secure=False,  # Development environment may use http
+                samesite="lax",  # localhost uses lax
+                max_age=60 * 60 * 24 * 7,  # 7 days
                 path="/",
             )
-            print(f"✅ 已设置 session cookie (localhost)，用户: {user.email}")
+            print(f"✅ Session cookie set (localhost), user: {user.email}")
         else:
-            # 生产环境：设置 domain
+            # Production environment: set domain
             response_obj.set_cookie(
                 key="da_session",
                 value=access_token,
@@ -661,31 +661,31 @@ async def set_session(request: Request):
                 secure=True,
                 samesite="none",
                 domain=".desktopai.org",
-                max_age=60 * 60 * 24 * 7,  # 7 天
+                max_age=60 * 60 * 24 * 7,  # 7 days
                 path="/",
             )
-            print(f"✅ 已设置 session cookie (production)，用户: {user.email}")
+            print(f"✅ Session cookie set (production), user: {user.email}")
         
         return response_obj
     except Exception as e:
-        print(f"❌ 设置 session cookie 失败: {e}")
+        print(f"❌ Failed to set session cookie: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to set session: {str(e)}")
 
 
-@app.post("/api/auth/logout", tags=["认证"])
+@app.post("/api/auth/logout", tags=["Authentication"])
 async def logout_endpoint(http_request: Request):
-    """用户登出，清除 session cookie"""
+    """User logout, clear session cookie"""
     from fastapi.responses import JSONResponse
     
-    # 创建响应
+    # Create response
     response_obj = JSONResponse({"success": True, "message": "Logged out successfully"})
     
-    # 根据请求来源确定 cookie domain
+    # Determine cookie domain based on request origin
     origin = http_request.headers.get("Origin", "")
     is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
     
-    # 清除 session cookie - 尝试多种方式确保清除
-    # 1. 清除带 domain 的 cookie（生产环境）
+    # Clear session cookie - try multiple ways to ensure clearing
+    # 1. Clear cookie with domain (production environment)
     response_obj.set_cookie(
         key="da_session",
         value="",
@@ -697,32 +697,32 @@ async def logout_endpoint(http_request: Request):
         path="/",
     )
     
-    # 2. 清除不带 domain 的 cookie（开发环境）
+    # 2. Clear cookie without domain (development environment)
     response_obj.set_cookie(
         key="da_session",
         value="",
         httponly=True,
-        secure=False,  # 开发环境可能使用 http
+        secure=False,  # Development environment may use http
         samesite="lax",
         max_age=0,
         path="/",
     )
     
-    print(f"✅ 已清除 session cookie (origin: {origin}, is_localhost: {is_localhost})")
+    print(f"✅ Session cookie cleared (origin: {origin}, is_localhost: {is_localhost})")
     return response_obj
 
 
-@app.get("/api/me", response_model=User, tags=["认证"])
+@app.get("/api/me", response_model=User, tags=["Authentication"])
 async def read_users_me(http_request: Request):
-    """获取当前用户信息"""
-    # 如果是桌面版，转发到 Vercel（不验证 token，让 Vercel 验证）
+    """Get current user information"""
+    # If desktop version, forward to Vercel (don't verify token, let Vercel verify)
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
         vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
         auth_header = http_request.headers.get("Authorization", "")
         if not auth_header:
-            raise HTTPException(status_code=401, detail="缺少认证 token")
+            raise HTTPException(status_code=401, detail="Missing authentication token")
         
         async with httpx.AsyncClient() as http_client:
             try:
@@ -734,27 +734,27 @@ async def read_users_me(http_request: Request):
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
-    # 优先从 Cookie 中获取 session token（OAuth 登录后设置的）
+    # Non-desktop version: normal processing
+    # Prioritize getting session token from Cookie (set after OAuth login)
     session_token = http_request.cookies.get("da_session")
     
     if session_token:
-        # 使用 session cookie 中的 token 验证用户
-        print(f"🔍 /api/me: 从 Cookie 获取 session token")
+        # Use token in session cookie to verify user
+        print(f"🔍 /api/me: Getting session token from Cookie")
         try:
-            # 使用 Supabase 验证 token
+            # Use Supabase to verify token
             from backend.auth_supabase import verify_token
             user = await verify_token(session_token)
             if user:
-                print(f"✅ /api/me: Cookie session 验证成功，用户: {user.email}")
+                print(f"✅ /api/me: Cookie session verification successful, user: {user.email}")
                 return user
         except Exception as e:
-            print(f"❌ /api/me: Cookie session 验证失败: {e}")
-            # Cookie 无效，继续尝试 Authorization header
+            print(f"❌ /api/me: Cookie session verification failed: {e}")
+            # Cookie invalid, continue trying Authorization header
     
-    # 如果没有 Cookie 或 Cookie 无效，尝试从 Authorization header 获取 token
+    # If no Cookie or Cookie invalid, try getting token from Authorization header
     auth_header = http_request.headers.get("Authorization", "")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.replace("Bearer ", "")
@@ -762,28 +762,28 @@ async def read_users_me(http_request: Request):
             from backend.auth_supabase import verify_token
             user = await verify_token(token)
             if user:
-                print(f"✅ /api/me: Authorization header 验证成功，用户: {user.email}")
+                print(f"✅ /api/me: Authorization header verification successful, user: {user.email}")
                 return user
         except Exception as e:
-            print(f"❌ /api/me: Authorization header 验证失败: {e}")
+            print(f"❌ /api/me: Authorization header verification failed: {e}")
     
-    # 都没有，返回 401
-    raise HTTPException(status_code=401, detail="未认证：缺少有效的 session cookie 或 Authorization token")
+    # Neither available, return 401
+    raise HTTPException(status_code=401, detail="Unauthenticated: Missing valid session cookie or Authorization token")
 
 
-# ========== 用户Plan相关 API ==========
+# ========== User Plan related API ==========
 
-@app.get("/api/plan", response_model=PlanResponse, tags=["Plan管理"])
+@app.get("/api/plan", response_model=PlanResponse, tags=["Plan Management"])
 async def get_plan(http_request: Request):
-    """获取用户当前Plan信息"""
-    # 如果是桌面版，转发到 Vercel（不验证 token，让 Vercel 验证）
+    """Get user current Plan information"""
+    # If desktop version, forward to Vercel (don't verify token, let Vercel verify)
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
         vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
         auth_header = http_request.headers.get("Authorization", "")
         if not auth_header:
-            raise HTTPException(status_code=401, detail="缺少认证 token")
+            raise HTTPException(status_code=401, detail="Missing authentication token")
         
         async with httpx.AsyncClient() as http_client:
             try:
@@ -795,39 +795,39 @@ async def get_plan(http_request: Request):
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理（需要验证 token）
+    # Non-desktop version: normal processing (need to verify token)
     auth_header = http_request.headers.get("Authorization", "")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="缺少认证 token")
+        raise HTTPException(status_code=401, detail="Missing authentication token")
     
     token = auth_header.replace("Bearer ", "")
     current_user = await verify_token(token)
     user_plan = await get_user_plan(current_user.id)
     quota = await get_user_quota(current_user.id)
     
-    # 确保 plan 字段存在
+    # Ensure plan field exists
     if not user_plan or not user_plan.plan:
-        # 如果 plan 不存在，使用默认的 NORMAL plan
-        print(f"⚠️ 用户 {current_user.id} 的 plan 为空，使用默认 NORMAL plan")
+        # If plan doesn't exist, use default NORMAL plan
+        print(f"⚠️ User {current_user.id} plan is empty, using default NORMAL plan")
         user_plan.plan = PlanType.NORMAL
     
     limits = PLAN_LIMITS[user_plan.plan]
     
-    # 获取订阅信息
+    # Get subscription information
     # Get subscription info for all plans (both NORMAL and HIGH have subscriptions)
-    # Start plan 没有订阅信息（一次性购买）
+    # Start plan has no subscription info (one-time purchase)
     subscription_info = None
     if user_plan.plan != PlanType.START:
         subscription_info = await get_subscription_info(current_user.id)
     
-    # 支持周度配额和终身配额
+    # Support weekly quota and lifetime quota
     weekly_token_limit = limits.get("weekly_token_limit")
     lifetime_token_limit = limits.get("lifetime_token_limit")
     is_lifetime = limits.get("is_lifetime", False)
     
-    # 对于 start plan，使用 lifetime_token_limit 作为 token_limit
+    # For start plan, use lifetime_token_limit as token_limit
     if is_lifetime and lifetime_token_limit is not None:
         weekly_token_limit = lifetime_token_limit
     
@@ -842,13 +842,13 @@ async def get_plan(http_request: Request):
     )
 
 
-@app.post("/api/plan/checkout", tags=["Plan管理"])
+@app.post("/api/plan/checkout", tags=["Plan Management"])
 async def create_checkout(
     request: CheckoutRequest,
     http_request: Request
 ):
-    """创建Stripe支付会话"""
-    # 如果是桌面版，转发到 Vercel
+    """Create Stripe payment session"""
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -856,7 +856,7 @@ async def create_checkout(
         auth_header = http_request.headers.get("Authorization", "")
         
         if not auth_header:
-            raise HTTPException(status_code=401, detail="缺少认证 token")
+            raise HTTPException(status_code=401, detail="Missing authentication token")
         
         async with httpx.AsyncClient() as http_client:
             try:
@@ -876,23 +876,23 @@ async def create_checkout(
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理
+    # Non-desktop version: normal processing
     try:
-        # 验证 token 并获取用户信息
+        # Verify token and get user information
         auth_header = http_request.headers.get("Authorization", "")
         if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="缺少认证 token")
+            raise HTTPException(status_code=401, detail="Missing authentication token")
         
         token = auth_header.replace("Bearer ", "")
         current_user = await verify_token(token)
         
-        # 创建支付会话
+        # Create payment session
         plan = PlanType(request.plan)
         
-        # Start plan 是一次性购买，不需要 Stripe 订阅
-        # 暂时直接更新用户 plan（后续可以添加一次性支付逻辑）
+        # Start plan is one-time purchase, doesn't need Stripe subscription
+        # Temporarily directly update user plan (can add one-time payment logic later)
         if plan == PlanType.START:
             from backend.db_operations import update_user_plan
             await update_user_plan(current_user.id, plan=plan)
@@ -901,45 +901,45 @@ async def create_checkout(
                 "message": "Start plan activated"
             }
         
-        # Normal 和 High plan 需要 Stripe 订阅
+        # Normal and High plan need Stripe subscription
         checkout_data = await create_checkout_session(
             user_id=current_user.id,
             plan=plan,
             success_url=request.success_url,
             cancel_url=request.cancel_url,
-            user_email=current_user.email  # 传递用户邮箱
+            user_email=current_user.email  # Pass user email
         )
         
         return checkout_data
     except ValueError as e:
-        # 配置错误，返回 400
-        print(f"❌ Checkout 配置错误: {e}")
+        # Configuration error, return 400
+        print(f"❌ Checkout configuration error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except AttributeError as e:
-        # AttributeError 通常是 None.data 错误
-        error_msg = f"数据访问错误: {str(e)}"
+        # AttributeError is usually None.data error
+        error_msg = f"Data access error: {str(e)}"
         print(f"❌ Checkout AttributeError: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=error_msg)
     except stripe.error.StripeError as e:
-        # Stripe API 错误
-        error_msg = f"Stripe API 错误: {e.user_message if hasattr(e, 'user_message') else str(e)}"
-        print(f"❌ Stripe API 错误: {e}")
+        # Stripe API error
+        error_msg = f"Stripe API error: {e.user_message if hasattr(e, 'user_message') else str(e)}"
+        print(f"❌ Stripe API error: {e}")
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        # 其他错误
-        error_msg = f"创建支付会话失败: {str(e)}"
-        print(f"❌ Checkout 错误: {type(e).__name__}: {e}")
+        # Other errors
+        error_msg = f"Failed to create payment session: {str(e)}"
+        print(f"❌ Checkout error: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@app.post("/api/plan/cancel", tags=["Plan管理"])
+@app.post("/api/plan/cancel", tags=["Plan Management"])
 async def cancel_plan(http_request: Request):
-    """取消当前订阅"""
-    # 如果是桌面版，转发到 Vercel
+    """Cancel current subscription"""
+    # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -947,7 +947,7 @@ async def cancel_plan(http_request: Request):
         auth_header = http_request.headers.get("Authorization", "")
         
         if not auth_header:
-            raise HTTPException(status_code=401, detail="缺少认证 token")
+            raise HTTPException(status_code=401, detail="Missing authentication token")
         
         async with httpx.AsyncClient() as http_client:
             try:
@@ -962,43 +962,43 @@ async def cancel_plan(http_request: Request):
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
     
-    # 非桌面版：正常处理（需要验证 token）
+    # Non-desktop version: normal processing (need to verify token)
     auth_header = http_request.headers.get("Authorization", "")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="缺少认证 token")
+        raise HTTPException(status_code=401, detail="Missing authentication token")
     
     token = auth_header.replace("Bearer ", "")
     current_user = await verify_token(token)
     success = await cancel_subscription(current_user.id)
     
     if success:
-        return {"message": "订阅将在当前周期结束时取消"}
+        return {"message": "Subscription will be cancelled at the end of current period"}
     else:
-        raise HTTPException(status_code=400, detail="取消订阅失败")
+        raise HTTPException(status_code=400, detail="Failed to cancel subscription")
 
 
-# ========== API Key 管理已移除 ==========
-# 所有用户都使用服务器的 API Key
+# ========== API Key management removed ==========
+# All users use server API Key
 
 
-# ========== 统一的 Chat API（核心接口）==========
+# ========== Unified Chat API (Core interface) ==========
 
-@app.post("/api/chat", response_model=ChatResponse, tags=["AI功能"])
+@app.post("/api/chat", response_model=ChatResponse, tags=["AI Features"])
 async def chat(
     request: ChatRequest,
     http_request: Request
 ):
-    """统一的Chat接口 - 支持文字对话和图片分析
+    """Unified Chat interface - supports text conversation and image analysis
     
-    - 如果有 image_base64：进行图片分析
-    - 如果只有 user_input：进行文字对话
-    - 自动根据用户Plan选择对应的API Key和模型
-    - 自动进行限流检查
-    - 自动记录使用统计
+    - If image_base64 exists: perform image analysis
+    - If only user_input: perform text conversation
+    - Automatically select corresponding API Key and model based on user Plan
+    - Automatically perform rate limiting check
+    - Automatically record usage statistics
     """
-    # 如果是桌面版，直接转发到 Vercel（不验证 token，让 Vercel 验证）
+    # If desktop version, directly forward to Vercel (don't verify token, let Vercel verify)
     is_desktop = getattr(sys, 'frozen', False)
     if is_desktop:
         import httpx
@@ -1006,7 +1006,7 @@ async def chat(
         auth_header = http_request.headers.get("Authorization", "")
         
         if not auth_header:
-            raise HTTPException(status_code=401, detail="缺少认证 token，无法转发请求到云端")
+            raise HTTPException(status_code=401, detail="Missing authentication token, unable to forward request to cloud")
         
         async with httpx.AsyncClient() as http_client:
             try:
@@ -1029,22 +1029,22 @@ async def chat(
             except httpx.HTTPError as e:
                 raise HTTPException(
                     status_code=502,
-                    detail=f"无法连接到云端 API: {str(e)}"
+                    detail=f"Unable to connect to cloud API: {str(e)}"
                 )
     
-    # 非桌面版：正常处理（需要验证 token）
+    # Non-desktop version: normal processing (need to verify token)
     try:
         auth_header = http_request.headers.get("Authorization", "")
         if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="缺少认证 token")
+            raise HTTPException(status_code=401, detail="Missing authentication token")
         
         token = auth_header.replace("Bearer ", "")
         current_user = await verify_token(token)
         
-        # 1. 获取用户Plan
+        # 1. Get user Plan
         user_plan = await get_user_plan(current_user.id)
         
-        # 2. 估算本次请求将使用的 tokens
+        # 2. Estimate tokens that will be used for this request
         estimated_tokens = estimate_tokens_for_request(
             user_input=request.user_input,
             context=request.context,
@@ -1053,18 +1053,18 @@ async def chat(
             max_output_tokens=3000 if request.image_base64 else 2000
         )
         
-        # 3. 检查限流（包括 token 配额）
+        # 3. Check rate limit (including token quota)
         allowed, error_msg = await check_rate_limit(current_user.id, estimated_tokens=estimated_tokens)
         if not allowed:
             raise HTTPException(status_code=429, detail=error_msg)
         
-        # 4. 获取对应的API客户端和模型
+        # 4. Get corresponding API client and model
         client, model = await get_api_client_for_user(current_user.id, user_plan.plan)
         
-        # 5. 处理请求
+        # 5. Process request
         if request.image_base64:
-            # 图片分析
-            print(f"🖼️ 用户 {current_user.id} ({user_plan.plan.value}) 请求图片分析")
+            # Image analysis
+            print(f"🖼️ User {current_user.id} ({user_plan.plan.value}) requesting image analysis")
             
             answer, token_usage = await analyze_image(
                 image_base64=request.image_base64,
@@ -1073,42 +1073,42 @@ async def chat(
                 model=model
             )
             
-            # 使用真实的 token 使用量
+            # Use actual token usage
             estimated_input_tokens = token_usage["input_tokens"]
             estimated_output_tokens = token_usage["output_tokens"]
             
         elif request.user_input:
-            # 文字对话
-            print(f"💬 用户 {current_user.id} ({user_plan.plan.value}) 请求文字对话")
+            # Text conversation
+            print(f"💬 User {current_user.id} ({user_plan.plan.value}) requesting text conversation")
             
             messages = []
             
-            # 添加系统提示
+            # Add system prompt
             messages.append({
                 "role": "system",
-                "content": """你是一个专业的技术面试助手。你的任务是：
-1. 回答技术问题，提供清晰的解释和代码示例
-2. 帮助用户理解面试题的解题思路
-3. 提供最佳实践和优化建议
-4. 保持简洁、专业的回答风格
+                "content": """You are a professional technical interview assistant. Your tasks are:
+1. Answer technical questions, provide clear explanations and code examples
+2. Help users understand interview problem-solving approaches
+3. Provide best practices and optimization suggestions
+4. Maintain concise, professional response style
 
-请用中文回答，代码默认使用 Python。"""
+Please answer in Chinese, code defaults to Python."""
             })
             
-            # 添加上下文（如果有）
+            # Add context (if exists)
             if request.context:
                 messages.append({
                     "role": "system",
-                    "content": f"以下是之前的对话历史：\n\n{request.context}"
+                    "content": f"The following is previous conversation history:\n\n{request.context}"
                 })
             
-            # 添加用户输入
+            # Add user input
             messages.append({
                 "role": "user",
                 "content": request.user_input
             })
             
-            # 调用LLM
+            # Call LLM
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -1118,42 +1118,42 @@ async def chat(
             
             answer = response.choices[0].message.content
             
-            # 获取真实的token使用
+            # Get actual token usage
             estimated_input_tokens = response.usage.prompt_tokens
             estimated_output_tokens = response.usage.completion_tokens
             
         else:
             raise HTTPException(
                 status_code=400,
-                detail="请提供 user_input（文字）或 image_base64（图片）"
+                detail="Please provide user_input (text) or image_base64 (image)"
             )
         
-        # 6. 计算总 token 使用量（使用 OpenAI 返回的实际值）
+        # 6. Calculate total token usage (use actual values returned by OpenAI)
         total_tokens = estimated_input_tokens + estimated_output_tokens
         
-        # 7. 增加配额计数（允许轻微超额，clamp 到上限）
-        # 一旦 OpenAI 返回成功，必须返回结果给用户并扣 token
+        # 7. Increment quota count (allow slight overage, clamp to limit)
+        # Once OpenAI returns success, must return result to user and deduct tokens
         limits = PLAN_LIMITS[user_plan.plan]
         weekly_token_limit = limits.get("weekly_token_limit")
         lifetime_token_limit = limits.get("lifetime_token_limit")
         is_lifetime = limits.get("is_lifetime", False)
         
-        # 对于终身配额，使用 lifetime_token_limit
+        # For lifetime quota, use lifetime_token_limit
         if is_lifetime and lifetime_token_limit is not None:
             weekly_token_limit = lifetime_token_limit
         
-        # 获取当前配额，计算 billable tokens（clamp 到剩余配额）
+        # Get current quota, calculate billable tokens (clamp to remaining quota)
         quota_before = await get_user_quota(current_user.id)
         current_tokens_used = getattr(quota_before, 'weekly_tokens_used', 0)
         
         if weekly_token_limit is not None and weekly_token_limit > 0:
             remaining_quota = weekly_token_limit - current_tokens_used
-            # Clamp: 如果超过剩余配额，只扣剩余配额的部分
+            # Clamp: if exceeds remaining quota, only deduct remaining quota portion
             billable_tokens = min(total_tokens, max(0, remaining_quota))
         else:
             billable_tokens = total_tokens
         
-        # 8. 记录使用日志（使用实际 tokens，success=True）
+        # 8. Record usage log (use actual tokens, success=True)
         await log_usage(
             user_id=current_user.id,
             plan=user_plan.plan,
@@ -1164,10 +1164,10 @@ async def chat(
             success=True
         )
         
-        # 9. 增加配额计数（使用 billable tokens）
+        # 9. Increment quota count (use billable tokens)
         await increment_user_quota(current_user.id, tokens_used=billable_tokens)
         
-        # 10. 永远返回结果给用户（即使轻微超额）
+        # 10. Always return result to user (even if slightly over quota)
         return ChatResponse(
             answer=answer,
             success=True,
@@ -1183,9 +1183,9 @@ async def chat(
         raise
     except Exception as e:
         error_message = str(e)
-        print(f"❌ Chat API 失败: {error_message}")
+        print(f"❌ Chat API failed: {error_message}")
         
-        # 记录失败日志
+        # Record failure log
         try:
             user_plan = await get_user_plan(current_user.id)
             await log_usage(
@@ -1200,7 +1200,7 @@ async def chat(
             pass
         
         return ChatResponse(
-            answer=f"处理失败: {error_message}",
+            answer=f"Processing failed: {error_message}",
             success=False,
             error=error_message
         )
@@ -1210,8 +1210,8 @@ async def chat(
 
 @app.get("/api/webhooks/stripe", tags=["Webhooks"])
 async def stripe_webhook_get():
-    """Webhook 端点健康检查（用于测试）"""
-    # 检查必要的环境变量
+    """Webhook endpoint health check (for testing)"""
+    # Check necessary environment variables
     env_status = {
         "SUPABASE_URL": bool(os.getenv("SUPABASE_URL")),
         "SUPABASE_SERVICE_ROLE_KEY": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
@@ -1314,14 +1314,14 @@ async def stripe_webhook(request: Request):
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-# ========== 保持向后兼容的API（逐步废弃）==========
+# ========== Backward compatible APIs (gradually deprecated) ==========
 
-@app.post("/api/vision_query", tags=["已废弃 - 请使用 /api/chat"])
+@app.post("/api/vision_query", tags=["Deprecated - Please use /api/chat"])
 async def vision_query_legacy(
     request: dict,
     current_user: User = Depends(get_current_active_user)
 ):
-    """旧的图片分析接口（向后兼容）"""
+    """Old image analysis interface (backward compatible)"""
     chat_request = ChatRequest(
         image_base64=request.get("image_base64"),
         prompt=request.get("prompt", "")
@@ -1329,12 +1329,12 @@ async def vision_query_legacy(
     return await chat(chat_request, current_user)
 
 
-@app.post("/api/text_chat", tags=["已废弃 - 请使用 /api/chat"])
+@app.post("/api/text_chat", tags=["Deprecated - Please use /api/chat"])
 async def text_chat_legacy(
     request: dict,
     current_user: User = Depends(get_current_active_user)
 ):
-    """旧的文字对话接口（向后兼容）"""
+    """Old text conversation interface (backward compatible)"""
     chat_request = ChatRequest(
         user_input=request.get("user_input"),
         context=request.get("context", "")
@@ -1342,32 +1342,32 @@ async def text_chat_legacy(
     return await chat(chat_request, current_user)
 
 
-# ========== SPA 路由支持（必须在最后定义，作为 catch-all）==========
-# 只有在检测到 UI 目录时才添加 SPA 路由
+# ========== SPA route support (must be defined last, as catch-all) ==========
+# Only add SPA routes when UI directory is detected
 if ui_directory:
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        """提供 SPA 路由支持"""
-        # 排除 API 和文档路径
+        """Provide SPA route support"""
+        # Exclude API and documentation paths
         if (full_path.startswith("api/") or 
             full_path in ["docs", "redoc", "openapi.json"]):
             raise HTTPException(status_code=404, detail="Not found")
         
-        # 返回 index.html
+        # Return index.html
         index_path = ui_directory / "index.html"
         if index_path.exists():
             return FileResponse(str(index_path))
         raise HTTPException(status_code=404, detail="UI not found")
 
 
-# ========== 启动服务 ==========
+# ========== Start service ==========
 
 if __name__ == "__main__":
-    # 如果是直接运行（不是通过 uvicorn backend.main:app），需要处理导入路径
+    # If running directly (not via uvicorn backend.main:app), need to handle import paths
     import sys
     from pathlib import Path
     
-    # 获取 backend 目录的绝对路径并添加到 sys.path
+    # Get absolute path of backend directory and add to sys.path
     backend_dir = Path(__file__).parent.resolve()
     project_root = backend_dir.parent.resolve()
     
@@ -1396,9 +1396,9 @@ if __name__ == "__main__":
     print("=" * 60)
     
     uvicorn.run(
-        app,  # 直接传递 app 对象，而不是字符串（PyInstaller 打包后无法使用字符串导入）
+        app,  # Directly pass app object, not string (PyInstaller packaged version cannot use string import)
         host=host,
         port=port,
-        reload=False,  # 直接运行时暂时禁用 reload，避免路径问题
+        reload=False,  # Temporarily disable reload when running directly, avoid path issues
         log_level="info"
     )

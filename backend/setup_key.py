@@ -1,27 +1,27 @@
 """
-快速设置脚本 - 生成 Encryption Key
+Quick setup script - Generate Encryption Key
 """
 from cryptography.fernet import Fernet
 
 def generate_encryption_key():
-    """生成 Fernet 加密密钥"""
+    """Generate Fernet encryption key"""
     key = Fernet.generate_key()
     return key.decode()
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🔐 Desktop AI - 加密密钥生成器")
+    print("🔐 Desktop AI - Encryption Key Generator")
     print("=" * 60)
     print()
     
     key = generate_encryption_key()
     
-    print("✅ 已生成加密密钥:")
+    print("✅ Encryption key generated:")
     print()
     print(f"ENCRYPTION_KEY={key}")
     print()
-    print("⚠️  请将此密钥添加到 .env 文件中")
-    print("⚠️  请妥善保管此密钥，丢失后所有用户API Key将无法解密")
+    print("⚠️  Please add this key to .env file")
+    print("⚠️  Please keep this key safe, if lost all user API Keys will be unable to decrypt")
     print()
     print("=" * 60)
 

@@ -1,6 +1,6 @@
 """
-Stripe 支付集成
-提供订阅购买、Webhook处理等功能
+Stripe payment integration
+Provides subscription purchase, Webhook handling and other functions
 """
 import os
 import stripe
@@ -12,11 +12,11 @@ from backend.db_models import PlanType
 
 load_dotenv()
 
-# Stripe 配置
+# Stripe configuration
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
-# Plan 对应的 Stripe Price IDs
+# Stripe Price IDs corresponding to Plans
 STRIPE_PRICE_IDS = {
     PlanType.NORMAL: os.getenv("STRIPE_PRICE_NORMAL", "price_xxx"),
     PlanType.HIGH: os.getenv("STRIPE_PRICE_HIGH", "price_yyy"),
@@ -25,86 +25,86 @@ STRIPE_PRICE_IDS = {
 
 
 async def create_checkout_session(user_id: str, plan: PlanType, success_url: str, cancel_url: str, user_email: Optional[str] = None) -> dict:
-    """创建 Stripe Checkout Session
+    """Create Stripe Checkout Session
     
     Args:
-        user_id: 用户ID
-        plan: 订阅计划
-        success_url: 支付成功后的跳转URL
-        cancel_url: 取消支付后的跳转URL
-        user_email: 用户邮箱（可选，如果提供会在 Checkout 中预填）
+        user_id: User ID
+        plan: Subscription plan
+        success_url: Redirect URL after successful payment
+        cancel_url: Redirect URL after cancelled payment
+        user_email: User email (optional, if provided will pre-fill in Checkout)
     
     Returns:
-        dict: 包含 checkout_url 的字典
+        dict: Dictionary containing checkout_url
     """
     try:
-        # 检查 Stripe API Key
+        # Check Stripe API Key
         if not stripe.api_key or stripe.api_key == "":
-            raise ValueError("STRIPE_SECRET_KEY 未配置，请在环境变量中设置")
+            raise ValueError("STRIPE_SECRET_KEY not configured, please set in environment variables")
         
         price_id = STRIPE_PRICE_IDS.get(plan)
         if not price_id or price_id in ["price_xxx", "price_yyy", "price_zzz"]:
             raise ValueError(
-                f"未找到 {plan} 对应的 Stripe Price ID。"
-                f"当前值: {price_id}。"
-                f"请在 Vercel 环境变量中设置 STRIPE_PRICE_{plan.value.upper()}"
+                f"Stripe Price ID not found for {plan}. "
+                f"Current value: {price_id}. "
+                f"Please set STRIPE_PRICE_{plan.value.upper()} in Vercel environment variables"
             )
         
-        # 获取或创建 Stripe Customer
+        # Get or create Stripe Customer
         user_plan_data = await get_user_plan(user_id)
         
         if user_plan_data.stripe_customer_id:
             customer_id = user_plan_data.stripe_customer_id
-            # 如果提供了邮箱，更新 Customer 的邮箱
+            # If email provided, update Customer email
             if user_email:
                 try:
                     stripe.Customer.modify(
                         customer_id,
                         email=user_email
                     )
-                    print(f"✅ 更新 Stripe Customer {customer_id} 的邮箱为 {user_email}")
+                    print(f"✅ Updated Stripe Customer {customer_id} email to {user_email}")
                 except Exception as e:
-                    print(f"⚠️ 更新 Customer 邮箱失败: {e}")
+                    print(f"⚠️ Failed to update Customer email: {e}")
             
-            # 检查用户是否已有活跃订阅
+            # Check if user already has active subscription
             if user_plan_data.stripe_subscription_id:
                 try:
-                    # 如果已有订阅，直接更新订阅（Stripe 会自动处理按比例计费和退款）
+                    # If subscription exists, directly update subscription (Stripe will automatically handle proration and refund)
                     subscription = stripe.Subscription.retrieve(user_plan_data.stripe_subscription_id)
                     
-                    # 更新订阅的 price（Stripe 会自动处理 proration）
+                    # Update subscription price (Stripe will automatically handle proration)
                     updated_subscription = stripe.Subscription.modify(
                         user_plan_data.stripe_subscription_id,
                         items=[{
                             'id': subscription['items']['data'][0].id,
                             'price': price_id,
                         }],
-                        proration_behavior='always_invoice',  # 立即按比例计费/退款
+                        proration_behavior='always_invoice',  # Immediately prorate billing/refund
                         metadata={
                             "user_id": user_id,
                             "plan": plan.value
                         }
                     )
                     
-                    # 更新数据库中的 plan
+                    # Update plan in database
                     await update_user_plan(
                         user_id=user_id,
                         plan=plan,
                         subscription_status="active"
                     )
                     
-                    print(f"✅ 用户 {user_id} 订阅已升级到 {plan.value} plan（Stripe 自动处理按比例计费/退款）")
+                    print(f"✅ User {user_id} subscription upgraded to {plan.value} plan (Stripe automatically handled proration/refund)")
                     
-                    # 返回 success_url，让用户跳转到成功页面
+                    # Return success_url, let user redirect to success page
                     return {
                         "checkout_url": success_url,
                         "message": "Subscription upgraded successfully"
                     }
                 except stripe.error.StripeError as e:
-                    print(f"⚠️ 更新订阅失败: {e}，将创建新的 checkout session")
-                    # 如果更新失败，继续创建新的 checkout session
+                    print(f"⚠️ Failed to update subscription: {e}, will create new checkout session")
+                    # If update fails, continue creating new checkout session
             
-            # 如果没有活跃订阅，创建新的 Checkout Session
+            # If no active subscription, create new Checkout Session
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=["card"],
@@ -115,14 +115,14 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
                 mode="subscription",
                 success_url=success_url,
                 cancel_url=cancel_url,
-                allow_promotion_codes=True,  # 启用优惠码输入框
+                allow_promotion_codes=True,  # Enable promotion code input
                 metadata={
                     "user_id": user_id,
                     "plan": plan.value
                 }
             )
         else:
-            # 创建新客户
+            # Create new customer
             customer_data = {
                 "metadata": {"user_id": user_id}
             }
@@ -132,12 +132,12 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
             customer = stripe.Customer.create(**customer_data)
             customer_id = customer.id
             
-            print(f"✅ 创建 Stripe Customer {customer_id}，邮箱: {user_email}")
+            print(f"✅ Created Stripe Customer {customer_id}, email: {user_email}")
             
-            # 保存到数据库
+            # Save to database
             await update_user_plan(user_id, stripe_customer_id=customer_id)
             
-            # 创建 Checkout Session（使用 customer_id）
+            # Create Checkout Session (using customer_id)
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=["card"],
@@ -148,7 +148,7 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
                 mode="subscription",
                 success_url=success_url,
                 cancel_url=cancel_url,
-                allow_promotion_codes=True,  # 启用优惠码输入框
+                allow_promotion_codes=True,  # Enable promotion code input
                 metadata={
                     "user_id": user_id,
                     "plan": plan.value
@@ -160,20 +160,20 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
             "session_id": session.id
         }
     except Exception as e:
-        print(f"❌ 创建 Stripe Checkout Session 失败: {e}")
+        print(f"❌ Failed to create Stripe Checkout Session: {e}")
         raise
 
 
 async def handle_checkout_completed(session: dict):
-    """处理支付成功的 Webhook
+    """Handle successful payment Webhook
     
     Args:
-        session: Stripe Checkout Session 对象
+        session: Stripe Checkout Session object
     """
     try:
         session_id = session.get('id')
         
-        # 检查 metadata 是否存在
+        # Check if metadata exists
         metadata = session.get("metadata", {})
         if not metadata:
             print(f"Warning: Checkout session {session_id} has no metadata, skipping")
@@ -191,14 +191,14 @@ async def handle_checkout_completed(session: dict):
         subscription_id = session.get("subscription")
         customer_id = session.get("customer")
         
-        # 更新用户 Plan
+        # Update user Plan
         await update_user_plan(
             user_id=user_id,
             plan=plan,
             stripe_customer_id=customer_id,
             stripe_subscription_id=subscription_id,
             subscription_status="active",
-            plan_expires_at=None  # 订阅模式下，过期时间由 Stripe 管理
+            plan_expires_at=None  # In subscription mode, expiration time is managed by Stripe
         )
         
         print(f"Success: User {user_id} upgraded to {plan.value} plan")
@@ -211,120 +211,120 @@ async def handle_checkout_completed(session: dict):
 
 
 async def handle_subscription_updated(subscription: dict):
-    """处理订阅更新的 Webhook
+    """Handle subscription update Webhook
     
     Args:
-        subscription: Stripe Subscription 对象
+        subscription: Stripe Subscription object
     """
     try:
         customer_id = subscription["customer"]
         status = subscription["status"]
         
-        # 从数据库查找用户
-        # 注意：这里需要通过 stripe_customer_id 查找用户
-        # 你需要在 db_operations.py 中添加一个函数
+        # Find user from database
+        # Note: Need to find user via stripe_customer_id
+        # You need to add a function in db_operations.py
         from backend.db_supabase import get_supabase
         supabase = get_supabase()
         
         response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()
         
         if not response.data:
-            print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
+            print(f"⚠️ User not found with stripe_customer_id={customer_id}")
             return
         
         user_id = response.data["user_id"]
         
-        # 更新订阅状态
+        # Update subscription status
         if status == "active":
-            # 订阅激活
+            # Subscription activated
             await update_user_plan(
                 user_id=user_id,
                 subscription_status="active"
             )
-            print(f"✅ 用户 {user_id} 订阅已激活")
+            print(f"✅ User {user_id} subscription activated")
         elif status in ["canceled", "past_due", "unpaid"]:
-            # 订阅取消或逾期，降级为 normal
+            # Subscription canceled or overdue, downgrade to normal
             await update_user_plan(
                 user_id=user_id,
                 plan=PlanType.NORMAL,
                 subscription_status=status
             )
-            print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 normal")
+            print(f"⚠️ User {user_id} subscription canceled/overdue, downgraded to normal")
     except Exception as e:
-        print(f"❌ 处理订阅更新 Webhook 失败: {e}")
+        print(f"❌ Failed to handle subscription update Webhook: {e}")
         raise
 
 
 async def handle_subscription_deleted(subscription: dict):
-    """处理订阅删除的 Webhook
+    """Handle subscription deletion Webhook
     
     Args:
-        subscription: Stripe Subscription 对象
+        subscription: Stripe Subscription object
     """
     try:
         customer_id = subscription["customer"]
         
-        # 从数据库查找用户
+        # Find user from database
         from backend.db_supabase import get_supabase
         supabase = get_supabase()
         
         response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()
         
         if not response.data:
-            print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
+            print(f"⚠️ User not found with stripe_customer_id={customer_id}")
             return
         
         user_id = response.data["user_id"]
         
-        # 降级为 normal
+        # Downgrade to normal
         await update_user_plan(
             user_id=user_id,
             plan=PlanType.NORMAL,
             subscription_status="canceled"
         )
         
-        print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 normal")
+        print(f"⚠️ User {user_id} subscription deleted, downgraded to normal")
     except Exception as e:
-        print(f"❌ 处理订阅删除 Webhook 失败: {e}")
+        print(f"❌ Failed to handle subscription deletion Webhook: {e}")
         raise
 
 
 async def cancel_subscription(user_id: str) -> bool:
-    """取消用户订阅
+    """Cancel user subscription
     
     Args:
-        user_id: 用户ID
+        user_id: User ID
     
     Returns:
-        bool: 是否成功
+        bool: Whether successful
     """
     try:
         user_plan = await get_user_plan(user_id)
         
         if not user_plan.stripe_subscription_id:
-            raise ValueError("用户没有活跃的订阅")
+            raise ValueError("User has no active subscription")
         
-        # 取消订阅（在周期结束时）
+        # Cancel subscription (at period end)
         stripe.Subscription.modify(
             user_plan.stripe_subscription_id,
             cancel_at_period_end=True
         )
         
-        print(f"✅ 用户 {user_id} 的订阅将在周期结束时取消")
+        print(f"✅ User {user_id} subscription will be cancelled at period end")
         return True
     except Exception as e:
-        print(f"❌ 取消订阅失败: {e}")
+        print(f"❌ Failed to cancel subscription: {e}")
         return False
 
 
 async def get_subscription_info(user_id: str) -> Optional[dict]:
-    """获取用户订阅信息
+    """Get user subscription information
     
     Args:
-        user_id: 用户ID
+        user_id: User ID
     
     Returns:
-        dict: 订阅信息
+        dict: Subscription information
     """
     try:
         user_plan = await get_user_plan(user_id)
@@ -341,6 +341,6 @@ async def get_subscription_info(user_id: str) -> Optional[dict]:
             "cancel_at_period_end": subscription.cancel_at_period_end
         }
     except Exception as e:
-        print(f"❌ 获取订阅信息失败: {e}")
+        print(f"❌ Failed to get subscription information: {e}")
         return None
 

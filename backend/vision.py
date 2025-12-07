@@ -7,23 +7,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ⚠️ 不再在模块级别初始化客户端，改为在函数中接收动态客户端
+# ⚠️ No longer initialize client at module level, changed to receive dynamic client in function
 
 async def analyze_image(image_base64: str | list[str], prompt: str = None, client: AsyncOpenAI = None, model: str = None) -> tuple[str, dict]:
     """
-    使用 OpenAI Vision API 分析图片（支持多张图片）
+    Use OpenAI Vision API to analyze images (supports multiple images)
     
     Args:
-        image_base64: Base64 编码的图片或图片列表
-        prompt: 分析提示词（可选）
-        client: OpenAI 客户端（必须提供）
-        model: 模型名称（可选，如果不提供则使用环境变量或默认值）
+        image_base64: Base64 encoded image or image list
+        prompt: Analysis prompt (optional)
+        client: OpenAI client (must be provided)
+        model: Model name (optional, if not provided use environment variable or default)
         
     Returns:
-        str: AI 分析结果
+        str: AI analysis result
     """
     try:
-        # 🔑 必须提供客户端
+        # 🔑 Client must be provided
         if client is None:
             raise ValueError("Client must be provided")
         
@@ -56,29 +56,29 @@ Briefly explain the key logic of the code, including time/space complexity analy
 - Do not write phrases like "This image shows..." or other unnecessary text.
 - Keep the response professional and concise."""
 
-        # 获取模型名称（优先使用传入的模型，其次环境变量，最后默认值）
+        # Get model name (prioritize passed model, then environment variable, finally default)
         if model is None:
             model = os.getenv("OPENAI_MODEL", "gpt-4o")
         
-        # 将单张图片转为列表
+        # Convert single image to list
         if isinstance(image_base64, str):
             image_list = [image_base64]
         else:
             image_list = image_base64
         
-        print(f"🤖 调用模型: {model}")
-        print(f"📸 图片数量: {len(image_list)}")
-        print(f"📝 提示词: {prompt[:100]}...")
+        print(f"🤖 Calling model: {model}")
+        print(f"📸 Number of images: {len(image_list)}")
+        print(f"📝 Prompt: {prompt[:100]}...")
         
-        # 🔍 调试：检查图片数据
+        # 🔍 Debug: check image data
         for idx, img_base64 in enumerate(image_list):
-            print(f"📷 图片 {idx + 1} 数据长度: {len(img_base64)} 字符")
-            print(f"📷 图片 {idx + 1} 数据前50字符: {img_base64[:50]}")
+            print(f"📷 Image {idx + 1} data length: {len(img_base64)} characters")
+            print(f"📷 Image {idx + 1} first 50 characters: {img_base64[:50]}")
         
-        # 构建 content 数组
+        # Build content array
         content = [{"type": "text", "text": prompt}]
         
-        # 添加所有图片
+        # Add all images
         for img_base64 in image_list:
             content.append({
                 "type": "image_url",
@@ -88,7 +88,7 @@ Briefly explain the key logic of the code, including time/space complexity analy
                 }
             })
         
-        # 调用 OpenAI Vision API
+        # Call OpenAI Vision API
         response = await api_client.chat.completions.create(
             model=model,
             messages=[
@@ -101,80 +101,80 @@ Briefly explain the key logic of the code, including time/space complexity analy
             temperature=0.3
         )
         
-        # 提取回复
+        # Extract reply
         answer = response.choices[0].message.content
         
-        # 提取 token 使用量
+        # Extract token usage
         token_usage = {
             "input_tokens": response.usage.prompt_tokens,
             "output_tokens": response.usage.completion_tokens,
             "total_tokens": response.usage.total_tokens
         }
         
-        print(f"✅ 分析完成，回复长度: {len(answer)} 字符")
-        print(f"📊 Token 使用: {token_usage['total_tokens']} (输入: {token_usage['input_tokens']}, 输出: {token_usage['output_tokens']})")
+        print(f"✅ Analysis completed, reply length: {len(answer)} characters")
+        print(f"📊 Token usage: {token_usage['total_tokens']} (input: {token_usage['input_tokens']}, output: {token_usage['output_tokens']})")
         
         return answer, token_usage
         
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ 视觉分析失败: {error_msg}")
+        print(f"❌ Vision analysis failed: {error_msg}")
         
-        # 返回友好的错误信息
+        # Return friendly error message
         error_message = ""
         if "api_key" in error_msg.lower() or "invalid api key" in error_msg.lower() or "authentication" in error_msg.lower():
-            error_message = "❌ API Key 错误。"
-            # 检查是否在 Vercel 环境（多种方式检测）
+            error_message = "❌ API Key error. "
+            # Check if in Vercel environment (multiple detection methods)
             import os
             is_vercel = os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("NOW_REGION")
             
             if is_vercel:
-                error_message += "\n\n请在 Vercel Dashboard 中检查："
-                error_message += "\n1. 进入 Settings -> Environment Variables"
-                error_message += "\n2. 确认 OPENAI_API_KEY 已配置"
-                error_message += "\n3. 确保 API Key 值正确（以 'sk-' 开头）"
-                error_message += "\n4. 添加后需要重新部署应用"
+                error_message += "\n\nPlease check in Vercel Dashboard:"
+                error_message += "\n1. Go to Settings -> Environment Variables"
+                error_message += "\n2. Confirm OPENAI_API_KEY is configured"
+                error_message += "\n3. Ensure API Key value is correct (starts with 'sk-')"
+                error_message += "\n4. Need to redeploy application after adding"
             else:
-                error_message += "\n\n请检查："
-                error_message += "\n1. 本地环境：检查 backend/.env 文件中的 OPENAI_API_KEY"
-                error_message += "\n2. Vercel 环境：检查 Vercel Dashboard -> Settings -> Environment Variables"
-                error_message += "\n3. 确保 API Key 以 'sk-' 开头且完整"
-            error_message += "\n\n如果问题仍然存在，请查看服务器日志获取更多信息。"
+                error_message += "\n\nPlease check:"
+                error_message += "\n1. Local environment: Check OPENAI_API_KEY in backend/.env file"
+                error_message += "\n2. Vercel environment: Check Vercel Dashboard -> Settings -> Environment Variables"
+                error_message += "\n3. Ensure API Key starts with 'sk-' and is complete"
+            error_message += "\n\nIf the problem persists, please check server logs for more information."
         elif "rate_limit" in error_msg.lower():
-            error_message = "❌ API 调用频率超限，请稍后再试"
+            error_message = "❌ API call rate limit exceeded, please try again later"
         elif "insufficient_quota" in error_msg.lower():
-            error_message = "❌ API 配额不足，请检查你的 OpenAI 账户余额"
+            error_message = "❌ API quota insufficient, please check your OpenAI account balance"
         else:
-            error_message = f"❌ 分析失败: {error_msg}"
+            error_message = f"❌ Analysis failed: {error_msg}"
         
         return error_message, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
 def validate_image_base64(image_base64: str) -> bool:
     """
-    验证 Base64 图片是否有效
+    Validate if Base64 image is valid
     
     Args:
-        image_base64: Base64 编码的图片
+        image_base64: Base64 encoded image
         
     Returns:
-        bool: 是否有效
+        bool: Whether valid
     """
     try:
-        # 解码 base64
+        # Decode base64
         image_data = base64.b64decode(image_base64)
         
-        # 尝试打开图片
+        # Try to open image
         image = Image.open(BytesIO(image_data))
         
-        # 检查图片格式
+        # Check image format
         if image.format not in ['PNG', 'JPEG', 'JPG', 'GIF', 'WEBP']:
             return False
         
         return True
         
     except Exception as e:
-        print(f"❌ 图片验证失败: {e}")
+        print(f"❌ Image validation failed: {e}")
         return False
 
 
@@ -184,15 +184,15 @@ async def analyze_image_with_context(
     question_type: str = "general"
 ) -> dict:
     """
-    带上下文的图片分析
+    Image analysis with context
     
     Args:
-        image_base64: Base64 编码的图片
-        context: 额外的上下文信息
-        question_type: 问题类型（algorithm, system_design, coding, general）
+        image_base64: Base64 encoded image
+        context: Additional context information
+        question_type: Question type (algorithm, system_design, coding, general)
         
     Returns:
-        dict: 包含分析结果的字典
+        dict: Dictionary containing analysis results
     """
     # Adjust prompt based on question type
     prompt_templates = {

@@ -1,34 +1,34 @@
-# AI 面试助手 - 后端服务
+# AI Interview Assistant - Backend Service
 
-FastAPI 后端服务，提供视觉分析 API。
+FastAPI backend service providing vision analysis API.
 
-## 快速开始
+## Quick Start
 
-### 1. 安装依赖
+### 1. Install Dependencies
 
 ```bash
-# 创建虚拟环境（推荐）
+# Create virtual environment (recommended)
 python -m venv venv
 
-# 激活虚拟环境
+# Activate virtual environment
 # Windows:
 venv\Scripts\activate
 # Linux/Mac:
 source venv/bin/activate
 
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
+### 2. Configure Environment Variables
 
-复制 `.env.example` 为 `.env`，并填入你的 OpenAI API Key：
+Copy `.env.example` to `.env` and fill in your OpenAI API Key:
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+Edit `.env` file:
 
 ```env
 OPENAI_API_KEY=sk-your-api-key-here
@@ -36,101 +36,101 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o
 ```
 
-### 3. 启动服务
+### 3. Start Service
 
 ```bash
 python start.py
 ```
 
-或者直接运行：
+Or run directly:
 
 ```bash
 python main.py
 ```
 
-或者使用 uvicorn：
+Or use uvicorn:
 
 ```bash
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## API 接口
+## API Endpoints
 
-### 健康检查
+### Health Check
 
 ```
 GET /health
 ```
 
-### 视觉分析
+### Vision Analysis
 
 ```
 POST /api/vision_query
 ```
 
-请求体：
+Request body:
 
 ```json
 {
   "image_base64": "base64_encoded_image_string",
-  "prompt": "请分析这张图片（可选）"
+  "prompt": "Please analyze this image (optional)"
 }
 ```
 
-响应：
+Response:
 
 ```json
 {
-  "answer": "AI 分析结果",
+  "answer": "AI analysis result",
   "success": true,
   "error": ""
 }
 ```
 
-## API 文档
+## API Documentation
 
-启动服务后，访问以下地址查看自动生成的 API 文档：
+After starting the service, visit the following addresses to view auto-generated API documentation:
 
 - Swagger UI: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
 
-## 支持的模型
+## Supported Models
 
-- gpt-4o (推荐)
+- gpt-4o (recommended)
 - gpt-4-turbo
 - gpt-4-vision-preview
 
-## 故障排除
+## Troubleshooting
 
-### 1. API Key 错误
+### 1. API Key Error
 
-确保 `.env` 文件中的 `OPENAI_API_KEY` 已正确配置。
+Ensure `OPENAI_API_KEY` in `.env` file is correctly configured.
 
-### 2. 模块未找到
+### 2. Module Not Found
 
-确保已安装所有依赖：
+Ensure all dependencies are installed:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 端口被占用
+### 3. Port Already in Use
 
-修改 `.env` 文件中的 `PORT` 配置，或在命令行指定：
+Modify `PORT` configuration in `.env` file, or specify in command line:
 
 ```bash
 PORT=8001 python start.py
 ```
 
-## 开发
+## Development
 
-### 添加新的 API 端点
+### Add New API Endpoints
 
-在 `main.py` 中添加新的路由函数。
+Add new route functions in `main.py`.
 
-### 修改视觉分析逻辑
+### Modify Vision Analysis Logic
 
-编辑 `vision.py` 文件。
+Edit `vision.py` file.
 
 
 

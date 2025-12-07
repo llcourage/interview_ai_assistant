@@ -1,10 +1,10 @@
 -- ========================================
--- Desktop AI 数据库表结构（简化版）
--- 用于 Supabase 数据库
--- 支持 Start Plan (免费), Normal Plan, High Plan
+-- Desktop AI Database Table Structure (Simplified)
+-- For Supabase Database
+-- Supports Start Plan (Free), Normal Plan, High Plan
 -- ========================================
 
--- 1. 用户订阅计划表
+-- 1. User Subscription Plan Table
 CREATE TABLE IF NOT EXISTS user_plans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -18,12 +18,12 @@ CREATE TABLE IF NOT EXISTS user_plans (
     UNIQUE(user_id)
 );
 
--- 索引
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_user_plans_user_id ON user_plans(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_plans_stripe_customer_id ON user_plans(stripe_customer_id);
 CREATE INDEX IF NOT EXISTS idx_user_plans_stripe_subscription_id ON user_plans(stripe_subscription_id);
 
--- 2. API 调用记录表
+-- 2. API Call Log Table
 CREATE TABLE IF NOT EXISTS usage_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -39,12 +39,12 @@ CREATE TABLE IF NOT EXISTS usage_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 索引
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON usage_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_user_plan ON usage_logs(user_id, plan);
 
--- 3. 用户配额管理表
+-- 3. User Quota Management Table
 CREATE TABLE IF NOT EXISTS usage_quotas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -60,22 +60,22 @@ CREATE TABLE IF NOT EXISTS usage_quotas (
     UNIQUE(user_id)
 );
 
--- 索引
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_usage_quotas_user_id ON usage_quotas(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_quotas_reset_date ON usage_quotas(quota_reset_date);
 
 -- ========================================
--- RLS (Row Level Security) 策略
+-- RLS (Row Level Security) Policies
 -- ========================================
 
--- 启用 RLS
+-- Enable RLS
 ALTER TABLE user_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_quotas ENABLE ROW LEVEL SECURITY;
 
--- 用户只能读取和更新自己的数据
+-- Users can only read and update their own data
 
--- user_plans 策略
+-- user_plans policies
 CREATE POLICY "Users can view their own plan"
     ON user_plans FOR SELECT
     USING (auth.uid() = user_id);
@@ -88,7 +88,7 @@ CREATE POLICY "Users can insert their own plan"
     ON user_plans FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
--- usage_logs 策略
+-- usage_logs policies
 CREATE POLICY "Users can view their own usage logs"
     ON usage_logs FOR SELECT
     USING (auth.uid() = user_id);
@@ -97,7 +97,7 @@ CREATE POLICY "System can insert usage logs"
     ON usage_logs FOR INSERT
     WITH CHECK (true);
 
--- usage_quotas 策略
+-- usage_quotas policies
 CREATE POLICY "Users can view their own quota"
     ON usage_quotas FOR SELECT
     USING (auth.uid() = user_id);
@@ -111,7 +111,7 @@ CREATE POLICY "Users can insert their own quota"
     WITH CHECK (auth.uid() = user_id);
 
 -- ========================================
--- 触发器：自动更新 updated_at
+-- Triggers: Automatically update updated_at
 -- ========================================
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -129,10 +129,10 @@ CREATE TRIGGER update_usage_quotas_updated_at BEFORE UPDATE ON usage_quotas
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ========================================
--- 初始化：为现有用户创建默认 Normal Plan
+-- Initialization: Create default Normal Plan for existing users
 -- ========================================
 
--- 这个脚本会为所有现有用户创建 normal plan（默认）
+-- This script will create normal plan for all existing users (default)
 INSERT INTO user_plans (user_id, plan, created_at, updated_at)
 SELECT 
     id,

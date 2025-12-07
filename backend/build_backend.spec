@@ -5,15 +5,15 @@ import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
 
-# 获取项目根目录
+# Get project root directory
 backend_dir = Path(SPECPATH).parent
 project_root = backend_dir.parent
 
-# 添加路径
+# Add paths
 sys.path.insert(0, str(backend_dir))
 sys.path.insert(0, str(project_root))
 
-# 定义 block_cipher（用于加密 Python 字节码，可选）
+# Define block_cipher (for encrypting Python bytecode, optional)
 block_cipher = None
 
 a = Analysis(
@@ -21,7 +21,7 @@ a = Analysis(
     pathex=[str(backend_dir), str(project_root)],
     binaries=[],
     datas=[
-        # 包含 .env.example（如果存在）
+        # Include .env.example (if exists)
         # (str(backend_dir / 'env.example'), '.'),
     ],
     hiddenimports=[
