@@ -593,7 +593,7 @@ async def oauth_callback(request: Request, code: Optional[str] = None, state: Op
         }, 500);
       })();
     </script>
-    <p>登录成功，可以关闭此窗口。</p>
+    <p>OAuth completed. You can close this window.</p>
   </body>
 </html>
 """
