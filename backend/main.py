@@ -554,23 +554,25 @@ async def oauth_callback(code: str, state: Optional[str] = None, platform: Optio
             <body>
                 <script>
                     // Send token data to Electron main window via postMessage
-                    if (window.opener) {{
-                        window.opener.postMessage({{
-                            type: 'oauth-success',
-                            data: {{
-                                access_token: {json.dumps(access_token)},
-                                refresh_token: {json.dumps(refresh_token)},
-                                user: {{
-                                    id: {json.dumps(user.id)},
-                                    email: {json.dumps(user.email)}
-                                }}
+                    (function() {{
+                        var payload = {{
+                            type: 'desktop-oauth-success',
+                            access_token: {json.dumps(access_token)},
+                            refresh_token: {json.dumps(refresh_token)},
+                            user: {{
+                                id: {json.dumps(user.id)},
+                                email: {json.dumps(user.email)},
+                                created_at: {json.dumps(user.created_at if hasattr(user, 'created_at') else None)}
                             }}
-                        }}, '*');
-                        window.close();
-                    }} else {{
-                        console.error('No window.opener found');
-                        document.body.innerHTML = '<p>OAuth completed. You can close this window.</p>';
-                    }}
+                        }};
+                        if (window.opener) {{
+                            window.opener.postMessage(payload, '*');
+                            window.close();
+                        }} else {{
+                            console.error('No window.opener found');
+                            document.body.innerHTML = '<p>OAuth completed. You can close this window.</p>';
+                        }}
+                    }})();
                 </script>
                 <p>OAuth completed. This window should close automatically.</p>
             </body>
@@ -684,10 +686,16 @@ async def oauth_callback(code: str, state: Optional[str] = None, platform: Optio
 @app.post("/api/auth/exchange-code", tags=["Authentication"])
 async def exchange_oauth_code(request: Request):
     """
-    Exchange OAuth code for session token (for Electron environment)
-    Electron should use this endpoint instead of directly connecting to Supabase
+    LEGACY endpoint: Previously used for direct PKCE exchange.
+    DEPRECATED: OAuth is now handled via /api/auth/callback with service key.
+    This endpoint is kept for backward compatibility but returns 410 Gone.
     """
-    print(f"🔐 /api/auth/exchange-code: Received request")
+    print(f"⚠️ /api/auth/exchange-code: LEGACY endpoint called - this should not be used anymore")
+    print(f"⚠️ OAuth is now handled via /api/auth/callback with service key")
+    raise HTTPException(
+        status_code=410,  # Gone - indicates the resource is no longer available
+        detail="This endpoint is deprecated. OAuth is now handled via /api/auth/callback. Please update your client code."
+    )
     
     # If desktop version, forward to Vercel
     is_desktop = getattr(sys, 'frozen', False)

@@ -355,38 +355,58 @@ export const loginWithGoogle = async (): Promise<void> => {
         error: result.error 
       });
       
-      if (result.success && result.code) {
-        console.log('🔐 Electron: 开始处理 OAuth callback，code length:', result.code.length);
+      // NEW ARCHITECTURE: Result now contains token data directly from backend callback
+      if (result.success && result.access_token && result.user) {
+        console.log('🔐 Electron: Received token data from OAuth callback');
         
-        // Get code_verifier from result (preferred) or localStorage (fallback)
-        const codeVerifier = result.code_verifier || localStorage.getItem('oauth_code_verifier');
-        if (codeVerifier) {
-          // Store in localStorage for handleOAuthCallback to use
-          localStorage.setItem('oauth_code_verifier', codeVerifier);
-          console.log('🔐 Electron: code_verifier from result:', codeVerifier ? `Found (length: ${codeVerifier.length})` : 'Not found');
-        } else {
-          console.error('❌ Electron: code_verifier is missing from both result and localStorage!');
-        }
+        // Create token object from result
+        const token: AuthToken = {
+          access_token: result.access_token,
+          refresh_token: result.refresh_token || '',
+          token_type: 'bearer',
+          user: {
+            id: result.user.id,
+            email: result.user.email || ''
+          }
+        };
         
-        // Exchange token using code, state, and code_verifier (via backend API)
-        // ✅ Key: Pass result.code_verifier directly to ensure the value from main process is used
-        const token = await handleOAuthCallback(result.code, result.state, result.code_verifier);
-        console.log('🔐 Electron: OAuth callback 处理完成，token saved:', !!token);
+        // Save token to localStorage
+        console.log('🔐 Electron: Saving token to localStorage');
+        saveToken(token);
         
-        // 验证 token 是否已保存
+        // Verify token was saved
         const savedToken = getToken();
         if (savedToken) {
-          console.log('✅ Electron: Token 已保存，用户:', savedToken.user?.email);
+          console.log('✅ Electron: Token saved successfully, user:', savedToken.user?.email);
         } else {
-          console.error('❌ Electron: Token 保存失败！');
+          console.error('❌ Electron: Token save failed!');
         }
         
-        // 触发认证状态变化事件
+        // Trigger auth state change event
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
-        console.log('🔐 Electron: 触发 auth-state-changed 事件');
+        console.log('🔐 Electron: Triggered auth-state-changed event');
         
-        // 重定向到主页面
-        console.log('🔐 Electron: 重定向到主页面');
+        // Redirect to main page
+        console.log('🔐 Electron: Redirecting to main page');
+        window.location.href = '/';
+        return;
+      } else if (result.success && result.code) {
+        // LEGACY: Old flow with code/state (should not happen with new architecture)
+        console.warn('⚠️ Electron: Received legacy code/state format - this should not happen with new architecture');
+        console.warn('⚠️ Consider updating OAuth flow to use backend callback endpoint');
+        
+        // Fallback to old flow for backward compatibility
+        const token = await handleOAuthCallback(result.code, result.state, result.code_verifier);
+        console.log('🔐 Electron: OAuth callback processed (legacy flow), token saved:', !!token);
+        
+        const savedToken = getToken();
+        if (savedToken) {
+          console.log('✅ Electron: Token saved, user:', savedToken.user?.email);
+        } else {
+          console.error('❌ Electron: Token save failed!');
+        }
+        
+        window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         window.location.href = '/';
         return;
       } else {

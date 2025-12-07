@@ -1053,82 +1053,64 @@ ipcMain.handle('oauth-google', async () => {
         reject(new Error(`OAuth window failed to load: ${errorDescription}`));
       });
       
-      // Solution: Let OAuth window load frontend page, frontend page will handle OAuth callback
-      // Frontend page will use Supabase JS SDK's exchangeCodeForSession, can automatically get code_verifier
-      if (isDev) {
-        // Development: load Vite dev server
-        const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
-        const oauthUrl = `http://localhost:${devPort}/#/auth/callback?oauth_url=${encodeURIComponent(authUrl)}`;
-        console.log('🔐 Development: OAuth window loading frontend page:', oauthUrl);
-        
-        // Add error handler for connection refused (Vite server not ready)
-        oauthWindow.webContents.once('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-          if (errorCode === -106 || errorCode === -105) { // ERR_CONNECTION_REFUSED or ERR_NAME_NOT_RESOLVED
-            console.error('🔐 OAuth window failed to load:', errorDescription);
-            console.error('🔐 Error code:', errorCode);
-            console.error('🔐 This usually means Vite dev server is not running or not ready');
-            console.error('🔐 Please ensure Vite dev server is running on http://localhost:' + devPort);
-            
-            // Show error to user
-            oauthWindow.webContents.executeJavaScript(`
-              document.body.innerHTML = \`
-                <div style="padding: 40px; font-family: Arial; text-align: center; background: #f5f7fa; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
-                  <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px;">
-                    <h2 style="color: #e74c3c;">❌ Connection Error</h2>
-                    <p><strong>Failed to connect to Vite dev server</strong></p>
-                    <p>Error: ${errorDescription}</p>
-                    <p style="margin-top: 20px; color: #666;">
-                      Please ensure the Vite dev server is running on <code>http://localhost:${devPort}</code>
-                    </p>
-                    <p style="margin-top: 10px; color: #666;">
-                      Try running: <code>npm run start:react</code> or <code>npm run dev</code>
-                    </p>
-                  </div>
-                </div>
-              \`;
-            `).catch(err => console.error('Failed to display error message:', err));
-          }
-        });
-        
-        oauthWindow.loadURL(oauthUrl);
-      } else {
-        // Production: load frontend page from local dist folder
-        const indexHtml = path.join(__dirname, '../dist/index.html');
-        console.log('🔐 Production: OAuth window loading frontend page:', indexHtml);
-        // Use loadFile and set hash and query
-        oauthWindow.loadFile(indexHtml, {
-          hash: '/auth/callback',
-          query: { oauth_url: authUrl }
-        });
-      }
+      // NEW ARCHITECTURE: Load OAuth URL directly
+      // OAuth flow: Google → Supabase → /api/auth/callback?platform=desktop
+      // Backend callback returns HTML with postMessage to send token back
+      console.log('🔐 Loading OAuth URL directly:', authUrl.substring(0, 100) + '...');
+      oauthWindow.loadURL(authUrl);
       
-      // Listen to OAuth result sent by frontend via IPC
-      console.log('🔐 Setting up oauth-result listener, waiting for frontend callback...');
-      ipcMain.once('oauth-result', (event, result) => {
-        console.log('🔐 Received frontend OAuth result:', JSON.stringify({
-          success: result.success,
-          hasCode: !!result.code,
-          hasState: !!result.state,
-          error: result.error
-        }));
+      // Listen for postMessage from OAuth callback page
+      console.log('🔐 Setting up postMessage listener for OAuth callback...');
+      
+      // Inject script to capture postMessage from callback page
+      oauthWindow.webContents.on('did-finish-load', () => {
+        const currentUrl = oauthWindow.webContents.getURL();
+        console.log('🔐 OAuth window loaded:', currentUrl.substring(0, 100) + '...');
+        
+        if (currentUrl.includes('/api/auth/callback')) {
+          console.log('🔐 Detected callback page, injecting message listener...');
+          // Inject script to forward postMessage to main process
+          oauthWindow.webContents.executeJavaScript(`
+            (function() {
+              window.addEventListener('message', function(event) {
+                console.log('🔐 OAuth callback page received message:', event.data);
+                if (event.data && event.data.type === 'desktop-oauth-success') {
+                  // Forward to Electron main process
+                  if (window.electron && window.electron.send) {
+                    window.electron.send('oauth-desktop-success', event.data);
+                  }
+                }
+              });
+            })();
+          `).catch(err => console.error('Failed to inject message listener:', err));
+        }
+      });
+      
+      // Listen for IPC message from injected script
+      ipcMain.once('oauth-desktop-success', (event, data) => {
+        console.log('🔐 Received OAuth success from callback page:', {
+          hasAccessToken: !!data.access_token,
+          hasUser: !!data.user
+        });
+        
         if (oauthWindow && !oauthWindow.isDestroyed()) {
           console.log('🔐 Closing OAuth window');
           oauthWindow.close();
         }
-        if (result.success && result.code) {
-          console.log('🔐 OAuth success, resolving with code, state, and code_verifier');
-          const codeVerifierToReturn = currentCodeVerifier;
-          currentCodeVerifier = null; // ✅ Clear code_verifier
-          resolve({ 
-            code: result.code, 
-            state: result.state, 
-            code_verifier: codeVerifierToReturn || undefined, // Include code_verifier in the response
-            success: true 
+        
+        if (data && data.access_token && data.user) {
+          console.log('🔐 OAuth success, resolving with token data');
+          currentCodeVerifier = null; // Clear (no longer needed)
+          resolve({
+            success: true,
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            user: data.user
           });
         } else {
-          const errorMsg = result.error || 'OAuth failed';
+          const errorMsg = 'OAuth callback failed: missing token or user data';
           console.error('🔐 OAuth failed:', errorMsg);
-          currentCodeVerifier = null; // ✅ Clear code_verifier
+          currentCodeVerifier = null;
           reject(new Error(errorMsg));
         }
       });

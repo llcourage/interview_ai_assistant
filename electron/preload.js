@@ -159,7 +159,21 @@ contextBridge.exposeInMainWorld('aiShot', {
   }
 });
 
-// Expose ipcRenderer for OAuth window use (only for sending OAuth result)
+// Expose electron API for OAuth callback page use (from backend /api/auth/callback)
+// Backend returns HTML that calls window.electron.send() to forward postMessage to main process
+contextBridge.exposeInMainWorld('electron', {
+  send: (channel, data) => {
+    // Forward messages from OAuth callback page to main process
+    if (channel === 'oauth-desktop-success') {
+      ipcRenderer.send('oauth-desktop-success', data);
+    } else if (channel === 'oauth-result') {
+      // Legacy channel for backward compatibility
+      ipcRenderer.send('oauth-result', data);
+    }
+  }
+});
+
+// Expose ipcRenderer for OAuth window use (legacy, kept for backward compatibility)
 if (window.location.hash.includes('auth/callback') || window.location.search.includes('oauth_url')) {
   contextBridge.exposeInMainWorld('ipcRenderer', {
     send: (channel, data) => {
