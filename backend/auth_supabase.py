@@ -334,7 +334,7 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
             print(f"🔐 Params: response_type=code, provider=google, redirect_uri={supabase_callback_url[:50]}..., redirect_to={callback_url[:50]}..., code_challenge={code_challenge[:20]}...")
             
             # Try POST request first (some OAuth endpoints require POST)
-            # If that fails, fall back to GET
+            # If that fails with 405, fall back to GET
             async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
                 # First try POST with JSON body
                 try:
@@ -348,6 +348,17 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                         }
                     )
                     print(f"🔐 POST request response status: {response.status_code}")
+                    # If POST returns 405 Method Not Allowed, fall back to GET
+                    if response.status_code == 405:
+                        print(f"⚠️ POST request returned 405 Method Not Allowed, trying GET...")
+                        response = await client.get(
+                            authorize_url,
+                            params=authorize_params,
+                            headers={
+                                "apikey": supabase_anon_key,
+                                "Accept": "application/json"
+                            }
+                        )
                 except Exception as post_error:
                     print(f"⚠️ POST request failed: {post_error}, trying GET...")
                     # Fall back to GET request
