@@ -857,11 +857,12 @@ ipcMain.handle('oauth-google', async () => {
       const API_BASE_URL = process.env.LOCAL_API_URL 
         || process.env.VERCEL_API_URL 
         || 'https://www.desktopai.org';
-      // 对于 Electron 桌面应用，使用已配置的 callback URL
-      // Supabase 需要在项目设置中配置允许的 redirect URLs
-      // 我们使用 https://www.desktopai.org/auth/callback，这个 URL 已经在 Supabase 中配置
-      // OAuth 窗口会监听导航，捕获回调 URL 中的 code，阻止跳转到外部网站
-      const redirectTo = 'https://www.desktopai.org/auth/callback';
+      // 对于 Electron 桌面应用，使用前端回调 URL
+      // 这样前端可以使用 Supabase JS SDK 处理 PKCE（code_verifier 在浏览器存储中）
+      // 前端处理完回调后，会调用后端 API 设置 session cookie
+      const redirectTo = isDev 
+        ? `http://localhost:5173/auth/callback`
+        : 'https://www.desktopai.org/auth/callback';
       const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${encodeURIComponent(redirectTo)}`;
       console.log('🔐 请求 OAuth URL:', apiUrl);
       console.log('🔐 API_BASE_URL:', API_BASE_URL);
@@ -1013,14 +1014,24 @@ ipcMain.handle('oauth-google', async () => {
             hasError: urlObj.searchParams.has('error')
           });
           
-          if (urlObj.pathname.includes('/auth/callback')) {
+          // 检查是否是前端回调 URL（localhost:5173 或 www.desktopai.org）
+          const isFrontendCallback = (
+            (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
+            urlObj.port === '5173' &&
+            urlObj.pathname.includes('/auth/callback')
+          ) || (
+            urlObj.hostname === 'www.desktopai.org' &&
+            urlObj.pathname.includes('/auth/callback')
+          );
+          
+          if (isFrontendCallback) {
             const code = urlObj.searchParams.get('code');
             const state = urlObj.searchParams.get('state');
             const error = urlObj.searchParams.get('error');
             
             if (code) {
-              // 这是回调 URL，阻止导航到外部网站，让前端处理
-              console.log('🔐 检测到 OAuth 回调 URL，阻止导航，让前端处理');
+              // 这是前端回调 URL，阻止导航，让前端处理
+              console.log('🔐 检测到前端 OAuth 回调 URL，阻止导航，让前端处理');
               console.log('🔐 提取到 OAuth code:', code.substring(0, 20) + '...');
               event.preventDefault();
               
@@ -1052,6 +1063,7 @@ ipcMain.handle('oauth-google', async () => {
               reject(new Error(`OAuth error: ${error}`));
             }
           }
+          // 如果是 Supabase 内部回调 URL，不处理，让它继续导航
         } catch (e) {
           // URL 解析失败，忽略
           console.error('🔐 URL 解析失败:', e);
@@ -1063,7 +1075,7 @@ ipcMain.handle('oauth-google', async () => {
       // 但如果 will-navigate 没有捕获到，did-navigate 可以作为备用
       oauthWindow.webContents.on('did-navigate', (event, url) => {
         console.log('🔐 OAuth 窗口已导航到:', url);
-        // 检查是否是回调 URL
+        // 检查是否是前端回调 URL
         try {
           const urlObj = new URL(url);
           const hasCode = urlObj.searchParams.has('code');
@@ -1073,9 +1085,19 @@ ipcMain.handle('oauth-google', async () => {
             hasCode
           });
           
-          if (urlObj.hostname === 'www.desktopai.org' && urlObj.pathname === '/auth/callback' && hasCode) {
+          // 检查是否是前端回调 URL（localhost:5173 或 www.desktopai.org）
+          const isFrontendCallback = (
+            (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
+            urlObj.port === '5173' &&
+            urlObj.pathname.includes('/auth/callback')
+          ) || (
+            urlObj.hostname === 'www.desktopai.org' &&
+            urlObj.pathname === '/auth/callback'
+          );
+          
+          if (isFrontendCallback && hasCode) {
             const code = urlObj.searchParams.get('code');
-            console.log('🔐 did-navigate: 检测到回调 URL，code:', code?.substring(0, 20) + '...');
+            console.log('🔐 did-navigate: 检测到前端回调 URL，code:', code?.substring(0, 20) + '...');
             
             // ⭐ 1. 先通知主窗口刷新登录状态
             if (mainWindow && !mainWindow.isDestroyed()) {

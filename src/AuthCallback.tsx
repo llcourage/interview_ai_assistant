@@ -106,8 +106,37 @@ export const AuthCallback: React.FC = () => {
 
       try {
         console.log('🔐 AuthCallback: 开始处理 OAuth code');
-        const token = await handleOAuthCallback(code, state || undefined);
+        const session = await handleOAuthCallback(code, state || undefined);
         console.log('🔐 AuthCallback: OAuth 回调处理成功');
+        
+        // 处理完 OAuth 回调后，调用后端 API 设置 session cookie
+        try {
+          console.log('🔐 AuthCallback: 调用后端 API 设置 session cookie');
+          const { API_BASE_URL } = await import('./lib/api');
+          const accessToken = session?.access_token || (typeof session === 'string' ? session : null);
+          
+          if (accessToken) {
+            const response = await fetch(`${API_BASE_URL}/api/auth/set-session`, {
+              method: 'POST',
+              credentials: 'include', // 携带 Cookie
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                access_token: accessToken,
+              }),
+            });
+            
+            if (response.ok) {
+              console.log('🔐 AuthCallback: 后端 session cookie 设置成功');
+            } else {
+              console.warn('🔐 AuthCallback: 后端 session cookie 设置失败，但继续流程');
+            }
+          }
+        } catch (e) {
+          console.error('🔐 AuthCallback: 设置 session cookie 失败:', e);
+          // 继续流程，即使设置 cookie 失败
+        }
         
         // 如果是 Electron OAuth 窗口，通过 IPC 发送成功结果
         if (isElectron() && (window as any).ipcRenderer) {

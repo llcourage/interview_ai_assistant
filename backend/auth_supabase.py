@@ -214,22 +214,14 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
             redirect_to = f"https://{redirect_to}" if not redirect_to.startswith("localhost") else f"http://{redirect_to}"
         
         # 构建回调 URL
-        # 对于 Electron，回调应该指向后端 API，这样后端可以设置 session cookie
-        # 对于 Web，如果 redirect_to 是前端路由，也改为指向后端 API
+        # 注意：对于 Electron 和 Web，OAuth 回调都应该指向前端页面（/auth/callback）
+        # 前端会使用 Supabase JS SDK 处理 PKCE，然后调用后端 API 设置 session cookie
+        # 不要改为 /api/auth/callback，因为后端无法处理 PKCE（没有 code_verifier）
         if redirect_to.endswith("/auth/callback"):
-            # 如果已经是 /auth/callback，改为指向后端 API
-            if redirect_to.startswith("https://www.desktopai.org") or redirect_to.startswith("http://localhost"):
-                # 提取基础 URL
-                from urllib.parse import urlparse
-                parsed = urlparse(redirect_to)
-                callback_url = f"{parsed.scheme}://{parsed.netloc}/api/auth/callback"
-            else:
-                callback_url = redirect_to
+            callback_url = redirect_to
         else:
-            # 构建后端 API 回调 URL
-            from urllib.parse import urlparse
-            parsed = urlparse(redirect_to)
-            callback_url = f"{parsed.scheme}://{parsed.netloc}/api/auth/callback"
+            # 如果 redirect_to 不包含 /auth/callback，添加它
+            callback_url = f"{redirect_to}/auth/callback" if not redirect_to.endswith("/") else f"{redirect_to}auth/callback"
         
         # 获取 Google OAuth URL
         # 注意：Supabase Python SDK 默认使用 PKCE

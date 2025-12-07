@@ -399,8 +399,12 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
 
 @app.get("/api/auth/callback", tags=["认证"])
 async def oauth_callback(code: str, state: Optional[str] = None, http_request: Request = None):
-    """处理 OAuth 回调"""
-    from backend.db_supabase import get_supabase
+    """
+    处理 OAuth 回调
+    注意：这个端点现在主要用于 Web 环境
+    Electron 环境的 OAuth 回调应该指向前端页面（/auth/callback），由前端处理
+    """
+    print(f"🔍 /api/auth/callback 收到请求: code={code[:20] if code else 'None'}..., state={state}")
     
     # 如果是桌面版，转发到 Vercel
     is_desktop = getattr(sys, 'frozen', False)
@@ -420,9 +424,15 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
+                print(f"❌ 桌面版转发失败: {e}")
                 raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
     
     # 非桌面版：正常处理
+    # 注意：由于 Supabase 使用 PKCE，后端无法直接处理 OAuth 回调
+    # 这个端点现在主要用于向后兼容，实际应该由前端处理
+    print("⚠️ /api/auth/callback: 后端无法处理 PKCE OAuth 回调，应该由前端处理")
+    print("⚠️ 建议：OAuth 回调应该指向前端页面（/auth/callback），而不是后端 API")
+    
     try:
         # 使用 Supabase REST API 直接处理 OAuth 回调，避免 Python SDK 的 PKCE 问题
         import os
@@ -567,6 +577,62 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"OAuth 回调处理失败: {str(e)}"
         )
+
+
+@app.post("/api/auth/set-session", tags=["认证"])
+async def set_session(request: Request):
+    """设置 session cookie（由前端 OAuth 回调后调用）"""
+    # 如果是桌面版，转发到 Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/auth/set-session",
+                    json={"access_token": access_token},
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+    
+    # 非桌面版：正常处理
+    try:
+        # 从请求体获取 access_token
+        body = await request.json()
+        access_token = body.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Missing access_token")
+        
+        # 验证 token
+        from backend.auth_supabase import verify_token
+        user = await verify_token(access_token)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # 创建响应并设置 cookie
+        from fastapi.responses import JSONResponse
+        response_obj = JSONResponse({"success": True, "user": {"id": user.id, "email": user.email}})
+        
+        # 设置 session cookie
+        response_obj.set_cookie(
+            key="da_session",
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            domain=".desktopai.org",
+            max_age=60 * 60 * 24 * 7,  # 7 天
+        )
+        
+        print(f"✅ 已设置 session cookie，用户: {user.email}")
+        return response_obj
+    except Exception as e:
+        print(f"❌ 设置 session cookie 失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to set session: {str(e)}")
 
 
 @app.get("/api/me", response_model=User, tags=["认证"])
