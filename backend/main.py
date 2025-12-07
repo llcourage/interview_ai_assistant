@@ -514,17 +514,35 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
             
             # 设置 session cookie
             # 使用 Supabase access_token 作为 session token
-            response_obj.set_cookie(
-                key="da_session",
-                value=session_token,
-                httponly=True,  # 防止 JavaScript 访问，提高安全性
-                secure=True,  # 只在 HTTPS 下传输
-                samesite="none",  # 允许跨站请求（Electron / localhost）
-                domain=".desktopai.org",  # 使用 .desktopai.org 以支持所有子域名
-                max_age=60 * 60 * 24 * 7,  # 7 天
-            )
+            # 根据请求来源确定 cookie domain
+            origin = http_request.headers.get("Origin", "") if http_request else ""
+            is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
             
-            print(f"✅ 已设置 session cookie，重定向到: {redirect_url}")
+            if is_localhost:
+                # 开发环境：不设置 domain，允许 localhost 使用
+                response_obj.set_cookie(
+                    key="da_session",
+                    value=session_token,
+                    httponly=True,
+                    secure=False,  # 开发环境可能使用 http
+                    samesite="lax",  # localhost 使用 lax
+                    max_age=60 * 60 * 24 * 7,  # 7 天
+                    path="/",
+                )
+            else:
+                # 生产环境：设置 domain
+                response_obj.set_cookie(
+                    key="da_session",
+                    value=session_token,
+                    httponly=True,
+                    secure=True,
+                    samesite="none",
+                    domain=".desktopai.org",
+                    max_age=60 * 60 * 24 * 7,  # 7 天
+                    path="/",
+                )
+            
+            print(f"✅ 已设置 session cookie (origin: {origin}, is_localhost: {is_localhost})，重定向到: {redirect_url}")
             
             return response_obj
         
@@ -617,18 +635,37 @@ async def set_session(request: Request):
         from fastapi.responses import JSONResponse
         response_obj = JSONResponse({"success": True, "user": {"id": user.id, "email": user.email}})
         
-        # 设置 session cookie
-        response_obj.set_cookie(
-            key="da_session",
-            value=access_token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            domain=".desktopai.org",
-            max_age=60 * 60 * 24 * 7,  # 7 天
-        )
+        # 根据请求来源确定 cookie domain
+        origin = request.headers.get("Origin", "")
+        is_localhost = "localhost" in origin or "127.0.0.1" in origin or not origin
         
-        print(f"✅ 已设置 session cookie，用户: {user.email}")
+        # 设置 session cookie
+        if is_localhost:
+            # 开发环境：不设置 domain，允许 localhost 使用
+            response_obj.set_cookie(
+                key="da_session",
+                value=access_token,
+                httponly=True,
+                secure=False,  # 开发环境可能使用 http
+                samesite="lax",  # localhost 使用 lax
+                max_age=60 * 60 * 24 * 7,  # 7 天
+                path="/",
+            )
+            print(f"✅ 已设置 session cookie (localhost)，用户: {user.email}")
+        else:
+            # 生产环境：设置 domain
+            response_obj.set_cookie(
+                key="da_session",
+                value=access_token,
+                httponly=True,
+                secure=True,
+                samesite="none",
+                domain=".desktopai.org",
+                max_age=60 * 60 * 24 * 7,  # 7 天
+                path="/",
+            )
+            print(f"✅ 已设置 session cookie (production)，用户: {user.email}")
+        
         return response_obj
     except Exception as e:
         print(f"❌ 设置 session cookie 失败: {e}")
