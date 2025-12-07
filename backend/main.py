@@ -781,31 +781,51 @@ async def exchange_oauth_code(request: Request):
             async with httpx.AsyncClient() as client:
                 token_url = f"{supabase_url}/auth/v1/token?grant_type=pkce"
                 
-                # Validate code and code_verifier before sending
+                # Validate code, code_verifier, and state before sending
                 if not code or not isinstance(code, str) or not code.strip():
                     raise HTTPException(status_code=400, detail=f"Invalid code: code is empty or not a string (type: {type(code)})")
                 if not code_verifier or not isinstance(code_verifier, str) or not code_verifier.strip():
                     raise HTTPException(status_code=400, detail=f"Invalid code_verifier: code_verifier is empty or not a string (type: {type(code_verifier)})")
+                if not state or not isinstance(state, str) or not state.strip():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Missing or invalid state parameter. State (flow_state) is required for PKCE flow to identify the OAuth flow state."
+                    )
                 
                 # Strip whitespace to ensure clean values
                 code = code.strip()
                 code_verifier = code_verifier.strip()
+                state = state.strip()
                 
                 print(f"🔐 Token URL: {token_url}")
                 print(f"🔐 Code (after strip): {code[:20]}... (length: {len(code)}, type: {type(code)})")
                 print(f"🔐 Code verifier (after strip): {code_verifier[:20]}... (length: {len(code_verifier)}, type: {type(code_verifier)})")
+                print(f"🔐 State (after strip): {state[:50]}... (length: {len(state)}, type: {type(state)})")
                 print(f"🔐 FULL Code value: {code}")
                 print(f"🔐 FULL Code verifier value: {code_verifier}")
                 
                 # Supabase PKCE token exchange requires "auth_code" parameter (not "code")
                 # The grant_type=pkce endpoint expects "auth_code" in the JSON body
+                # CRITICAL: Must also include auth_flow_state (the state JWT) so Supabase can find the flow
                 token_data = {
                     "auth_code": code,  # Supabase PKCE endpoint expects "auth_code" key
-                    "code_verifier": code_verifier
+                    "code_verifier": code_verifier,
+                    "auth_flow_type": "pkce",
+                    "auth_flow_state": state  # Required: Supabase needs this to find the flow state
                 }
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
                 print(f"🔐 Request body (full JSON): {json.dumps(token_data, indent=2)}")
-                print(f"🔐 Request body preview: {json.dumps({k: (v[:20] + '...' if isinstance(v, str) and len(v) > 20 else v) for k, v in token_data.items()})}")
+                # Preview with truncated values (state is long, so show first 50 chars)
+                preview_data = {}
+                for k, v in token_data.items():
+                    if isinstance(v, str):
+                        if k == "auth_flow_state":
+                            preview_data[k] = v[:50] + "..." if len(v) > 50 else v
+                        else:
+                            preview_data[k] = v[:20] + "..." if len(v) > 20 else v
+                    else:
+                        preview_data[k] = v
+                print(f"🔐 Request body preview: {json.dumps(preview_data)}")
                 
                 # Supabase PKCE token exchange requires JSON format with "code" parameter
                 # Log the actual request body that will be sent
