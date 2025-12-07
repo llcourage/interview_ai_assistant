@@ -274,8 +274,8 @@ function createMainWindow() {
     // ✅ Use loadFile to load specific HTML file
     mainWindow.loadFile(indexHtml);
     
-    // 🚨 Temporarily enable DevTools for debugging
-    mainWindow.webContents.openDevTools();
+    // 🚨 Disable DevTools in production (no console window)
+    // mainWindow.webContents.openDevTools();
   }
 
   // 🚨 Add error listener
