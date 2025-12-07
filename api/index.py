@@ -173,9 +173,22 @@ class handler(BaseHTTPRequestHandler):
                 "traceback": error_trace
             }).encode("utf-8")
             
+            # 错误响应也需要正确的 CORS 头部
+            origin = self.headers.get('Origin', '')
+            allowed_origins = [
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "https://www.desktopai.org",
+            ]
+            
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            if origin in allowed_origins:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Access-Control-Allow-Credentials", "true")
+            else:
+                # 如果不在白名单，使用默认值（但不使用 *，因为会与 credentials 冲突）
+                self.send_header("Access-Control-Allow-Origin", "https://www.desktopai.org")
             self.end_headers()
             self.wfile.write(error_body)
     

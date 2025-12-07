@@ -59,6 +59,21 @@ const ElectronDefaultPage: React.FC = () => {
     };
     window.addEventListener('auth-state-changed', handleAuthStateChange);
     
+    // 监听 Electron IPC 的 auth:refresh 事件（OAuth 窗口关闭时触发）
+    // 注意：不要在 cleanup 中移除监听器，避免 React StrictMode 下监听器被删除
+    if (isElectron()) {
+      const api = (window as any).aiShot;
+      if (api?.onAuthRefresh) {
+        console.log('🔒 AppRouter - Registering auth:refresh listener');
+        api.onAuthRefresh(() => {
+          console.log('🔄 AppRouter - Received auth:refresh from Electron, calling checkAuth()');
+          checkAuth();
+        });
+      } else {
+        console.warn('⚠️ AppRouter - aiShot.onAuthRefresh 不存在，无法监听 auth:refresh');
+      }
+    }
+    
     // 定期检查认证状态（替代 Supabase 的实时监听）
     const interval = setInterval(checkAuth, 5000);
     
@@ -66,6 +81,9 @@ const ElectronDefaultPage: React.FC = () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('auth-state-changed', handleAuthStateChange);
+      // 注意：不在 cleanup 中移除 Electron IPC 监听器
+      // 避免 React StrictMode 下 cleanup 导致监听器被删除
+      // 即使重复注册，也只是会触发多次回调，不会导致监听器丢失
     };
   }, []);
   

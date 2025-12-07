@@ -126,17 +126,28 @@ export const getCurrentUser = async (): Promise<User | null> => {
   try {
     const authHeader = getAuthHeader();
     if (!authHeader) {
-      // No auth header
+      console.log('🔒 getCurrentUser: 无 auth header');
       return null;
     }
 
     // Calling API to get current user
-    const response = await fetch(`${API_BASE_URL}/api/me`, {
+    // 注意：在开发环境中，需要 credentials: 'include' 来携带 Cookie
+    const apiUrl = `${API_BASE_URL}/api/me`;
+    console.log('🌐 getCurrentUser: 请求 API:', apiUrl);
+    console.log('🌐 getCurrentUser: 请求头:', { 
+      'Authorization': authHeader.substring(0, 20) + '...',
+      'credentials': 'include'
+    });
+    
+    const response = await fetch(apiUrl, {
+      credentials: 'include', // 携带 Cookie（用于跨域请求）
       headers: {
         'Authorization': authHeader,
       },
     });
 
+    console.log('🌐 getCurrentUser: 响应状态:', response.status, response.statusText);
+    
     if (!response.ok) {
       console.error('🔒 getCurrentUser: API error', response.status, response.statusText);
       // Token 可能已过期
@@ -159,22 +170,61 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
 /**
  * 检查是否已登录
+ * 优先检查 localStorage 中的 token，如果没有则检查服务器 Cookie 会话
  */
 export const isAuthenticated = async (): Promise<boolean> => {
+  console.log('🔑 isAuthenticated: 开始检查登录状态');
+  
+  // 1. 先检查 localStorage 中的 token（支持 Web 端的 token 登录）
   const token = getToken();
-  if (!token) {
-    // No token found
-    return false;
+  if (token) {
+    console.log('🔑 isAuthenticated: 找到 token，验证 token 有效性');
+    try {
+      const user = await getCurrentUser();
+      const authenticated = user !== null;
+      console.log('🔑 isAuthenticated: Token 验证完成，结果:', authenticated, user ? `用户: ${user.email}` : '无用户');
+      return authenticated;
+    } catch (error) {
+      console.error('🔑 isAuthenticated: Token 验证失败:', error);
+      // Token 无效，继续检查服务器会话
+    }
   }
-
-  // 验证 token 是否有效
+  
+  // 2. 没有 token 或 token 无效，检查服务器 Cookie 会话（Electron OAuth 流程）
+  console.log('🔑 isAuthenticated: 未找到有效 token，调用 /api/me 检查服务器会话');
   try {
-    const user = await getCurrentUser();
-    const authenticated = user !== null;
-    // Authentication check completed
-    return authenticated;
+    // 直接调用 API 检查服务器会话，使用 credentials: 'include' 携带 Cookie
+    const response = await fetch(`${API_BASE_URL}/api/me`, {
+      credentials: 'include', // 携带 Cookie（用于跨域请求）
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    console.log('🌐 isAuthenticated: /api/me 响应状态:', response.status, response.statusText);
+    
+    if (response.ok) {
+      const user = await response.json();
+      console.log('🔑 isAuthenticated: 服务器返回已登录用户:', user.email || user.id);
+      
+      // 如果服务器返回用户信息，保存到 localStorage（可选，用于后续请求）
+      if (user && user.id) {
+        // 注意：这里不保存完整的 token，因为服务器使用 Cookie 管理会话
+        // 但可以保存用户信息
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
+      }
+      
+      return true;
+    } else {
+      console.log('🔑 isAuthenticated: 服务器会话检查失败，状态码:', response.status);
+      if (response.status === 401) {
+        // 401 Unauthorized，清除可能存在的无效 token
+        clearToken();
+      }
+      return false;
+    }
   } catch (error) {
-    console.error('🔒 isAuthenticated error:', error);
+    console.error('🔑 isAuthenticated: 服务器会话检查异常:', error);
     return false;
   }
 };
@@ -197,10 +247,16 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
   }
   
   const data = await response.json();
+  
+  // 确保返回的数据包含必要的字段
+  if (!data.url) {
+    throw new Error('API 返回的数据中缺少 url 字段');
+  }
+  
   return {
     url: data.url,
-    supabaseUrl: data.supabase_url,
-    supabaseAnonKey: data.supabase_anon_key
+    supabaseUrl: data.supabase_url || data.supabaseUrl,
+    supabaseAnonKey: data.supabase_anon_key || data.supabaseAnonKey
   };
 };
 
@@ -240,13 +296,9 @@ export const loginWithGoogle = async (): Promise<void> => {
       const redirectTo = `${window.location.origin}/auth/callback`;
       const { url: authUrl, supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
       
-      // 如果 API 返回了 Supabase 配置，更新 Supabase 客户端
+      // 如果 API 返回了 Supabase 配置，保存到 localStorage
+      // handleOAuthCallback 会使用这些配置动态创建 Supabase 客户端
       if (supabaseUrl && supabaseAnonKey) {
-        const { supabase } = await import('./supabase');
-        // 动态更新 Supabase 客户端配置
-        // 注意：Supabase 客户端是单例，我们需要重新创建
-        // 但由于 createClient 在模块级别，我们需要在 handleOAuthCallback 中处理
-        // 暂时将配置保存到 localStorage，在 handleOAuthCallback 中使用
         localStorage.setItem('supabase_url', supabaseUrl);
         localStorage.setItem('supabase_anon_key', supabaseAnonKey);
       }
@@ -301,8 +353,23 @@ export const handleOAuthCallback = async (code: string, state?: string): Promise
   }
   
   if (!supabaseAnonKey) {
+    console.error('❌ Supabase 配置获取失败:', {
+      fromLocalStorage: !!localStorage.getItem('supabase_anon_key'),
+      fromEnv: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+      supabaseUrl,
+      supabaseAnonKey: supabaseAnonKey ? '***' : '(empty)'
+    });
     throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
   }
+  
+  if (!supabaseUrl) {
+    throw new Error('Supabase URL 未配置。');
+  }
+  
+  console.log('✅ 使用 Supabase 配置创建客户端:', {
+    url: supabaseUrl,
+    keyLength: supabaseAnonKey.length
+  });
   
   // 创建 Supabase 客户端（使用动态配置）
   const supabase = createClient(supabaseUrl, supabaseAnonKey);

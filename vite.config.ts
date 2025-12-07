@@ -11,7 +11,8 @@ export default defineConfig({
     emptyOutDir: true
   },
   server: {
-    port: 5173
+    port: 5173,
+    strictPort: true // 如果 5173 被占用就直接报错，而不是自动跳到其他端口
   }
 })
 

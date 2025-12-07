@@ -84,10 +84,19 @@ async def startup_event():
     print("=" * 60)
 
 # 配置 CORS
+# 注意：当 allow_credentials=True 时，不能使用 allow_origins=["*"]
+# 必须明确指定允许的源，否则浏览器会拒绝携带 Cookie 的跨域请求
+origins = [
+    "http://localhost:5173",      # Vite dev server
+    "http://127.0.0.1:5173",     # Vite dev server (alternative)
+    "https://www.desktopai.org", # Production web
+    "http://localhost:3000",      # 备用开发端口
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,        # ⭐ 不能再用 "*"，必须明确指定
+    allow_credentials=True,       # ⭐ 必须 True，才能带 Cookie
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -129,8 +129,46 @@ contextBridge.exposeInMainWorld('aiShot', {
   // ⚠️ 显示 Token 使用率警告
   showTokenWarning: (message, usagePercentage) => {
     ipcRenderer.send('show-token-warning', message, usagePercentage);
+  },
+
+  // 🔐 OAuth 结果（用于 OAuth 窗口）
+  sendOAuthResult: (result) => {
+    ipcRenderer.send('oauth-result', result);
+  },
+
+  // 🔄 监听登录状态刷新事件
+  onAuthRefresh: (callback) => {
+    console.log('[preload] 注册 auth:refresh 监听');
+    // 注意：不移除旧监听器，避免 React StrictMode 下 cleanup 导致监听器被删除
+    // 即使重复注册，也只是会触发多次回调，不会导致监听器丢失
+    ipcRenderer.on('auth:refresh', () => {
+      console.log('[preload] 收到 auth:refresh 事件，调用回调');
+      try {
+        callback();
+      } catch (e) {
+        console.error('[preload] auth:refresh 回调异常：', e);
+      }
+    });
+  },
+
+  // 移除事件监听器（暂时禁用，避免 React StrictMode 下 cleanup 导致监听器丢失）
+  removeAuthRefreshListener: () => {
+    console.log('[preload] removeAuthRefreshListener 调用（暂时不做任何事情，避免 StrictMode 下监听器丢失）');
+    // 暂时不执行 removeAllListeners，避免 React StrictMode 下 cleanup 导致监听器被删除
+    // ipcRenderer.removeAllListeners('auth:refresh');
   }
 });
+
+// 暴露 ipcRenderer 给 OAuth 窗口使用（仅用于发送 OAuth 结果）
+if (window.location.hash.includes('auth/callback') || window.location.search.includes('oauth_url')) {
+  contextBridge.exposeInMainWorld('ipcRenderer', {
+    send: (channel, data) => {
+      if (channel === 'oauth-result') {
+        ipcRenderer.send('oauth-result', data);
+      }
+    }
+  });
+}
 
 console.log('Preload script loaded');
 

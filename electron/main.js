@@ -857,8 +857,10 @@ ipcMain.handle('oauth-google', async () => {
       const API_BASE_URL = process.env.LOCAL_API_URL 
         || process.env.VERCEL_API_URL 
         || 'https://www.desktopai.org';
-      // 对于 Electron 桌面应用，使用应用网站的 callback URL
-      // 这样 Supabase 可以正确验证 OAuth flow state
+      // 对于 Electron 桌面应用，使用已配置的 callback URL
+      // Supabase 需要在项目设置中配置允许的 redirect URLs
+      // 我们使用 https://www.desktopai.org/auth/callback，这个 URL 已经在 Supabase 中配置
+      // OAuth 窗口会监听导航，捕获回调 URL 中的 code，阻止跳转到外部网站
       const redirectTo = 'https://www.desktopai.org/auth/callback';
       const apiUrl = `${API_BASE_URL}/api/auth/google/url?redirect_to=${encodeURIComponent(redirectTo)}`;
       console.log('🔐 请求 OAuth URL:', apiUrl);
@@ -931,6 +933,7 @@ ipcMain.handle('oauth-google', async () => {
       console.log('🔐 打开 Google OAuth 窗口:', authUrl);
       
       // 创建 OAuth 窗口
+      // 注意：OAuth 窗口需要加载前端页面，这样前端可以使用 Supabase JS SDK 处理 PKCE
       oauthWindow = new BrowserWindow({
         width: 500,
         height: 600,
@@ -939,7 +942,8 @@ ipcMain.handle('oauth-google', async () => {
         show: false,
         webPreferences: {
           nodeIntegration: false,
-          contextIsolation: true
+          contextIsolation: true,
+          preload: path.join(__dirname, 'preload.js')  // 需要 preload 以便前端可以通信
         }
       });
       
@@ -948,25 +952,148 @@ ipcMain.handle('oauth-google', async () => {
         oauthWindow.show();
       });
       
-      // 监听窗口导航，捕获回调 URL
-      oauthWindow.webContents.on('will-navigate', (event, url) => {
-        console.log('🔐 OAuth 窗口导航到:', url);
-        handleOAuthCallback(url, resolve, reject);
-      });
+      // 方案：让 OAuth 窗口加载前端页面，前端页面会处理 OAuth 回调
+      // 前端页面会使用 Supabase JS SDK 的 exchangeCodeForSession，可以自动获取 code_verifier
+      if (isDev) {
+        // 开发环境：加载 Vite dev server
+        const devPort = process.env.VITE_DEV_SERVER_PORT || '5173';
+        const oauthUrl = `http://localhost:${devPort}/#/auth/callback?oauth_url=${encodeURIComponent(authUrl)}`;
+        console.log('🔐 开发环境：OAuth 窗口加载前端页面:', oauthUrl);
+        oauthWindow.loadURL(oauthUrl);
+      } else {
+        // 生产环境：加载本地 dist 文件夹中的前端页面
+        const indexHtml = path.join(__dirname, '../dist/index.html');
+        console.log('🔐 生产环境：OAuth 窗口加载前端页面:', indexHtml);
+        // 使用 loadFile 并设置 hash 和 query
+        oauthWindow.loadFile(indexHtml, {
+          hash: '/auth/callback',
+          query: { oauth_url: authUrl }
+        });
+      }
       
-      // 也监听 did-navigate（某些情况下用这个）
-      oauthWindow.webContents.on('did-navigate', (event, url) => {
-        console.log('🔐 OAuth 窗口已导航到:', url);
-        handleOAuthCallback(url, resolve, reject);
+      // 监听前端通过 IPC 发送的 OAuth 结果
+      ipcMain.once('oauth-result', (event, result) => {
+        console.log('🔐 收到前端 OAuth 结果:', result);
+        if (oauthWindow && !oauthWindow.isDestroyed()) {
+          oauthWindow.close();
+        }
+        if (result.success && result.code) {
+          resolve({ code: result.code, state: result.state, success: true });
+        } else {
+          reject(new Error(result.error || 'OAuth failed'));
+        }
       });
       
       // 监听窗口关闭
       oauthWindow.on('closed', () => {
+        console.log('🔐 OAuth 窗口已关闭');
         oauthWindow = null;
+        
+        // 通知主窗口刷新登录状态
+        // 无论登录成功还是失败，都应该重新检查一次
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          console.log('🔐 通知主窗口刷新登录状态');
+          mainWindow.webContents.send('auth:refresh');
+        }
+        
+        // 如果窗口关闭时还没有收到结果，可能是用户取消了
+        // 但不要 reject，因为可能前端还在处理
       });
       
-      // 加载 OAuth URL
-      oauthWindow.loadURL(authUrl);
+      // 监听导航，捕获回调 URL（当 Google 重定向到 callback URL 时）
+      oauthWindow.webContents.on('will-navigate', (event, url) => {
+        console.log('🔐 OAuth 窗口导航到:', url);
+        // 检查是否是回调 URL（包含 code）
+        try {
+          const urlObj = new URL(url);
+          console.log('🔐 URL 解析结果:', {
+            hostname: urlObj.hostname,
+            pathname: urlObj.pathname,
+            hasCode: urlObj.searchParams.has('code'),
+            hasError: urlObj.searchParams.has('error')
+          });
+          
+          if (urlObj.pathname.includes('/auth/callback')) {
+            const code = urlObj.searchParams.get('code');
+            const state = urlObj.searchParams.get('state');
+            const error = urlObj.searchParams.get('error');
+            
+            if (code) {
+              // 这是回调 URL，阻止导航到外部网站，让前端处理
+              console.log('🔐 检测到 OAuth 回调 URL，阻止导航，让前端处理');
+              console.log('🔐 提取到 OAuth code:', code.substring(0, 20) + '...');
+              event.preventDefault();
+              
+              // 在前端页面中处理回调（更新 URL hash，触发 React Router）
+              const hashParams = new URLSearchParams({ code });
+              if (state) hashParams.set('state', state);
+              const hash = `#/auth/callback?${hashParams.toString()}`;
+              console.log('🔐 更新前端 hash 为:', hash);
+              
+              oauthWindow.webContents.executeJavaScript(`
+                (() => {
+                  console.log('🔐 前端：更新 hash 为', '${hash}');
+                  // 更新 URL hash，React Router 会自动处理
+                  window.location.hash = '${hash}';
+                  // 触发 hashchange 事件，确保 React Router 响应
+                  window.dispatchEvent(new Event('hashchange'));
+                })();
+              `).catch(err => {
+                console.error('🔐 执行 JavaScript 失败:', err);
+                // 降级：直接使用 handleOAuthCallback
+                handleOAuthCallback(url, resolve, reject);
+              });
+            } else if (error) {
+              console.error('🔐 OAuth 错误:', error);
+              event.preventDefault();
+              if (oauthWindow && !oauthWindow.isDestroyed()) {
+                oauthWindow.close();
+              }
+              reject(new Error(`OAuth error: ${error}`));
+            }
+          }
+        } catch (e) {
+          // URL 解析失败，忽略
+          console.error('🔐 URL 解析失败:', e);
+        }
+      });
+      
+      // 也监听 did-navigate（某些情况下用这个）
+      // 当 will-navigate 被阻止后，did-navigate 可能不会触发
+      // 但如果 will-navigate 没有捕获到，did-navigate 可以作为备用
+      oauthWindow.webContents.on('did-navigate', (event, url) => {
+        console.log('🔐 OAuth 窗口已导航到:', url);
+        // 检查是否是回调 URL
+        try {
+          const urlObj = new URL(url);
+          const hasCode = urlObj.searchParams.has('code');
+          console.log('🔐 did-navigate URL 解析结果:', {
+            hostname: urlObj.hostname,
+            pathname: urlObj.pathname,
+            hasCode
+          });
+          
+          if (urlObj.hostname === 'www.desktopai.org' && urlObj.pathname === '/auth/callback' && hasCode) {
+            const code = urlObj.searchParams.get('code');
+            console.log('🔐 did-navigate: 检测到回调 URL，code:', code?.substring(0, 20) + '...');
+            
+            // ⭐ 1. 先通知主窗口刷新登录状态
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              console.log('🔐 did-navigate: 向主窗口发送 auth:refresh');
+              mainWindow.webContents.send('auth:refresh');
+            }
+            
+            // ⭐ 2. 关闭 OAuth 窗口（会触发 closed 事件，那里也会发送 auth:refresh）
+            if (oauthWindow && !oauthWindow.isDestroyed()) {
+              console.log('🔐 did-navigate: 关闭 OAuth 窗口');
+              oauthWindow.close();
+            }
+          }
+        } catch (e) {
+          // URL 解析失败，忽略
+          console.error('🔐 did-navigate URL 解析失败:', e);
+        }
+      });
       
     } catch (error) {
       console.error('🔐 OAuth 错误:', error);
