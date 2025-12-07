@@ -343,58 +343,109 @@ export const loginWithGoogle = async (): Promise<void> => {
     // 检查是否是 Electron 环境
     if (typeof window !== 'undefined' && (window as any).aiShot?.loginWithGoogle) {
       // Electron 环境：使用 Electron OAuth 窗口，通过后端 API 处理
-      console.log('🔐 Electron 环境：通过后端 API 处理 OAuth 登录');
+      console.log('🔐 Electron environment: Handling OAuth login via Electron IPC');
       
-      // Electron 不需要获取 Supabase 配置，因为所有操作都通过后端 API
-      console.log('🔐 Electron: 调用主进程 loginWithGoogle');
+      // Setup IPC listener as backup (in case main process sends token via IPC before promise resolves)
+      let ipcTokenReceived = false;
+      const ipcHandler = (data: any) => {
+        if (ipcTokenReceived) return; // Only handle once
+        ipcTokenReceived = true;
+        
+        console.log('🔐 Electron: Received token via IPC event:', {
+          hasAccessToken: !!data.access_token,
+          hasRefreshToken: !!data.refresh_token,
+          hasUser: !!data.user
+        });
+        
+        // Create token object from IPC data
+        const token: AuthToken = {
+          access_token: data.access_token,
+          refresh_token: data.refresh_token || '',
+          token_type: data.token_type || 'bearer',
+          user: data.user ? {
+            id: data.user.id || '',
+            email: data.user.email || ''
+          } : undefined
+        };
+        
+        // Save token to localStorage
+        console.log('🔐 Electron: Saving token to localStorage (from IPC)');
+        saveToken(token);
+        
+        // Verify token was saved
+        const savedToken = getToken();
+        if (savedToken) {
+          console.log('✅ Electron: Token saved successfully (from IPC), user:', savedToken.user?.email);
+        } else {
+          console.error('❌ Electron: Token save failed (from IPC)!');
+        }
+        
+        // Trigger auth state change event
+        window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
+        console.log('🔐 Electron: Triggered auth-state-changed event (from IPC)');
+        
+        // Redirect to main page
+        console.log('🔐 Electron: Redirecting to main page (from IPC)');
+        window.location.href = '/';
+      };
+      
+      // Register IPC listener
+      if ((window as any).aiShot?.onOAuthComplete) {
+        (window as any).aiShot.onOAuthComplete(ipcHandler);
+      }
+      
+      // Call main process loginWithGoogle (this may resolve with token or trigger IPC event)
+      console.log('🔐 Electron: Calling main process loginWithGoogle');
       const result = await (window as any).aiShot.loginWithGoogle();
-      console.log('🔐 Electron: 收到主进程返回结果:', { 
+      console.log('🔐 Electron: Received result from main process:', { 
         success: result.success, 
-        hasCode: !!result.code, 
-        hasState: !!result.state,
+        hasAccessToken: !!result.access_token, 
+        hasUser: !!result.user,
         error: result.error 
       });
       
-      // NEW ARCHITECTURE: Result contains token data directly from backend callback via postMessage
-      if (result.success && result.access_token && result.user) {
-        console.log('🔐 Electron: Received token data from OAuth callback');
+      // If promise already resolved with token data, use it
+      if (result.success && result.access_token && !ipcTokenReceived) {
+        console.log('🔐 Electron: Received token data from promise result');
         
         // Create token object from result
         const token: AuthToken = {
           access_token: result.access_token,
           refresh_token: result.refresh_token || '',
           token_type: 'bearer',
-          user: {
-            id: result.user.id,
+          user: result.user ? {
+            id: result.user.id || '',
             email: result.user.email || ''
-          }
+          } : undefined
         };
         
         // Save token to localStorage
-        console.log('🔐 Electron: Saving token to localStorage');
+        console.log('🔐 Electron: Saving token to localStorage (from promise)');
         saveToken(token);
         
         // Verify token was saved
         const savedToken = getToken();
         if (savedToken) {
-          console.log('✅ Electron: Token saved successfully, user:', savedToken.user?.email);
+          console.log('✅ Electron: Token saved successfully (from promise), user:', savedToken.user?.email);
         } else {
-          console.error('❌ Electron: Token save failed!');
+          console.error('❌ Electron: Token save failed (from promise)!');
         }
         
         // Trigger auth state change event
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
-        console.log('🔐 Electron: Triggered auth-state-changed event');
+        console.log('🔐 Electron: Triggered auth-state-changed event (from promise)');
         
         // Redirect to main page
-        console.log('🔐 Electron: Redirecting to main page');
+        console.log('🔐 Electron: Redirecting to main page (from promise)');
         window.location.href = '/';
         return;
-      } else {
-        const errorMsg = result.error || 'Failed to get OAuth code from Electron';
-        console.error('❌ Electron: OAuth 失败:', errorMsg);
+      } else if (!result.success && !ipcTokenReceived) {
+        const errorMsg = result.error || 'Failed to get OAuth token from Electron';
+        console.error('❌ Electron: OAuth failed:', errorMsg);
         throw new Error(errorMsg);
       }
+      // If ipcTokenReceived is true, the IPC handler already handled everything
+      return;
     } else {
       // Web 环境：直接使用 Supabase JS SDK 生成 OAuth URL
       // 这样 code_verifier 会保存在浏览器存储中，PKCE 流程才能正常工作

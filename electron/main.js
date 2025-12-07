@@ -1082,44 +1082,102 @@ ipcMain.handle('oauth-google', async () => {
         }
       });
       
-      // Also listen to did-navigate to detect when OAuth callback completes
-      // In dev mode with hash route, callback will be in hash: http://localhost:5173/#/auth/callback?code=...
-      // Also handle Supabase direct callback: https://cjrblsalpfhugeatrhrr.supabase.co/auth/v1/callback?code=...
+      // Listen to did-navigate to detect when OAuth callback completes
+      // CRITICAL: Parse hash directly from URL (Supabase puts tokens in hash, not query)
       oauthWindow.webContents.on('did-navigate', (event, url) => {
         console.log('🔐 OAuth window navigated to:', url);
         try {
           const urlObj = new URL(url);
-          const hasCodeInQuery = urlObj.searchParams.has('code');
-          const hasCodeInHash = urlObj.hash.includes('code=');
-          const hasCode = hasCodeInQuery || hasCodeInHash;
+          const hostname = urlObj.hostname;
+          const pathname = urlObj.pathname;
+          const hash = urlObj.hash || '';
           
           console.log('🔐 did-navigate URL parse result:', {
-            hostname: urlObj.hostname,
-            pathname: urlObj.pathname,
-            hash: urlObj.hash.substring(0, 100) + (urlObj.hash.length > 100 ? '...' : ''),
-            hasCodeInQuery,
-            hasCodeInHash,
-            hasCode
+            hostname,
+            pathname,
+            hash: hash.substring(0, 100) + (hash.length > 100 ? '...' : ''),
           });
           
-          // NEW ARCHITECTURE: Only listen for backend callback URL
-          // Do NOT intercept Supabase callback - let it redirect to backend /api/auth/callback
+          // Check if this is the backend callback URL
           const isBackendCallback = (
-            (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
+            (hostname === 'localhost' || hostname === '127.0.0.1') && 
             urlObj.port === '5173' &&
-            urlObj.pathname === '/api/auth/callback'
+            pathname === '/api/auth/callback'
           ) || (
-            urlObj.hostname === 'www.desktopai.org' &&
-            urlObj.pathname === '/api/auth/callback'
+            hostname === 'www.desktopai.org' &&
+            pathname === '/api/auth/callback'
           );
           
-          if (isBackendCallback) {
-            console.log('🔐 [MAIN] Detected backend callback URL - waiting for postMessage from callback page');
-            // Don't close window here - let callback page load and send postMessage
-            // The callback page will send postMessage which is handled by the listener above
+          if (isBackendCallback && hash.startsWith('#')) {
+            console.log('🔐 [MAIN] Detected backend callback URL with hash - parsing tokens');
+            
+            // Parse hash parameters (#access_token=xxx&refresh_token=yyy&...)
+            const hashParams = new URLSearchParams(hash.substring(1)); // Remove '#'
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+            const expiresAt = hashParams.get('expires_at');
+            const expiresIn = hashParams.get('expires_in');
+            const tokenType = hashParams.get('token_type') || 'bearer';
+            
+            console.log('🔐 Parsed tokens from hash:', {
+              hasAccessToken: !!accessToken,
+              hasRefreshToken: !!refreshToken,
+              expiresAt,
+              expiresIn,
+              tokenType,
+            });
+            
+            if (accessToken) {
+              // Extract user info from access token (JWT payload)
+              let user = null;
+              try {
+                // JWT format: header.payload.signature
+                // We only need the payload part (middle section)
+                const parts = accessToken.split('.');
+                if (parts.length === 3) {
+                  const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+                  user = {
+                    id: payload.sub || payload.user_id || null,
+                    email: payload.email || null,
+                  };
+                }
+              } catch (e) {
+                console.warn('🔐 Could not parse user from JWT:', e);
+              }
+              
+              // Send token to renderer via IPC
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('auth:oauth-complete', {
+                  access_token: accessToken,
+                  refresh_token: refreshToken,
+                  expires_at: expiresAt ? parseInt(expiresAt, 10) : undefined,
+                  expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
+                  token_type: tokenType,
+                  user: user,
+                });
+                console.log('🔐 Sent auth:oauth-complete to renderer');
+              }
+              
+              // Close OAuth window
+              setTimeout(() => {
+                if (oauthWindow && !oauthWindow.isDestroyed()) {
+                  console.log('🔐 Closing OAuth window after successful token extraction');
+                  oauthWindow.close();
+                }
+              }, 500);
+              
+              // Resolve OAuth promise
+              resolve({
+                success: true,
+                access_token: accessToken,
+                refresh_token: refreshToken,
+                user: user,
+              });
+            } else {
+              console.warn('❌ No access_token found in hash, cannot complete login');
+            }
           }
         } catch (e) {
-          // URL parse failed, ignore
           console.error('🔐 did-navigate URL parse failed:', e);
         }
       });
@@ -1127,7 +1185,6 @@ ipcMain.handle('oauth-google', async () => {
     } catch (error) {
       console.error('🔐 OAuth error:', error);
       console.error('🔐 Error stack:', error.stack);
-      currentCodeVerifier = null; // ✅ 清除 code_verifier
       reject(new Error(error.message || 'Failed to initiate Google OAuth'));
     }
   });

@@ -49,5 +49,36 @@ console.log('🌐 Environment:', {
   origin: typeof window !== 'undefined' ? window.location.origin : 'N/A'
 });
 
+/**
+ * Enhanced fetch function that automatically adds Authorization header
+ * for authenticated requests in Electron environment
+ */
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  // Get token from localStorage (if available)
+  let authHeader: string | null = null;
+  try {
+    const { getAuthHeader } = await import('./auth');
+    authHeader = getAuthHeader();
+  } catch (e) {
+    // auth module not available or token not found
+    console.debug('No auth token available for API request');
+  }
+
+  // Merge headers
+  const headers = new Headers(init.headers || {});
+  if (authHeader) {
+    headers.set('Authorization', authHeader);
+  }
+
+  // Build full URL
+  const url = input.startsWith('http') ? input : `${API_BASE_URL}${input}`;
+
+  // Make request with merged headers
+  return fetch(url, {
+    ...init,
+    headers,
+    credentials: 'include', // Include cookies for web version
+  });
+}
 
 

@@ -156,6 +156,23 @@ contextBridge.exposeInMainWorld('aiShot', {
     console.log('[preload] removeAuthRefreshListener called (temporarily doing nothing to avoid listener loss in StrictMode)');
     // Temporarily don't execute removeAllListeners to avoid React StrictMode cleanup deleting listeners
     // ipcRenderer.removeAllListeners('auth:refresh');
+  },
+
+  // Listen to OAuth completion event from main process
+  onOAuthComplete: (callback) => {
+    console.log('[preload] Registering auth:oauth-complete listener');
+    ipcRenderer.on('auth:oauth-complete', (event, data) => {
+      console.log('[preload] Received auth:oauth-complete event:', {
+        hasAccessToken: !!data.access_token,
+        hasRefreshToken: !!data.refresh_token,
+        hasUser: !!data.user
+      });
+      try {
+        callback(data);
+      } catch (e) {
+        console.error('[preload] auth:oauth-complete callback exception:', e);
+      }
+    });
   }
 });
 
