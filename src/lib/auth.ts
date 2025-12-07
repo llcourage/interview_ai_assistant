@@ -343,6 +343,9 @@ export const loginWithGoogle = async (): Promise<void> => {
       // 这样 code_verifier 会保存在浏览器存储中，PKCE 流程才能正常工作
       console.log('🔐 Web 环境：使用 Supabase JS SDK 生成 OAuth URL');
       
+      // 先定义 redirectTo（在动态导入之前）
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      
       // 动态导入 Supabase 客户端
       let createClient: any;
       try {
@@ -350,15 +353,15 @@ export const loginWithGoogle = async (): Promise<void> => {
         createClient = supabaseModule.createClient;
       } catch (importError: any) {
         console.error('🔐 动态导入 Supabase SDK 失败:', importError);
-        // 如果动态导入失败，尝试从后端 API 获取 OAuth URL
+        // 如果动态导入失败，降级到使用后端 API 获取 OAuth URL
         console.log('🔐 降级：使用后端 API 获取 OAuth URL');
-        const { supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
-        if (supabaseUrl && supabaseAnonKey) {
-          localStorage.setItem('supabase_url', supabaseUrl);
-          localStorage.setItem('supabase_anon_key', supabaseAnonKey);
-        }
-        // 重新尝试导入
         try {
+          const { supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
+          if (supabaseUrl && supabaseAnonKey) {
+            localStorage.setItem('supabase_url', supabaseUrl);
+            localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+          }
+          // 重新尝试导入
           const supabaseModule = await import('@supabase/supabase-js');
           createClient = supabaseModule.createClient;
         } catch (retryError: any) {
@@ -405,7 +408,6 @@ export const loginWithGoogle = async (): Promise<void> => {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       
       // 使用 Supabase JS SDK 生成 OAuth URL（这样 code_verifier 会保存在浏览器存储中）
-      const redirectTo = `${window.location.origin}/auth/callback`;
       console.log('🔐 Web 环境：redirectTo:', redirectTo);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
