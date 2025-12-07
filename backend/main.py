@@ -18,7 +18,7 @@ if not is_production:
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, Request, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -482,17 +482,41 @@ async def oauth_callback(code: str, state: Optional[str] = None, http_request: R
                     detail="OAuth 回调失败：无法获取 token 或用户信息"
                 )
             
-            # 返回 token 信息
-            token = Token(
-                access_token=token_data["access_token"],
-                refresh_token=token_data.get("refresh_token", ""),
-                user={
-                    "id": token_data["user"]["id"],
-                    "email": token_data["user"].get("email", "")
-                }
+            user_data = token_data["user"]
+            user_id = user_data["id"]
+            user_email = user_data.get("email", "")
+            
+            print(f"✅ OAuth 回调成功，用户 ID: {user_id}, Email: {user_email}")
+            
+            # 生成自己的 session token（使用 Supabase access_token 作为 session token）
+            # 注意：这里简化处理，直接使用 Supabase access_token 作为 session token
+            # 如果需要更安全，可以使用 JWT 生成自己的 token
+            session_token = token_data["access_token"]
+            
+            # 构建重定向 URL（重定向到前端成功页面）
+            # 对于 Electron，这个重定向会被 Electron 捕获，所以 URL 不重要
+            # 对于 Web，重定向到前端页面
+            frontend_url = os.getenv("FRONTEND_URL", "https://www.desktopai.org")
+            redirect_url = f"{frontend_url}/auth/success"
+            
+            # 创建重定向响应，并设置 session cookie
+            response_obj = RedirectResponse(url=redirect_url, status_code=302)
+            
+            # 设置 session cookie
+            # 使用 Supabase access_token 作为 session token
+            response_obj.set_cookie(
+                key="da_session",
+                value=session_token,
+                httponly=True,  # 防止 JavaScript 访问，提高安全性
+                secure=True,  # 只在 HTTPS 下传输
+                samesite="none",  # 允许跨站请求（Electron / localhost）
+                domain=".desktopai.org",  # 使用 .desktopai.org 以支持所有子域名
+                max_age=60 * 60 * 24 * 7,  # 7 天
             )
             
-            return token
+            print(f"✅ 已设置 session cookie，重定向到: {redirect_url}")
+            
+            return response_obj
         
         # 调试日志
         print(f"🔍 OAuth 回调响应类型: {type(response)}")
@@ -569,11 +593,39 @@ async def read_users_me(http_request: Request):
             except httpx.HTTPError as e:
                 raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
     
-    # 非桌面版：正常处理（需要验证 token）
-    # 从请求头获取 token
+    # 非桌面版：正常处理
+    # 优先从 Cookie 中获取 session token（OAuth 登录后设置的）
+    session_token = http_request.cookies.get("da_session")
+    
+    if session_token:
+        # 使用 session cookie 中的 token 验证用户
+        print(f"🔍 /api/me: 从 Cookie 获取 session token")
+        try:
+            # 使用 Supabase 验证 token
+            from backend.auth_supabase import verify_token
+            user = await verify_token(session_token)
+            if user:
+                print(f"✅ /api/me: Cookie session 验证成功，用户: {user.email}")
+                return user
+        except Exception as e:
+            print(f"❌ /api/me: Cookie session 验证失败: {e}")
+            # Cookie 无效，继续尝试 Authorization header
+    
+    # 如果没有 Cookie 或 Cookie 无效，尝试从 Authorization header 获取 token
     auth_header = http_request.headers.get("Authorization", "")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="缺少认证 token")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.replace("Bearer ", "")
+        try:
+            from backend.auth_supabase import verify_token
+            user = await verify_token(token)
+            if user:
+                print(f"✅ /api/me: Authorization header 验证成功，用户: {user.email}")
+                return user
+        except Exception as e:
+            print(f"❌ /api/me: Authorization header 验证失败: {e}")
+    
+    # 都没有，返回 401
+    raise HTTPException(status_code=401, detail="未认证：缺少有效的 session cookie 或 Authorization token")
     
     token = auth_header.replace("Bearer ", "")
     current_user = await verify_token(token)

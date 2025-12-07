@@ -291,20 +291,73 @@ export const loginWithGoogle = async (): Promise<void> => {
         throw new Error(result.error || 'Failed to get OAuth code from Electron');
       }
     } else {
-      // Web 环境：跳转到 Google 授权页面
-      // redirectTo 指向前端路由，这样回调会在前端处理（使用 Supabase JS SDK 的 exchangeCodeForSession）
-      const redirectTo = `${window.location.origin}/auth/callback`;
-      const { url: authUrl, supabaseUrl, supabaseAnonKey } = await getGoogleOAuthUrl(redirectTo);
+      // Web 环境：直接使用 Supabase JS SDK 生成 OAuth URL
+      // 这样 code_verifier 会保存在浏览器存储中，PKCE 流程才能正常工作
+      console.log('🔐 Web 环境：使用 Supabase JS SDK 生成 OAuth URL');
       
-      // 如果 API 返回了 Supabase 配置，保存到 localStorage
-      // handleOAuthCallback 会使用这些配置动态创建 Supabase 客户端
-      if (supabaseUrl && supabaseAnonKey) {
-        localStorage.setItem('supabase_url', supabaseUrl);
-        localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+      // 动态导入 Supabase 客户端
+      const { createClient } = await import('@supabase/supabase-js');
+      
+      // 获取 Supabase 配置
+      let supabaseUrl = localStorage.getItem('supabase_url');
+      let supabaseAnonKey = localStorage.getItem('supabase_anon_key');
+      
+      // 如果 localStorage 中没有，从 API 获取
+      if (!supabaseUrl || !supabaseAnonKey) {
+        try {
+          const { API_BASE_URL } = await import('./api');
+          const configResponse = await fetch(`${API_BASE_URL}/api/config/supabase`);
+          if (configResponse.ok) {
+            const config = await configResponse.json();
+            supabaseUrl = config.supabase_url;
+            supabaseAnonKey = config.supabase_anon_key;
+            if (supabaseUrl && supabaseAnonKey) {
+              localStorage.setItem('supabase_url', supabaseUrl);
+              localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+            }
+          }
+        } catch (e) {
+          console.error('🔐 从 API 获取 Supabase 配置失败:', e);
+        }
       }
       
+      // 如果还是没有，使用环境变量或默认值
+      if (!supabaseUrl) {
+        supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
+      }
+      if (!supabaseAnonKey) {
+        supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      }
+      
+      if (!supabaseAnonKey) {
+        throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
+      }
+      
+      // 创建 Supabase 客户端
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      
+      // 使用 Supabase JS SDK 生成 OAuth URL（这样 code_verifier 会保存在浏览器存储中）
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      console.log('🔐 Web 环境：redirectTo:', redirectTo);
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectTo
+        }
+      });
+      
+      if (error) {
+        throw new Error(error.message || 'Failed to get OAuth URL');
+      }
+      
+      if (!data?.url) {
+        throw new Error('Failed to get OAuth URL from Supabase');
+      }
+      
+      console.log('🔐 Web 环境：跳转到 OAuth URL');
       // 跳转到 Google 授权页面
-      window.location.href = authUrl;
+      window.location.href = data.url;
     }
   } catch (error: any) {
     console.error('Google OAuth error:', error);
