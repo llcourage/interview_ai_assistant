@@ -799,48 +799,43 @@ async def exchange_oauth_code(request: Request):
             async with httpx.AsyncClient() as client:
                 token_url = f"{supabase_url}/auth/v1/token?grant_type=pkce"
                 
-                # Validate code, code_verifier, and state before sending
+                # Validate code and code_verifier before sending (state is optional for now)
                 if not code or not isinstance(code, str) or not code.strip():
                     raise HTTPException(status_code=400, detail=f"Invalid code: code is empty or not a string (type: {type(code)})")
                 if not code_verifier or not isinstance(code_verifier, str) or not code_verifier.strip():
                     raise HTTPException(status_code=400, detail=f"Invalid code_verifier: code_verifier is empty or not a string (type: {type(code_verifier)})")
-                if not state or not isinstance(state, str) or not state.strip():
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Missing or invalid state parameter. State (flow_state) is required for PKCE flow to identify the OAuth flow state."
-                    )
                 
                 # Strip whitespace to ensure clean values
                 code = code.strip()
                 code_verifier = code_verifier.strip()
-                state = state.strip()
+                # State is kept for logging but not used in token request for now
+                if state:
+                    state = state.strip()
                 
                 print(f"🔐 Token URL: {token_url}")
                 print(f"🔐 Code (after strip): {code[:20]}... (length: {len(code)}, type: {type(code)})")
                 print(f"🔐 Code verifier (after strip): {code_verifier[:20]}... (length: {len(code_verifier)}, type: {type(code_verifier)})")
-                print(f"🔐 State (after strip): {state[:50]}... (length: {len(state)}, type: {type(state)})")
-                print(f"🔐 FULL Code value: {code}")
-                print(f"🔐 FULL Code verifier value: {code_verifier}")
+                if state:
+                    print(f"🔐 State (after strip): {state[:50]}... (length: {len(state)}, type: {type(state)})")
+                print(f"🔐 SUPABASE_URL: {supabase_url[:50]}...")
+                print(f"🔐 SUPABASE_ANON_KEY: {'***' + supabase_anon_key[-10:] if supabase_anon_key else 'NOT SET'}")
                 
                 # Supabase PKCE token exchange requires "auth_code" parameter (not "code")
                 # The grant_type=pkce endpoint expects "auth_code" in the JSON body
-                # CRITICAL: Must also include auth_flow_state (the state JWT) so Supabase can find the flow
+                # Start with minimal required fields: auth_code and code_verifier only
+                # auth_flow_type and auth_flow_state may not be needed and could cause issues
                 token_data = {
                     "auth_code": code,  # Supabase PKCE endpoint expects "auth_code" key
-                    "code_verifier": code_verifier,
-                    "auth_flow_type": "pkce",
-                    "auth_flow_state": state  # Required: Supabase needs this to find the flow state
+                    "code_verifier": code_verifier
+                    # Removed auth_flow_type and auth_flow_state - test with minimal fields first
                 }
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
                 print(f"🔐 Request body (full JSON): {json.dumps(token_data, indent=2)}")
-                # Preview with truncated values (state is long, so show first 50 chars)
+                # Preview with truncated values
                 preview_data = {}
                 for k, v in token_data.items():
                     if isinstance(v, str):
-                        if k == "auth_flow_state":
-                            preview_data[k] = v[:50] + "..." if len(v) > 50 else v
-                        else:
-                            preview_data[k] = v[:20] + "..." if len(v) > 20 else v
+                        preview_data[k] = v[:20] + "..." if len(v) > 20 else v
                     else:
                         preview_data[k] = v
                 print(f"🔐 Request body preview: {json.dumps(preview_data)}")
@@ -851,13 +846,19 @@ async def exchange_oauth_code(request: Request):
                 print(f"🔐 Request body JSON (that will be sent): {request_body_json}")
                 print(f"🔐 Request body JSON length: {len(request_body_json)}")
                 
+                # CRITICAL: Include both apikey and Authorization headers (matching Supabase SDK behavior)
+                # This ensures Supabase can properly identify the request and find the flow state
+                request_headers = {
+                    "apikey": supabase_anon_key,
+                    "Authorization": f"Bearer {supabase_anon_key}",  # Required: matches Supabase SDK behavior
+                    "Content-Type": "application/json"
+                }
+                print(f"🔐 Request headers (sanitized): apikey={'***' + supabase_anon_key[-10:] if supabase_anon_key else 'NOT SET'}, Authorization=Bearer ***{supabase_anon_key[-10:] if supabase_anon_key else 'NOT SET'}, Content-Type=application/json")
+                
                 token_response = await client.post(
                     token_url,
                     json=token_data,
-                    headers={
-                        "apikey": supabase_anon_key,
-                        "Content-Type": "application/json"
-                    },
+                    headers=request_headers,
                     timeout=30.0
                 )
                 print(f"🔐 Supabase REST API response status: {token_response.status_code}")
