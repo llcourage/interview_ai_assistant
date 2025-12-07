@@ -356,27 +356,40 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
     if is_desktop:
         import httpx
         vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        print(f"🔐 桌面版：转发 Google OAuth URL 请求到 Vercel: {vercel_api_url}")
         async with httpx.AsyncClient() as http_client:
             try:
                 params = {}
                 if redirect_to:
                     params["redirect_to"] = redirect_to
+                url = f"{vercel_api_url}/api/auth/google/url"
+                print(f"🔐 请求 URL: {url}, 参数: {params}")
                 response = await http_client.get(
-                    f"{vercel_api_url}/api/auth/google/url",
+                    url,
                     params=params,
                     timeout=30.0
                 )
+                print(f"🔐 Vercel 响应状态: {response.status_code}")
                 response.raise_for_status()
                 data = response.json()
+                print(f"🔐 Vercel 返回数据: {data}")
                 # 验证返回的数据格式
                 if not isinstance(data, dict) or 'url' not in data:
+                    print(f"❌ Vercel 返回格式错误: {data}")
                     raise HTTPException(
                         status_code=502, 
                         detail=f"云端 API 返回格式错误: {data}"
                     )
+                print(f"✅ 成功从 Vercel 获取 OAuth URL")
                 return data
             except httpx.HTTPError as e:
+                print(f"❌ 无法连接到云端 API: {e}")
                 raise HTTPException(status_code=502, detail=f"无法连接到云端 API: {str(e)}")
+            except Exception as e:
+                print(f"❌ 转发到 Vercel 时出错: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(status_code=502, detail=f"转发到云端 API 时出错: {str(e)}")
     
     # 非桌面版：正常处理
     # 如果没有提供 redirect_to，使用请求来源
