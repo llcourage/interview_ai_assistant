@@ -16,7 +16,6 @@ let mainWindow = null;
 let overlayWindow = null;
 let oauthWindow = null;
 let currentScreenshot = null;
-let currentCodeVerifier = null; // Store code_verifier for current OAuth flow
 
 const isDev = !app.isPackaged;
 
@@ -839,55 +838,6 @@ function httpRequest(url, options = {}) {
   });
 }
 
-// Handle OAuth callback
-function handleOAuthCallback(url, resolve, reject) {
-  try {
-    const urlObj = new URL(url);
-    
-    // Check if it's a callback URL (contains code parameter)
-    if (urlObj.pathname.includes('/auth/callback') || urlObj.searchParams.has('code')) {
-      const code = urlObj.searchParams.get('code');
-      const error = urlObj.searchParams.get('error');
-      
-      if (error) {
-        console.error('🔐 OAuth error:', error);
-        if (oauthWindow && !oauthWindow.isDestroyed()) {
-          oauthWindow.close();
-        }
-        currentCodeVerifier = null; // ✅ Clear code_verifier
-        reject(new Error(`OAuth error: ${error}`));
-        return;
-      }
-      
-      if (code) {
-        const state = urlObj.searchParams.get('state');
-        console.log('🔐 Got OAuth code:', code.substring(0, 20) + '...');
-        if (state) {
-          console.log('🔐 Got OAuth state:', state.substring(0, 20) + '...');
-        }
-        
-        // Close OAuth window
-        if (oauthWindow && !oauthWindow.isDestroyed()) {
-          oauthWindow.close();
-        }
-        
-        // Return code, state, and code_verifier to frontend
-        const codeVerifierToReturn = currentCodeVerifier;
-        currentCodeVerifier = null; // ✅ Clear code_verifier
-        resolve({ 
-          code, 
-          state: state || undefined, 
-          code_verifier: codeVerifierToReturn || undefined,
-          success: true 
-        });
-      }
-    }
-  } catch (error) {
-    console.error('🔐 OAuth callback handling error:', error);
-    // Don't reject, as it might just be intermediate page navigation
-  }
-}
-
 // 🔐 IPC: Google OAuth login
 ipcMain.handle('oauth-google', async () => {
   console.log('🔐 [MAIN] oauth-google handler called');
@@ -936,7 +886,6 @@ ipcMain.handle('oauth-google', async () => {
         console.error('🔐 [MAIN] HTTP request failed:', httpError);
         console.error('🔐 [MAIN] Error details:', httpError.message);
         console.error('🔐 [MAIN] Error stack:', httpError.stack);
-        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`HTTP request failed: ${httpError.message}`));
         return;
       }
@@ -990,28 +939,9 @@ ipcMain.handle('oauth-google', async () => {
       }
       
       const authUrl = data.url;
-      const codeVerifier = data.code_verifier; // Get code_verifier from API response
       
       console.log('🔐 [MAIN] Got OAuth URL, length:', authUrl.length);
-      console.log('🔐 [MAIN] Got code_verifier:', codeVerifier ? 'Yes (length: ' + codeVerifier.length + ')' : 'No');
-      
-      // Store code_verifier in module-level variable for OAuth callback to access
-      // This is more reliable than localStorage, as it doesn't depend on window context
-      currentCodeVerifier = codeVerifier;
-      console.log('🔐 [MAIN] Stored code_verifier in module variable');
-      
-      // Also store in main window's localStorage as backup (via webContents.executeJavaScript)
-      if (codeVerifier && mainWindow && !mainWindow.isDestroyed()) {
-        try {
-          await mainWindow.webContents.executeJavaScript(`
-            localStorage.setItem('oauth_code_verifier', ${JSON.stringify(codeVerifier)});
-            console.log('🔐 [MAIN] Stored code_verifier in main window localStorage');
-          `);
-          console.log('🔐 [MAIN] Successfully stored code_verifier in main window localStorage');
-        } catch (e) {
-          console.error('🔐 [MAIN] Failed to store code_verifier in main window localStorage:', e);
-        }
-      }
+      // No code_verifier needed - backend handles OAuth callback directly
       
       console.log('🔐 [MAIN] Opening Google OAuth window...');
       
@@ -1035,7 +965,6 @@ ipcMain.handle('oauth-google', async () => {
         console.log('🔐 [MAIN] OAuth window created successfully');
       } catch (windowError) {
         console.error('🔐 [MAIN] Failed to create OAuth window:', windowError);
-        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`Failed to create OAuth window: ${windowError.message}`));
         return;
       }
@@ -1049,7 +978,6 @@ ipcMain.handle('oauth-google', async () => {
       // Listen to window errors
       oauthWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
         console.error('🔐 [MAIN] OAuth window failed to load:', errorCode, errorDescription);
-        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`OAuth window failed to load: ${errorDescription}`));
       });
       
@@ -1062,31 +990,8 @@ ipcMain.handle('oauth-google', async () => {
       // Listen for postMessage from OAuth callback page
       console.log('🔐 Setting up postMessage listener for OAuth callback...');
       
-      // Inject script to capture postMessage from callback page
-      oauthWindow.webContents.on('did-finish-load', () => {
-        const currentUrl = oauthWindow.webContents.getURL();
-        console.log('🔐 OAuth window loaded:', currentUrl.substring(0, 100) + '...');
-        
-        if (currentUrl.includes('/api/auth/callback')) {
-          console.log('🔐 Detected callback page, injecting message listener...');
-          // Inject script to forward postMessage to main process
-          oauthWindow.webContents.executeJavaScript(`
-            (function() {
-              window.addEventListener('message', function(event) {
-                console.log('🔐 OAuth callback page received message:', event.data);
-                if (event.data && event.data.type === 'desktop-oauth-success') {
-                  // Forward to Electron main process
-                  if (window.electron && window.electron.send) {
-                    window.electron.send('oauth-desktop-success', event.data);
-                  }
-                }
-              });
-            })();
-          `).catch(err => console.error('Failed to inject message listener:', err));
-        }
-      });
-      
-      // Listen for IPC message from injected script
+      // Listen for IPC message from main window's preload script
+      // Main window receives postMessage from OAuth callback page and forwards via IPC
       ipcMain.once('oauth-desktop-success', (event, data) => {
         console.log('🔐 Received OAuth success from callback page:', {
           hasAccessToken: !!data.access_token,
@@ -1100,7 +1005,6 @@ ipcMain.handle('oauth-google', async () => {
         
         if (data && data.access_token && data.user) {
           console.log('🔐 OAuth success, resolving with token data');
-          currentCodeVerifier = null; // Clear (no longer needed)
           resolve({
             success: true,
             access_token: data.access_token,
@@ -1110,7 +1014,6 @@ ipcMain.handle('oauth-google', async () => {
         } else {
           const errorMsg = 'OAuth callback failed: missing token or user data';
           console.error('🔐 OAuth failed:', errorMsg);
-          currentCodeVerifier = null;
           reject(new Error(errorMsg));
         }
       });
@@ -1120,7 +1023,6 @@ ipcMain.handle('oauth-google', async () => {
         if (oauthWindow && !oauthWindow.isDestroyed()) {
         console.warn('🔐 OAuth timeout: No result received after 5 minutes, closing window');
         oauthWindow.close();
-        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error('OAuth timeout: No response from OAuth callback'));
         }
       }, 5 * 60 * 1000); // 5 minutes timeout
@@ -1165,7 +1067,6 @@ ipcMain.handle('oauth-google', async () => {
             if (oauthWindow && !oauthWindow.isDestroyed()) {
               oauthWindow.close();
             }
-            currentCodeVerifier = null; // ✅ Clear code_verifier
             reject(new Error(`OAuth error: ${error}`));
           }
           // Let all other navigation proceed naturally, especially hash-based callbacks
@@ -1195,66 +1096,21 @@ ipcMain.handle('oauth-google', async () => {
             hasCode
           });
           
-          // Check if it's Supabase callback URL (direct callback from Supabase)
-          const isSupabaseCallback = urlObj.hostname.includes('supabase.co') && 
-                                     urlObj.pathname.includes('/auth/v1/callback') &&
-                                     hasCodeInQuery;
-          
-          // Check if it's frontend callback URL (localhost:5173 with hash route, or www.desktopai.org)
-          const isFrontendCallback = (
+          // NEW ARCHITECTURE: Only listen for backend callback URL
+          // Do NOT intercept Supabase callback - let it redirect to backend /api/auth/callback
+          const isBackendCallback = (
             (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') && 
             urlObj.port === '5173' &&
-            (urlObj.pathname === '/' || urlObj.pathname === '') &&
-            urlObj.hash.includes('/auth/callback')
+            urlObj.pathname === '/api/auth/callback'
           ) || (
             urlObj.hostname === 'www.desktopai.org' &&
-            (urlObj.pathname === '/auth/callback' || urlObj.hash.includes('/auth/callback'))
+            urlObj.pathname === '/api/auth/callback'
           );
           
-          // Handle Supabase direct callback: extract code and resolve immediately
-          if (isSupabaseCallback && hasCodeInQuery) {
-            const code = urlObj.searchParams.get('code');
-            const state = urlObj.searchParams.get('state');
-            console.log('🔐 [MAIN] Detected Supabase direct callback with code, extracting code and state');
-            console.log('🔐 [MAIN] Code length:', code ? code.length : 0);
-            console.log('🔐 [MAIN] State:', state || 'N/A');
-            
-            if (code) {
-              // Close OAuth window
-              if (oauthWindow && !oauthWindow.isDestroyed()) {
-                console.log('🔐 [MAIN] Closing OAuth window');
-                oauthWindow.close();
-              }
-              
-              // Resolve promise with code and state
-              console.log('🔐 [MAIN] Resolving OAuth promise with code');
-              const codeVerifierToReturn = currentCodeVerifier;
-              currentCodeVerifier = null; // ✅ Clear code_verifier
-              resolve({ 
-                code, 
-                state: state || undefined, 
-                code_verifier: codeVerifierToReturn || undefined,
-                success: true 
-              });
-              return;
-            }
-          }
-          
-          // Handle frontend callback URL
-          if (isFrontendCallback && hasCode) {
-            console.log('🔐 did-navigate: Detected frontend callback URL with code');
-      
-            // ⭐ 1. First notify main window to refresh login status
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              console.log('🔐 did-navigate: Sending auth:refresh to main window');
-              mainWindow.webContents.send('auth:refresh');
-            }
-            
-            // ⭐ 2. Close OAuth window (will trigger closed event, which also sends auth:refresh)
-            if (oauthWindow && !oauthWindow.isDestroyed()) {
-              console.log('🔐 did-navigate: Closing OAuth window');
-              oauthWindow.close();
-            }
+          if (isBackendCallback) {
+            console.log('🔐 [MAIN] Detected backend callback URL - waiting for postMessage from callback page');
+            // Don't close window here - let callback page load and send postMessage
+            // The callback page will send postMessage which is handled by the listener above
           }
         } catch (e) {
           // URL parse failed, ignore

@@ -464,10 +464,10 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
     supabase_url = os.getenv("SUPABASE_URL", "")
     supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
     
-    # result is now a dict with "url" and "code_verifier"
+    # NEW ARCHITECTURE: Only return URL, no code_verifier needed
+    # Backend callback handles OAuth exchange with service key
     return {
         "url": result.get("url") if isinstance(result, dict) else result,
-        "code_verifier": result.get("code_verifier") if isinstance(result, dict) else None,
         "supabase_url": supabase_url,
         "supabase_anon_key": supabase_anon_key
     }

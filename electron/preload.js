@@ -184,5 +184,19 @@ if (window.location.hash.includes('auth/callback') || window.location.search.inc
   });
 }
 
+// Listen for postMessage from OAuth callback page (in OAuth window)
+// When OAuth callback page sends window.opener.postMessage(), this main window receives it
+window.addEventListener('message', (event) => {
+  // Only accept messages from our OAuth callback
+  if (event.data && event.data.type === 'desktop-oauth-success') {
+    console.log('[preload] Received OAuth success message from callback page:', {
+      hasAccessToken: !!event.data.access_token,
+      hasUser: !!event.data.user
+    });
+    // Forward to main process via IPC
+    ipcRenderer.send('oauth-desktop-success', event.data);
+  }
+});
+
 console.log('Preload script loaded');
 

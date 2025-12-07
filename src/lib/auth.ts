@@ -355,7 +355,7 @@ export const loginWithGoogle = async (): Promise<void> => {
         error: result.error 
       });
       
-      // NEW ARCHITECTURE: Result now contains token data directly from backend callback
+      // NEW ARCHITECTURE: Result contains token data directly from backend callback via postMessage
       if (result.success && result.access_token && result.user) {
         console.log('🔐 Electron: Received token data from OAuth callback');
         
@@ -388,25 +388,6 @@ export const loginWithGoogle = async (): Promise<void> => {
         
         // Redirect to main page
         console.log('🔐 Electron: Redirecting to main page');
-        window.location.href = '/';
-        return;
-      } else if (result.success && result.code) {
-        // LEGACY: Old flow with code/state (should not happen with new architecture)
-        console.warn('⚠️ Electron: Received legacy code/state format - this should not happen with new architecture');
-        console.warn('⚠️ Consider updating OAuth flow to use backend callback endpoint');
-        
-        // Fallback to old flow for backward compatibility
-        const token = await handleOAuthCallback(result.code, result.state, result.code_verifier);
-        console.log('🔐 Electron: OAuth callback processed (legacy flow), token saved:', !!token);
-        
-        const savedToken = getToken();
-        if (savedToken) {
-          console.log('✅ Electron: Token saved, user:', savedToken.user?.email);
-        } else {
-          console.error('❌ Electron: Token save failed!');
-        }
-        
-        window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         window.location.href = '/';
         return;
       } else {
@@ -513,102 +494,12 @@ export const handleOAuthCallback = async (code: string, state?: string, codeVeri
   const isElectronEnv = typeof window !== 'undefined' && (window as any).aiShot !== undefined;
   
   if (isElectronEnv) {
-    // Electron 环境：通过后端 API 处理 OAuth 回调，不直接连接 Supabase
-    console.log('🔐 Electron 环境：通过后端 API 处理 OAuth 回调');
-    
-    try {
-      // 调用后端 API 交换 OAuth code
-      const exchangeUrl = `${API_BASE_URL}/api/auth/exchange-code`;
-      // Get code_verifier from parameter (preferred) or localStorage (fallback)
-      // ✅ Cache localStorage result to avoid repeated get operations
-      const cachedLocalStorageVerifier = codeVerifier ? null : localStorage.getItem('oauth_code_verifier');
-      const finalCodeVerifier = codeVerifier || cachedLocalStorageVerifier;
-      console.log('🔐 Electron OAuth: code_verifier source:', codeVerifier ? 'parameter' : (cachedLocalStorageVerifier ? 'localStorage' : 'not found'));
-      console.log('🔐 Electron OAuth: code_verifier:', finalCodeVerifier ? `Found (length: ${finalCodeVerifier.length})` : 'Not found');
-      
-      // Debug: Check all localStorage keys (only if needed)
-      if (!finalCodeVerifier) {
-        const allKeys = Object.keys(localStorage);
-        console.log('🔐 Electron OAuth: localStorage keys:', allKeys);
-        console.log('🔐 Electron OAuth: localStorage has oauth_code_verifier:', allKeys.includes('oauth_code_verifier'));
-      }
-      
-      if (!finalCodeVerifier) {
-        console.error('❌ Electron OAuth: code_verifier is missing!');
-        console.error('❌ This will cause OAuth exchange to fail. Ensure code_verifier is passed from OAuth result or stored in localStorage.');
-      }
-      
-      const requestBody = {
-        code: code,
-        state: state,
-        code_verifier: finalCodeVerifier || undefined
-      };
-      console.log('🔐 Electron OAuth: 调用 exchange-code 端点:');
-      console.log('   - URL:', exchangeUrl);
-      console.log('   - Method: POST');
-      console.log('   - Code length:', code?.length);
-      console.log('   - State length:', state?.length);
-      console.log('   - Code verifier length:', finalCodeVerifier?.length || 0);
-      console.log('   - Request body (without sensitive data):', {
-        code: code ? code.substring(0, 20) + '...' : null,
-        state: state ? state.substring(0, 20) + '...' : null,
-        hasCodeVerifier: !!codeVerifier,
-        codeVerifierLength: codeVerifier?.length || 0
-      });
-      
-      const response = await fetch(exchangeUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        credentials: 'include', // 携带 Cookie
-      });
-      
-      console.log('🔐 Electron OAuth: exchange-code 响应:');
-      console.log('   - Status:', response.status, response.statusText);
-      console.log('   - OK:', response.ok);
-      console.log('   - URL:', response.url);
-      
-      if (!response.ok) {
-        let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
-        try {
-          const error = await response.json();
-          errorDetail = error.detail || error.error || error.message || JSON.stringify(error) || errorDetail;
-          console.error('🔐 Electron OAuth: API 错误响应:');
-          console.error('   - Status:', response.status, response.statusText);
-          console.error('   - Error object:', error);
-          console.error('   - Error JSON:', JSON.stringify(error, null, 2));
-        } catch (e) {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          console.error('🔐 Electron OAuth: API 错误响应 (非 JSON):', {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText.substring(0, 500),
-            parseError: e
-          });
-          errorDetail = errorText || errorDetail;
-        }
-        throw new Error(errorDetail);
-      }
-      
-      const token: AuthToken = await response.json();
-      console.log('🔐 Electron OAuth: 收到 token，保存到 localStorage');
-      saveToken(token);
-      
-      // 验证 token 是否已保存
-      const savedToken = getToken();
-      if (savedToken) {
-        console.log('✅ Electron OAuth: Token 已保存到 localStorage，用户:', token.user?.email);
-      } else {
-        console.error('❌ Electron OAuth: Token 保存失败！');
-      }
-      
-      return token;
-    } catch (error: any) {
-      console.error('❌ Electron OAuth 回调失败:', error);
-      throw new Error(error.message || 'Failed to exchange OAuth code through backend API');
-    }
+    // NEW ARCHITECTURE: Electron OAuth is now handled entirely via backend callback
+    // Token is received through postMessage from /api/auth/callback page
+    // This function should not be called in Electron environment anymore
+    console.error('❌ handleOAuthCallback called in Electron environment - this should not happen');
+    console.error('❌ Electron OAuth flow should receive token via postMessage from backend callback page');
+    throw new Error('Electron OAuth callback handling has been moved to backend callback endpoint. This function is deprecated for Electron.');
   } else {
     // Web 环境：使用前端 Supabase 客户端直接处理
     console.log('🔐 Web 环境：使用 Supabase JS SDK 处理 OAuth 回调');
