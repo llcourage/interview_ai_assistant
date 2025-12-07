@@ -770,10 +770,10 @@ async def exchange_oauth_code(request: Request):
                 print(f"🔐 FULL Code value: {code}")
                 print(f"🔐 FULL Code verifier value: {code_verifier}")
                 
-                # Supabase PKCE token exchange requires "code" parameter (not "auth_code")
-                # Based on Supabase GoTrue API documentation
+                # Supabase PKCE token exchange - try "auth_code" parameter
+                # Error message says "both auth code and code verifier", suggesting "auth_code" parameter
                 token_data = {
-                    "code": code,
+                    "auth_code": code,  # Supabase error message mentions "auth code", so try "auth_code"
                     "code_verifier": code_verifier
                 }
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
