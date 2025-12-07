@@ -16,7 +16,7 @@ def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(data, dict):
         data = data.copy()  # 创建副本，避免修改原始数据
         if data.get('plan') == 'starter':
-        data['plan'] = 'normal'
+            data['plan'] = 'normal'
         # 兼容旧数据库列名：将 monthly_tokens_used 映射到 weekly_tokens_used
         if 'monthly_tokens_used' in data and 'weekly_tokens_used' not in data:
             data['weekly_tokens_used'] = data['monthly_tokens_used']
