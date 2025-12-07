@@ -980,8 +980,25 @@ ipcMain.handle('oauth-google', async () => {
       }
       
       const authUrl = data.url;
+      const codeVerifier = data.code_verifier; // Get code_verifier from API response
       
       console.log('🔐 [MAIN] Got OAuth URL, length:', authUrl.length);
+      console.log('🔐 [MAIN] Got code_verifier:', codeVerifier ? 'Yes (length: ' + codeVerifier.length + ')' : 'No');
+      
+      // Store code_verifier in main window's localStorage (via webContents.executeJavaScript)
+      // This allows frontend to access it when exchanging code
+      if (codeVerifier && mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          await mainWindow.webContents.executeJavaScript(`
+            localStorage.setItem('oauth_code_verifier', ${JSON.stringify(codeVerifier)});
+            console.log('🔐 [MAIN] Stored code_verifier in main window localStorage');
+          `);
+          console.log('🔐 [MAIN] Successfully stored code_verifier in main window');
+        } catch (e) {
+          console.error('🔐 [MAIN] Failed to store code_verifier in main window:', e);
+        }
+      }
+      
       console.log('🔐 [MAIN] Opening Google OAuth window...');
       
       // Create OAuth window

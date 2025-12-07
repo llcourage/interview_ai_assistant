@@ -458,14 +458,16 @@ async def get_google_oauth_url_endpoint(redirect_to: Optional[str] = None, http_
         if redirect_to:
             redirect_to = require_clean_url("redirect_to from request", redirect_to)
     
-    url = await get_google_oauth_url(redirect_to)
+    result = await get_google_oauth_url(redirect_to)
     
     # Also return Supabase configuration for frontend OAuth callback use
     supabase_url = os.getenv("SUPABASE_URL", "")
     supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
     
+    # result is now a dict with "url" and "code_verifier"
     return {
-        "url": url,
+        "url": result.get("url") if isinstance(result, dict) else result,
+        "code_verifier": result.get("code_verifier") if isinstance(result, dict) else None,
         "supabase_url": supabase_url,
         "supabase_anon_key": supabase_anon_key
     }

@@ -487,9 +487,14 @@ export const handleOAuthCallback = async (code: string, state?: string): Promise
     try {
       // 调用后端 API 交换 OAuth code
       const exchangeUrl = `${API_BASE_URL}/api/auth/exchange-code`;
+      // Get code_verifier from localStorage (saved when OAuth URL was generated)
+      const codeVerifier = localStorage.getItem('oauth_code_verifier');
+      console.log('🔐 Electron OAuth: code_verifier from localStorage:', codeVerifier ? 'Found' : 'Not found');
+      
       const requestBody = {
         code: code,
-        state: state
+        state: state,
+        code_verifier: codeVerifier || undefined
       };
       console.log('🔐 Electron OAuth: 调用 exchange-code 端点:');
       console.log('   - URL:', exchangeUrl);

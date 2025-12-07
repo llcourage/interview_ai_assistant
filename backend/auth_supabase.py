@@ -198,7 +198,7 @@ def require_clean_url(name: str, s: str | None) -> str:
         raise ValueError(f"{name} contains whitespace: {repr(s)}")
     return v
 
-async def get_google_oauth_url(redirect_to: str = None) -> str:
+async def get_google_oauth_url(redirect_to: str = None) -> dict:
     """Get Google OAuth authorization URL"""
     try:
         # For OAuth, we need to use ANON_KEY instead of SERVICE_ROLE_KEY
@@ -275,17 +275,38 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
             # If redirect_to doesn't include /auth/callback, add it
             callback_url = f"{redirect_to}/auth/callback" if not redirect_to.endswith("/") else f"{redirect_to}auth/callback"
         
+        # Generate PKCE parameters manually for Electron environment
+        # Electron needs code_verifier to exchange code for session
+        import secrets
+        import base64
+        import hashlib
+        
+        # Generate code_verifier (43-128 characters, URL-safe base64)
+        code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+        
+        # Generate code_challenge (SHA256 hash of code_verifier)
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode('utf-8')).digest()
+        ).decode('utf-8').rstrip('=')
+        
+        print(f"🔐 Generated PKCE parameters:")
+        print(f"   - code_verifier length: {len(code_verifier)}")
+        print(f"   - code_challenge length: {len(code_challenge)}")
+        
         # Get Google OAuth URL
-        # Note: Supabase Python SDK uses PKCE by default
-        # Since callback will be handled by frontend (using Supabase JS SDK), PKCE will be handled correctly
-        # Frontend will get code_verifier from browser storage
+        # Note: We need to manually add PKCE parameters to the OAuth URL
+        # because Supabase Python SDK doesn't return code_verifier
         print(f"🔐 Preparing to call Supabase OAuth, provider: google, redirect_to: {callback_url}")
         try:
-            # Call Supabase OAuth API
+            # Call Supabase OAuth API (this will generate its own PKCE, but we'll override)
             response = supabase.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
-                    "redirect_to": callback_url
+                    "redirect_to": callback_url,
+                    "query_params": {
+                        "code_challenge": code_challenge,
+                        "code_challenge_method": "S256"
+                    }
                 }
             })
             
@@ -361,8 +382,33 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
                     detail=error_detail
                 )
             
-            print(f"✅ Successfully got Google OAuth URL: {url[:100]}...")
-            return url
+            # Ensure the URL contains our code_challenge (in case Supabase SDK overrides it)
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+            parsed = urlparse(url)
+            query_params = parse_qs(parsed.query)
+            
+            # Add/override PKCE parameters
+            query_params['code_challenge'] = [code_challenge]
+            query_params['code_challenge_method'] = ['S256']
+            
+            # Rebuild URL with PKCE parameters
+            new_query = urlencode(query_params, doseq=True)
+            final_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+            
+            print(f"✅ Successfully got Google OAuth URL with PKCE: {final_url[:100]}...")
+            
+            # Return both URL and code_verifier for Electron to use
+            return {
+                "url": final_url,
+                "code_verifier": code_verifier
+            }
         except HTTPException:
             # Re-raise HTTP exceptions
             raise
