@@ -310,16 +310,28 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
             
             # Call Supabase REST API /auth/v1/authorize endpoint
             # This will create flow state on Supabase server with our code_challenge
+            # According to Supabase GoTrue API docs, we need:
+            # - response_type=code (for OAuth code flow)
+            # - provider=google (OAuth provider)
+            # - redirect_uri (where to redirect after OAuth, Supabase's callback URL)
+            # - redirect_to (where Supabase should redirect after processing, our callback URL)
+            # - code_challenge and code_challenge_method (for PKCE)
             authorize_url = f"{supabase_url}/auth/v1/authorize"
+            
+            # Get Supabase's callback URL (where OAuth provider redirects to)
+            supabase_callback_url = f"{supabase_url}/auth/v1/callback"
+            
             authorize_params = {
+                "response_type": "code",
                 "provider": "google",
-                "redirect_to": callback_url,
+                "redirect_uri": supabase_callback_url,  # Where OAuth provider redirects to
+                "redirect_to": callback_url,  # Where Supabase redirects to after processing
                 "code_challenge": code_challenge,
                 "code_challenge_method": "S256"
             }
             
             print(f"🔐 Calling: {authorize_url}")
-            print(f"🔐 Params: provider=google, redirect_to={callback_url[:50]}..., code_challenge={code_challenge[:20]}...")
+            print(f"🔐 Params: response_type=code, provider=google, redirect_uri={supabase_callback_url[:50]}..., redirect_to={callback_url[:50]}..., code_challenge={code_challenge[:20]}...")
             
             # Make GET request - Supabase will create flow state and return redirect URL
             async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
