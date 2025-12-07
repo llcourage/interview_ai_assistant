@@ -770,10 +770,10 @@ async def exchange_oauth_code(request: Request):
                 print(f"🔐 FULL Code value: {code}")
                 print(f"🔐 FULL Code verifier value: {code_verifier}")
                 
-                # Supabase PKCE token exchange - try "auth_code" parameter
-                # Error message says "both auth code and code verifier", suggesting "auth_code" parameter
+                # Supabase PKCE token exchange requires "auth_code" parameter (not "code")
+                # The grant_type=pkce endpoint expects "auth_code" in the JSON body
                 token_data = {
-                    "auth_code": code,  # Supabase error message mentions "auth code", so try "auth_code"
+                    "auth_code": code,  # Supabase PKCE endpoint expects "auth_code" key
                     "code_verifier": code_verifier
                 }
                 print(f"🔐 Token data keys: {list(token_data.keys())}")
