@@ -384,12 +384,8 @@ export const loginWithGoogle = async (): Promise<void> => {
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         console.log('🔐 Electron: Triggered auth-state-changed event (from IPC)');
         
-        // Force reload to ensure AppRouter re-checks auth status and navigates correctly
-        // This simulates "closing and reopening the app" behavior
-        console.log('🔐 Electron: Reloading page to refresh auth state (from IPC)');
-        setTimeout(() => {
-          window.location.reload();
-        }, 50);
+        // Note: Navigation should be handled by the calling component (e.g., Login.tsx)
+        // Do not reload here, let React Router handle navigation
       };
       
       // Register IPC listener
@@ -438,12 +434,8 @@ export const loginWithGoogle = async (): Promise<void> => {
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         console.log('🔐 Electron: Triggered auth-state-changed event (from promise)');
         
-        // Force reload to ensure AppRouter re-checks auth status and navigates correctly
-        // This simulates "closing and reopening the app" behavior
-        console.log('🔐 Electron: Reloading page to refresh auth state (from promise)');
-        setTimeout(() => {
-          window.location.reload();
-        }, 50);
+        // Note: Navigation should be handled by the calling component (e.g., Login.tsx)
+        // Do not reload here, let React Router handle navigation
         return;
       } else if (!result.success && !ipcTokenReceived) {
         const errorMsg = result.error || 'Failed to get OAuth token from Electron';

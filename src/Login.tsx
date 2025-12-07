@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { register, login, loginWithGoogle } from './lib/auth';
+import { register, login, loginWithGoogle, isAuthenticated } from './lib/auth';
 import { isElectron } from './utils/isElectron';
 import './Login.css';
 
@@ -21,6 +21,18 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+
+  // Check if already authenticated, redirect to home
+  useEffect(() => {
+    const checkAuth = async () => {
+      const authenticated = await isAuthenticated();
+      if (authenticated) {
+        console.log('🔒 Login: Already authenticated, redirecting to home');
+        navigate('/', { replace: true });
+      }
+    };
+    checkAuth();
+  }, [navigate]);
 
   // Check URL parameters
   useEffect(() => {
@@ -117,17 +129,70 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setError('');
     setLoading(true);
     try {
-      await loginWithGoogle();
-      // Electron: 在 OAuth 窗口关闭后会自动处理
-      // Web: 用户将被重定向到 Google 授权页面
-      
-      // 对于 Electron，等待一下让 OAuth 流程完成
+      // For Electron: set up event listener before calling loginWithGoogle
+      // because token might be saved via IPC event (async)
       if (isElectron()) {
-        // Electron 环境下的处理在 auth.ts 中已包含
-        // 这里只需要等待一下
-        setTimeout(() => {
-          setLoading(false);
-        }, 1000);
+        let authStateChanged = false;
+        const handleAuthStateChange = async () => {
+          if (authStateChanged) return; // Only handle once
+          authStateChanged = true;
+          
+          // Wait a bit for token to be fully saved
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          const authenticated = await isAuthenticated();
+          if (authenticated) {
+            console.log('✅ Login: Google login successful, navigating to home');
+            navigate('/', { replace: true });
+            setLoading(false);
+            window.removeEventListener('auth-state-changed', handleAuthStateChange);
+          } else {
+            console.warn('⚠️ Login: Auth state changed but not authenticated');
+            setLoading(false);
+            window.removeEventListener('auth-state-changed', handleAuthStateChange);
+          }
+        };
+        
+        // Listen for auth state change event
+        window.addEventListener('auth-state-changed', handleAuthStateChange);
+        
+        // Set timeout fallback (5 seconds)
+        const timeout = setTimeout(() => {
+          if (!authStateChanged) {
+            console.warn('⚠️ Login: Timeout waiting for auth state change');
+            window.removeEventListener('auth-state-changed', handleAuthStateChange);
+            // Try to check auth status anyway
+            isAuthenticated().then(authenticated => {
+              if (authenticated) {
+                navigate('/', { replace: true });
+              }
+              setLoading(false);
+            });
+          }
+        }, 5000);
+        
+        // Call loginWithGoogle
+        await loginWithGoogle();
+        
+        // If loginWithGoogle resolved immediately (promise path), check auth status
+        // The event listener will handle IPC event path
+        setTimeout(async () => {
+          if (!authStateChanged) {
+            const authenticated = await isAuthenticated();
+            if (authenticated) {
+              authStateChanged = true;
+              clearTimeout(timeout);
+              window.removeEventListener('auth-state-changed', handleAuthStateChange);
+              console.log('✅ Login: Google login successful (promise path), navigating to home');
+              navigate('/', { replace: true });
+              setLoading(false);
+            }
+          }
+        }, 500);
+      } else {
+        // Web: user will be redirected to Google OAuth page
+        await loginWithGoogle();
+        // The redirect will happen in auth.ts, so we don't need to do anything here
       }
     } catch (err: any) {
       console.error('Google login error:', err);
