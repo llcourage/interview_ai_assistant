@@ -707,47 +707,65 @@ async def exchange_oauth_code(request: Request):
     # Non-desktop version: normal processing
     try:
         body = await request.json()
+        print(f"🔐 /api/auth/exchange-code: Received request body keys: {list(body.keys())}")
+        print(f"🔐 /api/auth/exchange-code: Full request body (sanitized): {json.dumps({k: (v[:20] + '...' if isinstance(v, str) and len(v) > 20 else ('***' if k == 'code_verifier' and v else v)) for k, v in body.items()}, indent=2)}")
+        
         code = body.get("code")
-        state = body.get("state")  # Get state to extract flow_state_id
-        code_verifier = body.get("code_verifier")  # Optional, for PKCE
+        state = body.get("state")  # Get state for flow_state_id (fallback only)
+        code_verifier = body.get("code_verifier")  # REQUIRED for PKCE flow
         
-        print(f"🔐 /api/auth/exchange-code: Processing code exchange (code length: {len(code) if code else 0})")
-        print(f"🔐 /api/auth/exchange-code: code_verifier received: {'Yes (length: ' + str(len(code_verifier)) + ')' if code_verifier else 'No'}")
-        print(f"🔐 /api/auth/exchange-code: Request body keys: {list(body.keys())}")
+        # Validate code
+        if not code or not isinstance(code, str) or not code.strip():
+            raise HTTPException(status_code=400, detail="Missing or invalid code parameter")
         
-        if not code:
-            raise HTTPException(status_code=400, detail="Missing code parameter")
+        # PRIORITY 1: Use code_verifier from request body (preferred - stateless approach)
+        # This works in Vercel/serverless environments where memory storage doesn't persist
+        # ✅ If code_verifier exists, use it directly without accessing flow_state dictionary
+        if code_verifier and isinstance(code_verifier, str) and code_verifier.strip():
+            code_verifier = code_verifier.strip()
+            print(f"✅ /api/auth/exchange-code: Using code_verifier from request body (length: {len(code_verifier)})")
+            print(f"✅ /api/auth/exchange-code: Skipping flow_state dictionary lookup (using provided code_verifier)")
+        else:
+            # PRIORITY 2: Fallback to memory storage (ONLY works in single-process environments)
+            # Note: This will fail in Vercel/serverless as different requests may hit different instances
+            # Only attempt this if code_verifier is truly missing
+            print(f"⚠️ /api/auth/exchange-code: code_verifier not found in request body, attempting fallback...")
+            if state:
+                print(f"⚠️ /api/auth/exchange-code: Attempting fallback to memory storage (may fail in serverless)...")
+                try:
+                    # Decode state JWT to get flow_state_id
+                    import base64
+                    parts = state.split('.')
+                    if len(parts) >= 2:
+                        # Decode payload (second part)
+                        payload_b64 = parts[1]
+                        # Add padding if needed
+                        payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+                        payload = json.loads(payload_bytes)
+                        flow_state_id = payload.get('flow_state_id')
+                        if flow_state_id:
+                            from backend.auth_supabase import _pkce_storage
+                            stored_verifier = _pkce_storage.get(flow_state_id)
+                            if stored_verifier:
+                                code_verifier = stored_verifier
+                                print(f"✅ Retrieved code_verifier from memory storage using flow_state_id: {flow_state_id[:20]}...")
+                            else:
+                                print(f"❌ No code_verifier found in memory storage for flow_state_id: {flow_state_id[:20]}...")
+                                print(f"❌ This is expected in Vercel/serverless environments where requests may hit different instances")
+                except Exception as e:
+                    print(f"⚠️ Failed to extract flow_state_id from state: {e}")
         
-        # If code_verifier not provided, try to retrieve from storage using flow_state_id
-        if not code_verifier and state:
-            try:
-                # Decode state JWT to get flow_state_id
-                # Supabase state JWT format: base64url(header).base64url(payload).signature
-                import base64
-                parts = state.split('.')
-                if len(parts) >= 2:
-                    # Decode payload (second part)
-                    payload_b64 = parts[1]
-                    # Add padding if needed
-                    payload_b64 += '=' * (4 - len(payload_b64) % 4)
-                    payload_bytes = base64.urlsafe_b64decode(payload_b64)
-                    payload = json.loads(payload_bytes)
-                    flow_state_id = payload.get('flow_state_id')
-                    if flow_state_id:
-                        from backend.auth_supabase import _pkce_storage
-                        stored_verifier = _pkce_storage.get(flow_state_id)
-                        if stored_verifier:
-                            code_verifier = stored_verifier
-                            print(f"🔐 Retrieved code_verifier from storage using flow_state_id: {flow_state_id[:20]}...")
-                        else:
-                            print(f"⚠️ No code_verifier found in storage for flow_state_id: {flow_state_id[:20]}...")
-            except Exception as e:
-                print(f"⚠️ Failed to extract flow_state_id from state: {e}")
-        
-        if not code_verifier:
-            print(f"⚠️ /api/auth/exchange-code: WARNING - code_verifier is missing!")
-            print(f"⚠️ /api/auth/exchange-code: This will fail if OAuth URL was generated with PKCE.")
-            print(f"⚠️ /api/auth/exchange-code: Request body: {json.dumps({k: ('***' if k == 'code_verifier' and v else (v[:20] + '...' if isinstance(v, str) and len(v) > 20 else v)) for k, v in body.items()}, indent=2)}")
+        # Final validation: code_verifier is REQUIRED for PKCE flow
+        if not code_verifier or not isinstance(code_verifier, str) or not code_verifier.strip():
+            error_detail = {
+                "code": "code_verifier_missing",
+                "msg": "code_verifier is required for PKCE OAuth flow. Please ensure the client sends code_verifier in the request body.",
+                "hint": "In Electron environment, code_verifier should be retrieved from localStorage and included in the exchange-code request."
+            }
+            print(f"❌ /api/auth/exchange-code: ERROR - code_verifier is missing or invalid!")
+            print(f"❌ Error detail: {json.dumps(error_detail, indent=2)}")
+            raise HTTPException(status_code=400, detail=error_detail)
         
         # Use Supabase Python SDK to exchange code for session
         # Note: OAuth exchange should use ANON_KEY, not SERVICE_ROLE_KEY

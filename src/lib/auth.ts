@@ -368,8 +368,9 @@ export const loginWithGoogle = async (): Promise<void> => {
           console.error('❌ Electron: code_verifier is missing from both result and localStorage!');
         }
         
-        // 使用 code 和 state 交换 token（通过后端 API）
-        const token = await handleOAuthCallback(result.code, result.state);
+        // Exchange token using code, state, and code_verifier (via backend API)
+        // ✅ Key: Pass result.code_verifier directly to ensure the value from main process is used
+        const token = await handleOAuthCallback(result.code, result.state, result.code_verifier);
         console.log('🔐 Electron: OAuth callback 处理完成，token saved:', !!token);
         
         // 验证 token 是否已保存
@@ -487,7 +488,7 @@ export const loginWithGoogle = async (): Promise<void> => {
  * Electron 环境：通过后端 API 处理，不直接连接 Supabase
  * Web 环境：使用前端 Supabase 客户端直接处理，避免 PKCE code_verifier 问题
  */
-export const handleOAuthCallback = async (code: string, state?: string): Promise<AuthToken> => {
+export const handleOAuthCallback = async (code: string, state?: string, codeVerifier?: string): Promise<AuthToken> => {
   // 检查是否是 Electron 环境
   const isElectronEnv = typeof window !== 'undefined' && (window as any).aiShot !== undefined;
   
@@ -498,31 +499,36 @@ export const handleOAuthCallback = async (code: string, state?: string): Promise
     try {
       // 调用后端 API 交换 OAuth code
       const exchangeUrl = `${API_BASE_URL}/api/auth/exchange-code`;
-      // Get code_verifier from localStorage (saved when OAuth URL was generated)
-      const codeVerifier = localStorage.getItem('oauth_code_verifier');
-      console.log('🔐 Electron OAuth: code_verifier from localStorage:', codeVerifier ? `Found (length: ${codeVerifier.length})` : 'Not found');
+      // Get code_verifier from parameter (preferred) or localStorage (fallback)
+      // ✅ Cache localStorage result to avoid repeated get operations
+      const cachedLocalStorageVerifier = codeVerifier ? null : localStorage.getItem('oauth_code_verifier');
+      const finalCodeVerifier = codeVerifier || cachedLocalStorageVerifier;
+      console.log('🔐 Electron OAuth: code_verifier source:', codeVerifier ? 'parameter' : (cachedLocalStorageVerifier ? 'localStorage' : 'not found'));
+      console.log('🔐 Electron OAuth: code_verifier:', finalCodeVerifier ? `Found (length: ${finalCodeVerifier.length})` : 'Not found');
       
-      // Debug: Check all localStorage keys
-      const allKeys = Object.keys(localStorage);
-      console.log('🔐 Electron OAuth: localStorage keys:', allKeys);
-      console.log('🔐 Electron OAuth: localStorage has oauth_code_verifier:', allKeys.includes('oauth_code_verifier'));
+      // Debug: Check all localStorage keys (only if needed)
+      if (!finalCodeVerifier) {
+        const allKeys = Object.keys(localStorage);
+        console.log('🔐 Electron OAuth: localStorage keys:', allKeys);
+        console.log('🔐 Electron OAuth: localStorage has oauth_code_verifier:', allKeys.includes('oauth_code_verifier'));
+      }
       
-      if (!codeVerifier) {
-        console.error('❌ Electron OAuth: code_verifier is missing from localStorage!');
-        console.error('❌ This will cause OAuth exchange to fail. Check if code_verifier was saved when OAuth URL was generated.');
+      if (!finalCodeVerifier) {
+        console.error('❌ Electron OAuth: code_verifier is missing!');
+        console.error('❌ This will cause OAuth exchange to fail. Ensure code_verifier is passed from OAuth result or stored in localStorage.');
       }
       
       const requestBody = {
         code: code,
         state: state,
-        code_verifier: codeVerifier || undefined
+        code_verifier: finalCodeVerifier || undefined
       };
       console.log('🔐 Electron OAuth: 调用 exchange-code 端点:');
       console.log('   - URL:', exchangeUrl);
       console.log('   - Method: POST');
       console.log('   - Code length:', code?.length);
       console.log('   - State length:', state?.length);
-      console.log('   - Code verifier length:', codeVerifier?.length || 0);
+      console.log('   - Code verifier length:', finalCodeVerifier?.length || 0);
       console.log('   - Request body (without sensitive data):', {
         code: code ? code.substring(0, 20) + '...' : null,
         state: state ? state.substring(0, 20) + '...' : null,

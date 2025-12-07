@@ -16,6 +16,7 @@ let mainWindow = null;
 let overlayWindow = null;
 let oauthWindow = null;
 let currentScreenshot = null;
+let currentCodeVerifier = null; // Store code_verifier for current OAuth flow
 
 const isDev = !app.isPackaged;
 
@@ -853,6 +854,7 @@ function handleOAuthCallback(url, resolve, reject) {
         if (oauthWindow && !oauthWindow.isDestroyed()) {
           oauthWindow.close();
         }
+        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`OAuth error: ${error}`));
         return;
       }
@@ -869,8 +871,15 @@ function handleOAuthCallback(url, resolve, reject) {
           oauthWindow.close();
         }
         
-        // Return code and state to frontend
-        resolve({ code, state: state || undefined, success: true });
+        // Return code, state, and code_verifier to frontend
+        const codeVerifierToReturn = currentCodeVerifier;
+        currentCodeVerifier = null; // ✅ Clear code_verifier
+        resolve({ 
+          code, 
+          state: state || undefined, 
+          code_verifier: codeVerifierToReturn || undefined,
+          success: true 
+        });
       }
     }
   } catch (error) {
@@ -927,6 +936,7 @@ ipcMain.handle('oauth-google', async () => {
         console.error('🔐 [MAIN] HTTP request failed:', httpError);
         console.error('🔐 [MAIN] Error details:', httpError.message);
         console.error('🔐 [MAIN] Error stack:', httpError.stack);
+        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`HTTP request failed: ${httpError.message}`));
         return;
       }
@@ -985,9 +995,10 @@ ipcMain.handle('oauth-google', async () => {
       console.log('🔐 [MAIN] Got OAuth URL, length:', authUrl.length);
       console.log('🔐 [MAIN] Got code_verifier:', codeVerifier ? 'Yes (length: ' + codeVerifier.length + ')' : 'No');
       
-      // Store code_verifier in a variable that will be returned with the OAuth result
+      // Store code_verifier in module-level variable for OAuth callback to access
       // This is more reliable than localStorage, as it doesn't depend on window context
-      let storedCodeVerifier = codeVerifier;
+      currentCodeVerifier = codeVerifier;
+      console.log('🔐 [MAIN] Stored code_verifier in module variable');
       
       // Also store in main window's localStorage as backup (via webContents.executeJavaScript)
       if (codeVerifier && mainWindow && !mainWindow.isDestroyed()) {
@@ -1024,6 +1035,7 @@ ipcMain.handle('oauth-google', async () => {
         console.log('🔐 [MAIN] OAuth window created successfully');
       } catch (windowError) {
         console.error('🔐 [MAIN] Failed to create OAuth window:', windowError);
+        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`Failed to create OAuth window: ${windowError.message}`));
         return;
       }
@@ -1037,6 +1049,7 @@ ipcMain.handle('oauth-google', async () => {
       // Listen to window errors
       oauthWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
         console.error('🔐 [MAIN] OAuth window failed to load:', errorCode, errorDescription);
+        currentCodeVerifier = null; // ✅ Clear code_verifier
         reject(new Error(`OAuth window failed to load: ${errorDescription}`));
       });
       
@@ -1104,15 +1117,18 @@ ipcMain.handle('oauth-google', async () => {
         }
         if (result.success && result.code) {
           console.log('🔐 OAuth success, resolving with code, state, and code_verifier');
+          const codeVerifierToReturn = currentCodeVerifier;
+          currentCodeVerifier = null; // ✅ Clear code_verifier
           resolve({ 
             code: result.code, 
             state: result.state, 
-            code_verifier: storedCodeVerifier, // Include code_verifier in the response
+            code_verifier: codeVerifierToReturn || undefined, // Include code_verifier in the response
             success: true 
           });
         } else {
           const errorMsg = result.error || 'OAuth failed';
           console.error('🔐 OAuth failed:', errorMsg);
+          currentCodeVerifier = null; // ✅ Clear code_verifier
           reject(new Error(errorMsg));
         }
       });
@@ -1120,9 +1136,10 @@ ipcMain.handle('oauth-google', async () => {
       // Add timeout to prevent hanging forever
       setTimeout(() => {
         if (oauthWindow && !oauthWindow.isDestroyed()) {
-          console.warn('🔐 OAuth timeout: No result received after 5 minutes, closing window');
-          oauthWindow.close();
-          reject(new Error('OAuth timeout: No response from OAuth callback'));
+        console.warn('🔐 OAuth timeout: No result received after 5 minutes, closing window');
+        oauthWindow.close();
+        currentCodeVerifier = null; // ✅ Clear code_verifier
+        reject(new Error('OAuth timeout: No response from OAuth callback'));
         }
       }, 5 * 60 * 1000); // 5 minutes timeout
       
@@ -1166,6 +1183,7 @@ ipcMain.handle('oauth-google', async () => {
             if (oauthWindow && !oauthWindow.isDestroyed()) {
               oauthWindow.close();
             }
+            currentCodeVerifier = null; // ✅ Clear code_verifier
             reject(new Error(`OAuth error: ${error}`));
           }
           // Let all other navigation proceed naturally, especially hash-based callbacks
@@ -1228,7 +1246,14 @@ ipcMain.handle('oauth-google', async () => {
               
               // Resolve promise with code and state
               console.log('🔐 [MAIN] Resolving OAuth promise with code');
-              resolve({ code, state: state || undefined, success: true });
+              const codeVerifierToReturn = currentCodeVerifier;
+              currentCodeVerifier = null; // ✅ Clear code_verifier
+              resolve({ 
+                code, 
+                state: state || undefined, 
+                code_verifier: codeVerifierToReturn || undefined,
+                success: true 
+              });
               return;
             }
           }
@@ -1258,6 +1283,7 @@ ipcMain.handle('oauth-google', async () => {
     } catch (error) {
       console.error('🔐 OAuth error:', error);
       console.error('🔐 Error stack:', error.stack);
+      currentCodeVerifier = null; // ✅ 清除 code_verifier
       reject(new Error(error.message || 'Failed to initiate Google OAuth'));
     }
   });
