@@ -329,12 +329,18 @@ async def get_google_oauth_url(redirect_to: str = None) -> dict:
                 
                 print(f"🔐 Supabase authorize response status: {response.status_code}")
                 print(f"🔐 Supabase authorize response headers: {dict(response.headers)}")
+                print(f"🔐 Supabase authorize response text (first 500 chars): {response.text[:500]}")
                 
                 # Supabase should return a redirect (302) or the OAuth URL
                 if response.status_code == 302:
                     # Extract redirect URL from Location header
                     url = response.headers.get("Location")
                     print(f"🔐 Got redirect URL from Location header: {url[:150] if url else 'None'}...")
+                    # IMPORTANT: When Supabase returns 302, the flow state is initialized
+                    # The Location header contains the OAuth provider URL
+                    # The flow_state_id is embedded in the state parameter of the redirect URL
+                    if url:
+                        print(f"🔐 Flow state should be initialized by Supabase with our code_challenge")
                 elif response.status_code == 200:
                     # Try to extract URL from response body
                     try:
