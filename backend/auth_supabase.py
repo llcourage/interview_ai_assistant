@@ -195,10 +195,20 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
         supabase_url = os.getenv("SUPABASE_URL", "")
         supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
         
+        print(f"🔐 检查 Supabase 配置:")
+        print(f"   SUPABASE_URL: {'已设置' if supabase_url else '未设置'} ({supabase_url[:50] if supabase_url else 'N/A'}...)")
+        print(f"   SUPABASE_ANON_KEY: {'已设置' if supabase_anon_key else '未设置'} ({'***' + supabase_anon_key[-10:] if supabase_anon_key else 'N/A'})")
+        
         if not supabase_url or not supabase_anon_key:
+            error_msg = "Supabase 配置缺失: "
+            if not supabase_url:
+                error_msg += "SUPABASE_URL 未设置; "
+            if not supabase_anon_key:
+                error_msg += "SUPABASE_ANON_KEY 未设置; "
+            print(f"❌ {error_msg}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Supabase 配置缺失: SUPABASE_URL 或 SUPABASE_ANON_KEY 未设置"
+                detail=error_msg.strip()
             )
         
         # 创建使用 ANON_KEY 的 Supabase 客户端（用于 OAuth）
@@ -227,20 +237,62 @@ async def get_google_oauth_url(redirect_to: str = None) -> str:
         # 注意：Supabase Python SDK 默认使用 PKCE
         # 由于回调会在前端处理（使用 Supabase JS SDK），PKCE 会被正确处理
         # 前端会从浏览器存储中获取 code_verifier
-        response = supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {
-                "redirect_to": callback_url
-            }
-        })
-        
-        if not response or not response.url:
+        print(f"🔐 准备调用 Supabase OAuth，provider: google, redirect_to: {callback_url}")
+        try:
+            response = supabase.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": callback_url
+                }
+            })
+            print(f"🔐 Supabase OAuth 响应类型: {type(response)}")
+            print(f"🔐 Supabase OAuth 响应内容: {response}")
+            
+            if not response:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="获取 Google OAuth URL 失败: Supabase 返回空响应"
+                )
+            
+            # Supabase Python SDK 返回的可能是字典或对象
+            url = None
+            if isinstance(response, dict):
+                url = response.get("url") or response.get("data", {}).get("url")
+            elif hasattr(response, "url"):
+                # 如果是对象，直接获取 url 属性
+                url = response.url
+            elif hasattr(response, "data"):
+                # 如果有 data 属性，尝试从 data 中获取
+                data = response.data
+                if isinstance(data, dict):
+                    url = data.get("url")
+                elif hasattr(data, "url"):
+                    url = data.url
+            
+            # 如果还是没有找到，尝试转换为字符串再解析（最后的手段）
+            if not url:
+                response_str = str(response)
+                print(f"🔐 尝试从响应字符串中提取 URL: {response_str[:200]}")
+                # 这里可以添加更多的解析逻辑，但通常不应该到达这里
+            
+            if not url:
+                print(f"❌ Supabase OAuth 响应中没有找到 URL，响应内容: {response}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"获取 Google OAuth URL 失败: Supabase 返回的响应中没有 URL。响应类型: {type(response)}, 响应内容: {str(response)[:200]}"
+                )
+            
+            print(f"✅ 成功获取 Google OAuth URL: {url[:100]}...")
+            return url
+        except Exception as oauth_error:
+            import traceback
+            oauth_trace = traceback.format_exc()
+            print(f"❌ Supabase OAuth 调用异常: {oauth_error}")
+            print(f"详细错误信息:\n{oauth_trace}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="获取 Google OAuth URL 失败: Supabase 返回的响应中没有 URL"
+                detail=f"调用 Supabase OAuth API 失败: {str(oauth_error)}"
             )
-        
-        return response.url
     except HTTPException:
         # 重新抛出 HTTPException
         raise

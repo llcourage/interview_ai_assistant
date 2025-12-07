@@ -1052,7 +1052,7 @@ ipcMain.handle('oauth-google', async () => {
               `).catch(err => {
                 console.error('🔐 执行 JavaScript 失败:', err);
                 // 降级：直接使用 handleOAuthCallback
-                handleOAuthCallback(url, resolve, reject);
+        handleOAuthCallback(url, resolve, reject);
               });
             } else if (error) {
               console.error('🔐 OAuth 错误:', error);
@@ -1098,7 +1098,7 @@ ipcMain.handle('oauth-google', async () => {
           if (isFrontendCallback && hasCode) {
             const code = urlObj.searchParams.get('code');
             console.log('🔐 did-navigate: 检测到前端回调 URL，code:', code?.substring(0, 20) + '...');
-            
+      
             // ⭐ 1. 先通知主窗口刷新登录状态
             if (mainWindow && !mainWindow.isDestroyed()) {
               console.log('🔐 did-navigate: 向主窗口发送 auth:refresh');

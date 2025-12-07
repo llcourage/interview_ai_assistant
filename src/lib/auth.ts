@@ -147,7 +147,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
     });
 
     console.log('🌐 getCurrentUser: 响应状态:', response.status, response.statusText);
-    
+
     if (!response.ok) {
       console.error('🔒 getCurrentUser: API error', response.status, response.statusText);
       // Token 可能已过期
@@ -179,9 +179,9 @@ export const isAuthenticated = async (): Promise<boolean> => {
   const token = getToken();
   if (token) {
     console.log('🔑 isAuthenticated: 找到 token，验证 token 有效性');
-    try {
-      const user = await getCurrentUser();
-      const authenticated = user !== null;
+  try {
+    const user = await getCurrentUser();
+    const authenticated = user !== null;
       console.log('🔑 isAuthenticated: Token 验证完成，结果:', authenticated, user ? `用户: ${user.email}` : '无用户');
       return authenticated;
     } catch (error) {
@@ -242,8 +242,30 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
   const response = await fetch(`${API_BASE_URL}/api/auth/google/url?${params.toString()}`);
   
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to get Google OAuth URL' }));
-    throw new Error(error.detail || 'Failed to get Google OAuth URL');
+    let errorMessage = 'Failed to get Google OAuth URL';
+    try {
+      const error = await response.json();
+      // 处理不同的错误格式
+      if (error.detail) {
+        errorMessage = error.detail;
+      } else if (error.msg) {
+        errorMessage = error.msg;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.error) {
+        errorMessage = error.error;
+      }
+      console.error('Google OAuth URL 错误:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: error,
+        apiUrl: `${API_BASE_URL}/api/auth/google/url`
+      });
+    } catch (e) {
+      console.error('解析错误响应失败:', e);
+      errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    }
+    throw new Error(errorMessage);
   }
   
   const data = await response.json();

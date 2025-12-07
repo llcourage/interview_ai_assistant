@@ -741,7 +741,7 @@ async def get_plan(http_request: Request):
     # Start plan 没有订阅信息（一次性购买）
     subscription_info = None
     if user_plan.plan != PlanType.START:
-        subscription_info = await get_subscription_info(current_user.id)
+    subscription_info = await get_subscription_info(current_user.id)
     
     # 支持周度配额和终身配额
     weekly_token_limit = limits.get("weekly_token_limit")
