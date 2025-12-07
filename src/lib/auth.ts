@@ -231,16 +231,25 @@ export const isAuthenticated = async (): Promise<boolean> => {
     
     if (response.ok) {
       const user = await response.json();
-      console.log('🔑 isAuthenticated: 服务器返回已登录用户:', user.email || user.id);
+      console.log('🔑 isAuthenticated: 服务器返回响应:', user);
       
-      // 如果服务器返回用户信息，保存到 localStorage（可选，用于后续请求）
-      if (user && user.id) {
-        // 注意：这里不保存完整的 token，因为服务器使用 Cookie 管理会话
-        // 但可以保存用户信息
-        localStorage.setItem(USER_KEY, JSON.stringify(user));
+      // 检查响应是否包含有效的用户信息
+      if (user && (user.id || user.email)) {
+        console.log('🔑 isAuthenticated: 服务器返回已登录用户:', user.email || user.id);
+        
+        // 如果服务器返回用户信息，保存到 localStorage（可选，用于后续请求）
+        if (user.id) {
+          // 注意：这里不保存完整的 token，因为服务器使用 Cookie 管理会话
+          // 但可以保存用户信息
+          localStorage.setItem(USER_KEY, JSON.stringify(user));
+        }
+        
+        return true;
+      } else {
+        // 响应成功但没有有效的用户信息，说明未登录
+        console.log('🔑 isAuthenticated: 服务器返回 200 但无有效用户信息，视为未登录');
+        return false;
       }
-      
-      return true;
     } else {
       console.log('🔑 isAuthenticated: 服务器会话检查失败，状态码:', response.status);
       if (response.status === 401) {
