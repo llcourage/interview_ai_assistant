@@ -12,6 +12,7 @@ import { ScenarioSelector } from './components/ScenarioSelector'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { getCurrentSceneName } from './lib/sceneStorage'
+import { DOWNLOAD_CONFIG } from './constants/download'
 
 // Session type definition
 interface SessionData {
@@ -454,6 +455,25 @@ function App() {
             >
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
+            <a
+              href={DOWNLOAD_CONFIG.windows.url}
+              className="theme-toggle"
+              download={DOWNLOAD_CONFIG.windows.filename}
+              title="Free Download"
+              style={{ 
+                fontSize: '0.9rem', 
+                padding: '0.5rem 1rem',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Free Download
+            </a>
           </div>
         </div>
       </header>
