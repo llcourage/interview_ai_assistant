@@ -6,7 +6,7 @@ import Overlay from './Overlay'
 import { isElectron } from './utils/isElectron'
 import './index.css'
 
-// 🚨 定义错误边界组件
+// 🚨 Define error boundary component
 class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any }> {
   constructor(props: any) {
     super(props);
@@ -18,14 +18,14 @@ class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any
   }
 
   componentDidCatch(error: any, errorInfo: any) {
-    console.error("React 崩溃:", error, errorInfo);
+    console.error("React crashed:", error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <div style={{ padding: 20, background: 'red', color: 'white', height: '100vh', overflow: 'auto' }}>
-          <h2>💥 组件崩溃了</h2>
+          <h2>💥 Component Crashed</h2>
           <pre>{this.state.error?.toString()}</pre>
         </div>
       );
@@ -34,14 +34,14 @@ class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any
   }
 }
 
-// 获取 URL 参数
+// Get URL parameters
 const params = new URLSearchParams(window.location.search);
 const type = params.get('type');
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
 if (type === 'overlay') {
-  // 悬浮窗模式
+  // Overlay window mode
   root.render(
     <React.StrictMode>
       <ErrorBoundary>
@@ -50,9 +50,9 @@ if (type === 'overlay') {
     </React.StrictMode>
   );
 } else {
-  // 主窗口模式
-  // Electron 使用 HashRouter 避免 file:// 协议下的路径问题
-  // Web 使用 BrowserRouter 支持正常的 URL 路由
+  // Main window mode
+  // Electron uses HashRouter to avoid path issues under file:// protocol
+  // Web uses BrowserRouter to support normal URL routing
   const Router = isElectron() ? HashRouter : BrowserRouter;
   
   root.render(

@@ -12,7 +12,7 @@ export const Header: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 检查认证状态
+    // Check authentication status
     const checkAuth = async () => {
       const authenticated = await isAuthenticated();
       setAuthStatus(authenticated);
@@ -27,7 +27,7 @@ export const Header: React.FC = () => {
 
     checkAuth();
 
-    // 定期检查认证状态（替代 Supabase 的实时监听）
+    // Periodically check authentication status (replacement for Supabase real-time listening)
     const interval = setInterval(checkAuth, 5000);
 
     return () => {

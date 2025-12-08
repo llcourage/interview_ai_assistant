@@ -1,15 +1,15 @@
-/* Summary Bar - 居中、放大 */
+/* Summary Bar - centered, enlarged */
 .summary-bar {
   background: rgb(15, 23, 42); /* bg-slate-900 */
   border-radius: 1rem; /* rounded-2xl */
   border: 1px solid rgba(255, 255, 255, 0.05); /* border-white/5 */
-  padding: 2.5rem 3rem; /* 增大内边距 */
+  padding: 2.5rem 3rem; /* Increase padding */
   box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.4);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 3rem; /* 增大间距 */
-  max-width: 800px; /* 限制最大宽度 */
+  gap: 3rem; /* Increase spacing */
+  max-width: 800px; /* Limit max width */
   width: 100%;
 }
 
@@ -21,14 +21,14 @@
 }
 
 .avatar {
-  width: 64px; /* 增大头像 */
+  width: 64px; /* Increase avatar size */
   height: 64px;
   border-radius: 50%;
   background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.75rem; /* 增大字体 */
+  font-size: 1.75rem; /* Increase font size */
   font-weight: 600;
   color: var(--color-text-primary);
   flex-shrink: 0;
@@ -41,7 +41,7 @@
 }
 
 .summary-title {
-  font-size: 1.25rem; /* 增大标题 */
+  font-size: 1.25rem; /* Increase title size */
   font-weight: 600; /* font-semibold */
   color: rgb(241, 245, 249); /* text-slate-100 */
   margin: 0;
@@ -49,7 +49,7 @@
 }
 
 .summary-email {
-  font-size: 1rem; /* 增大邮箱字体 */
+  font-size: 1rem; /* Increase email font size */
   color: rgb(203, 213, 225); /* text-slate-300 */
   margin: 0;
 }
@@ -62,12 +62,12 @@
 }
 
 .summary-status {
-  font-size: 0.875rem; /* 增大状态字体 */
+  font-size: 0.875rem; /* Increase status font size */
   color: rgb(148, 163, 184); /* text-slate-400 */
 }
 
 .summary-billing {
-  font-size: 0.875rem; /* 增大扣费日期字体 */
+  font-size: 0.875rem; /* Increase billing date font size */
   color: rgb(148, 163, 184); /* text-slate-400 */
 }
 
@@ -76,12 +76,12 @@
 }
 
 .summary-manage-button {
-  padding: 0.75rem 1.5rem; /* 增大按钮内边距 */
+  padding: 0.75rem 1.5rem; /* Increase button padding */
   background: linear-gradient(to right, #3b82f6, #8b5cf6); /* from-blue-500 to-violet-500 */
   color: white;
   border: none;
   border-radius: 0.5rem;
-  font-size: 1rem; /* 增大按钮字体 */
+  font-size: 1rem; /* Increase button font size */
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;

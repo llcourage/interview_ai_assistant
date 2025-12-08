@@ -17,7 +17,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
-  // 加载当前 Prompt
+  // Load current Prompt
   useEffect(() => {
     const loadPrompt = () => {
       const currentPrompt = getCurrentPrompt();
@@ -27,7 +27,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
     loadPrompt();
 
-    // 监听场景变化
+    // Listen to scene changes
     const handleSceneChange = () => {
       loadPrompt();
       setIsEditing(false);

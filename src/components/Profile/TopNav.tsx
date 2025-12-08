@@ -10,8 +10,8 @@ export const TopNav: React.FC = () => {
 
   const handleLogout = async () => {
     await logout();
-    // 登出后，在 Electron 环境中导航到 /login，在 Web 环境中导航到 /
-    // 这样可以避免 ElectronDefaultPage 的认证检查延迟
+    // After logout, navigate to /login in Electron environment, navigate to / in Web environment
+    // This avoids ElectronDefaultPage authentication check delay
     if (isElectron()) {
       navigate('/login', { replace: true });
     } else {

@@ -1,4 +1,4 @@
-/* Profile 页面特定样式 - 补充基础样式 */
+/* Profile page specific styles - supplement base styles */
 
 .loading-spinner {
   text-align: center;
@@ -7,7 +7,7 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
-/* 页面背景光晕效果 - 增加视觉焦点 */
+/* Page background glow effect - increase visual focus */
 .page-bg::before {
   content: '';
   position: fixed;

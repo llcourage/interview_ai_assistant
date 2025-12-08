@@ -9,16 +9,16 @@
 }
 
 .plans-container {
-  max-width: 100%; /* 不限制最大宽度，让grid自己控制 */
+  max-width: 100%; /* Don't limit max width, let grid control itself */
   width: 100%;
   margin: 0 auto;
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start; /* 从 center 改为 flex-start，让内容靠上 */
-  padding: 2rem 1rem; /* 恢复一点左右内边距 */
+  justify-content: flex-start; /* Changed from center to flex-start, align content to top */
+  padding: 2rem 1rem; /* Restore some left-right padding */
   overflow-y: auto;
-  margin-top: 150px; /* 从 120px 减小到 80px，整体上移 */
+  margin-top: 150px; /* Reduced from 120px to 80px, move overall up */
   position: relative;
   
   /* Modern scrollbar styles */
@@ -54,7 +54,7 @@
   background-clip: padding-box;
 }
 
-/* 焦点渐变光 - 让标题和卡片区域成为视觉中心 */
+/* Focus gradient glow - make title and card area the visual center */
 .plans-glow {
   position: absolute;
   top: 10rem; /* top-40 */
@@ -82,8 +82,8 @@
 .plans-subtitle {
   text-align: center;
   font-size: 1.25rem;
-  color: var(--color-text-secondary); /* text-slate-400 - 描述再浅一点 */
-  margin: 0 0 3rem 0; /* 增加底部间距，让卡片和标题之间有更多空间 */
+  color: var(--color-text-secondary); /* text-slate-400 - description lighter */
+  margin: 0 0 3rem 0; /* Increase bottom spacing, more space between cards and title */
   font-weight: 400;
   position: relative;
   z-index: 1;
@@ -91,20 +91,20 @@
 
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(4, 240px) !important; /* 增加列宽：从200px到240px，保持4列横向排列 */
-  gap: 0.15rem; /* 极小间距：0.15rem (约2.4px) */
-  justify-content: center; /* 居中整体 */
+  grid-template-columns: repeat(4, 240px) !important; /* Increase column width: from 200px to 240px, keep 4 columns horizontal */
+  gap: 0.15rem; /* Minimal spacing: 0.15rem (about 2.4px) */
+  justify-content: center; /* Center overall */
   position: relative;
   z-index: 1;
-  width: fit-content; /* 让grid根据内容自适应宽度 */
-  margin: 0 auto; /* 居中整个grid */
-  grid-auto-flow: row; /* 确保横向排列 */
+  width: fit-content; /* Let grid adapt width based on content */
+  margin: 0 auto; /* Center entire grid */
+  grid-auto-flow: row; /* Ensure horizontal arrangement */
 }
 
 /* Responsive */
 @media (max-width: 1000px) {
   .plans-grid {
-    grid-template-columns: repeat(2, 240px) !important; /* 中等屏幕：2列，保持相同的卡片宽度 */
+    grid-template-columns: repeat(2, 240px) !important; /* Medium screen: 2 columns, keep same card width */
     gap: 0.15rem;
   }
 }
@@ -115,7 +115,7 @@
   }
 
   .plans-grid {
-    grid-template-columns: 1fr !important; /* 小屏幕：1列 */
+    grid-template-columns: 1fr !important; /* Small screen: 1 column */
     gap: 0.15rem;
   }
 }

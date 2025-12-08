@@ -24,12 +24,12 @@ export const PlanCard: React.FC<PlanCardProps> = ({
 }) => {
   return (
     <article className="plan-card">
-      {/* 推荐标签 - 移到右上角 */}
+      {/* Recommended label - moved to top right */}
       {recommended && (
         <span className="plan-tag">RECOMMENDED</span>
       )}
       
-      {/* 顶部：标题 */}
+      {/* Top: Title */}
       <header className="plan-card-header">
         <h3 className="plan-name">{name}</h3>
         {subtitle && (
@@ -37,7 +37,7 @@ export const PlanCard: React.FC<PlanCardProps> = ({
         )}
       </header>
 
-      {/* 中部：特性描述 */}
+      {/* Middle: Feature description */}
       {features && (
         <div className="plan-features">
           <p className="plan-features-text">
@@ -60,13 +60,13 @@ export const PlanCard: React.FC<PlanCardProps> = ({
         </div>
       )}
 
-      {/* 价格区域 */}
+      {/* Price area */}
       <div className="plan-price-row">
         <span className="plan-price">{price}</span>
         <span className="plan-billing">{billing}</span>
       </div>
 
-      {/* 底部按钮 */}
+      {/* Bottom button */}
       <footer className="plan-footer">
         <button 
           className="plan-button"

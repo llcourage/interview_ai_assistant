@@ -44,7 +44,7 @@ export const Plans: React.FC = () => {
       });
 
       if (!response.ok) {
-        // 尝试获取详细错误信息
+        // Try to get detailed error information
         let errorMessage = 'Failed to create checkout session';
         try {
           const errorData = await response.json();
@@ -75,7 +75,7 @@ export const Plans: React.FC = () => {
     <div className="plans-page">
       <Header />
       <div className="plans-container">
-        {/* 焦点渐变光 - 让标题和卡片区域成为视觉中心 */}
+        {/* Focus gradient glow - make title and card area the visual center */}
         <div className="plans-glow"></div>
         
         <h1 className="plans-title">Choose Your Plan</h1>

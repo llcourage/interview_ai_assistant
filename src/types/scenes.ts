@@ -1,4 +1,4 @@
-// 场景和 Prompt 模板的类型定义
+// Type definitions for scenes and Prompt templates
 
 export interface PromptPreset {
   id: string;
@@ -10,7 +10,7 @@ export interface Scene {
   id: string;
   name: string;
   presets: PromptPreset[];
-  isBuiltIn: boolean; // 是否为内置场景（不可删除）
+  isBuiltIn: boolean; // Whether it's a built-in scene (cannot be deleted)
 }
 
 export interface SceneConfig {

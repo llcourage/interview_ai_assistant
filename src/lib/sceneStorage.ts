@@ -1,10 +1,10 @@
-// 场景和 Prompt 配置的本地存储管理（兼容 Electron 和 Web）
+// Local storage management for scene and Prompt configuration (compatible with Electron and Web)
 
 import { Scene, SceneConfig, PromptPreset } from '../types/scenes';
 
 const STORAGE_KEY = 'ai_assistant_scenes';
 
-// 默认内置场景
+// Default built-in scenes
 const DEFAULT_SCENES: Scene[] = [
   {
     id: 'interview-assistant',
@@ -128,7 +128,7 @@ List 2-3 common mistakes candidates make when answering this type of question.
 ];
 
 /**
- * 获取场景配置
+ * Get scene configuration
  */
 export function getSceneConfig(): SceneConfig {
   try {
@@ -136,22 +136,22 @@ export function getSceneConfig(): SceneConfig {
     if (stored) {
       const config: SceneConfig = JSON.parse(stored);
       
-      // 确保所有内置场景都存在（合并默认场景）
+      // Ensure all built-in scenes exist (merge default scenes)
       const mergedScenes = [...DEFAULT_SCENES];
       const customScenes = config.scenes.filter(s => !s.isBuiltIn);
       
-      // 合并自定义场景，但保留内置场景的更新
+      // Merge custom scenes, but preserve built-in scene updates
       customScenes.forEach(customScene => {
         const existingIndex = mergedScenes.findIndex(s => s.id === customScene.id);
         if (existingIndex >= 0) {
-          // 如果是内置场景，保留 isBuiltIn 标志
+          // If it's a built-in scene, preserve isBuiltIn flag
           mergedScenes[existingIndex] = { ...customScene, isBuiltIn: true };
         } else {
           mergedScenes.push(customScene);
         }
       });
       
-      // 确保当前选中的场景和预设存在
+      // Ensure currently selected scene and preset exist
       let currentSceneId = config.currentSceneId || DEFAULT_SCENES[0].id;
       let currentPresetId = config.currentPresetId || DEFAULT_SCENES[0].presets[0].id;
       
@@ -176,7 +176,7 @@ export function getSceneConfig(): SceneConfig {
     console.error('Failed to load scene config:', error);
   }
   
-  // 返回默认配置
+  // Return default configuration
   return {
     scenes: DEFAULT_SCENES,
     currentSceneId: DEFAULT_SCENES[0].id,
@@ -185,11 +185,11 @@ export function getSceneConfig(): SceneConfig {
 }
 
 /**
- * 保存场景配置
+ * Save scene configuration
  */
 export function saveSceneConfig(config: SceneConfig): void {
   try {
-    // 只保存自定义场景和当前选择
+    // Only save custom scenes and current selection
     const customScenes = config.scenes.filter(s => !s.isBuiltIn);
     const dataToSave: SceneConfig = {
       scenes: customScenes,
@@ -203,20 +203,20 @@ export function saveSceneConfig(config: SceneConfig): void {
 }
 
 /**
- * 添加新场景
+ * Add new scene
  */
 export function addScene(scene: Scene): void {
   const config = getSceneConfig();
   config.scenes.push(scene);
   saveSceneConfig(config);
-  // 通知 Electron 更新菜单
+  // Notify Electron to update menu
   if (typeof window !== 'undefined' && window.aiShot?.notifyScenarioUpdated) {
     window.aiShot.notifyScenarioUpdated();
   }
 }
 
 /**
- * 更新场景
+ * Update scene
  */
 export function updateScene(sceneId: string, updates: Partial<Scene>): void {
   const config = getSceneConfig();
@@ -224,7 +224,7 @@ export function updateScene(sceneId: string, updates: Partial<Scene>): void {
   if (sceneIndex >= 0) {
     config.scenes[sceneIndex] = { ...config.scenes[sceneIndex], ...updates };
     saveSceneConfig(config);
-    // 通知 Electron 更新菜单
+    // Notify Electron to update menu
     if (typeof window !== 'undefined' && window.aiShot?.notifyScenarioUpdated) {
       window.aiShot.notifyScenarioUpdated();
     }
@@ -232,20 +232,20 @@ export function updateScene(sceneId: string, updates: Partial<Scene>): void {
 }
 
 /**
- * 删除场景（只能删除自定义场景）
+ * Delete scene (can only delete custom scenes)
  */
 export function deleteScene(sceneId: string): void {
   const config = getSceneConfig();
   const scene = config.scenes.find(s => s.id === sceneId);
   if (scene && !scene.isBuiltIn) {
     config.scenes = config.scenes.filter(s => s.id !== sceneId);
-    // 如果删除的是当前场景，切换到第一个场景
+    // If deleted scene is current scene, switch to first scene
     if (config.currentSceneId === sceneId) {
       config.currentSceneId = config.scenes[0]?.id || DEFAULT_SCENES[0].id;
       config.currentPresetId = config.scenes[0]?.presets[0]?.id || DEFAULT_SCENES[0].presets[0].id;
     }
     saveSceneConfig(config);
-    // 通知 Electron 更新菜单
+    // Notify Electron to update menu
     if (typeof window !== 'undefined' && window.aiShot?.notifyScenarioUpdated) {
       window.aiShot.notifyScenarioUpdated();
     }
@@ -253,7 +253,7 @@ export function deleteScene(sceneId: string): void {
 }
 
 /**
- * 添加预设到场景
+ * Add preset to scene
  */
 export function addPresetToScene(sceneId: string, preset: PromptPreset): void {
   const config = getSceneConfig();
@@ -261,7 +261,7 @@ export function addPresetToScene(sceneId: string, preset: PromptPreset): void {
   if (scene) {
     scene.presets.push(preset);
     saveSceneConfig(config);
-    // 通知 Electron 更新菜单
+    // Notify Electron to update menu
     if (typeof window !== 'undefined' && window.aiShot?.notifyScenarioUpdated) {
       window.aiShot.notifyScenarioUpdated();
     }
@@ -269,7 +269,7 @@ export function addPresetToScene(sceneId: string, preset: PromptPreset): void {
 }
 
 /**
- * 更新预设
+ * Update preset
  */
 export function updatePreset(sceneId: string, presetId: string, updates: Partial<PromptPreset>): void {
   const config = getSceneConfig();
@@ -278,7 +278,7 @@ export function updatePreset(sceneId: string, presetId: string, updates: Partial
     const presetIndex = scene.presets.findIndex(p => p.id === presetId);
     if (presetIndex >= 0) {
       const preset = scene.presets[presetIndex];
-      // 如果是内置场景的默认 preset，不允许修改
+      // If it's a built-in scene's default preset, modification is not allowed
       if (scene.isBuiltIn && preset.id === 'default') {
         console.warn('Cannot modify default preset of built-in scenes');
         return;
@@ -290,20 +290,20 @@ export function updatePreset(sceneId: string, presetId: string, updates: Partial
 }
 
 /**
- * 删除预设
+ * Delete preset
  */
 export function deletePreset(sceneId: string, presetId: string): void {
   const config = getSceneConfig();
   const scene = config.scenes.find(s => s.id === sceneId);
   if (scene && scene.presets.length > 1) {
-    // 如果是内置场景的默认 preset，不允许删除
+    // If it's a built-in scene's default preset, deletion is not allowed
     if (scene.isBuiltIn && presetId === 'default') {
       console.warn('Cannot delete default preset of built-in scenes');
       return;
     }
-    // 至少保留一个预设
+    // Keep at least one preset
     scene.presets = scene.presets.filter(p => p.id !== presetId);
-    // 如果删除的是当前预设，切换到第一个预设
+    // If deleted preset is current preset, switch to first preset
     if (config.currentPresetId === presetId && config.currentSceneId === sceneId) {
       config.currentPresetId = scene.presets[0]?.id || '';
     }
@@ -312,7 +312,7 @@ export function deletePreset(sceneId: string, presetId: string): void {
 }
 
 /**
- * 设置当前场景和预设
+ * Set current scene and preset
  */
 export function setCurrentScene(sceneId: string, presetId?: string): void {
   const config = getSceneConfig();
@@ -340,7 +340,7 @@ export function getCustomDefaultPrompt(): string {
 }
 
 /**
- * 获取当前 Prompt 模板（包含自定义默认 prompt）
+ * Get current Prompt template (includes custom default prompt)
  */
 export function getCurrentPrompt(): string {
   // Check if custom default prompt is set
@@ -360,7 +360,7 @@ export function getCurrentPrompt(): string {
 }
 
 /**
- * 获取当前场景名称
+ * Get current scene name
  */
 export function getCurrentSceneName(): string {
   const config = getSceneConfig();

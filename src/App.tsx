@@ -13,7 +13,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { getCurrentSceneName } from './lib/sceneStorage'
 
-// Session 类型定义
+// Session type definition
 interface SessionData {
   id: string;
   timestamp: number;
@@ -31,11 +31,11 @@ function App() {
   const [authStatus, setAuthStatus] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
-  // 🎨 主题状态：'dark' | 'light'
+  // 🎨 Theme state: 'dark' | 'light'
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
   });
-  // 📦 Plan 状态
+  // 📦 Plan state
   const [currentPlan, setCurrentPlan] = useState<PlanType>(() => {
     return (localStorage.getItem('currentPlan') as PlanType) || 'normal';
   });
@@ -70,29 +70,29 @@ function App() {
             // Trigger custom event to notify other windows (e.g., overlay) to update plan
             window.dispatchEvent(new CustomEvent('planChanged', { detail: newPlan }));
             
-            // 检查 Token 使用率警告（仅在 Electron 环境下）
+            // Check Token usage warning (only in Electron environment)
             if (window.aiShot && planData.weekly_token_limit && planData.weekly_token_limit > 0) {
               const usagePercentage = ((planData.weekly_tokens_used || 0) / planData.weekly_token_limit * 100);
               if (usagePercentage >= 80) {
                 const usagePercentageStr = usagePercentage.toFixed(1);
-                const message = `⚠️ Token 使用率警告\n\n您本周已使用 ${usagePercentageStr}% 的 Token 配额 (${(planData.weekly_tokens_used || 0).toLocaleString()} / ${planData.weekly_token_limit.toLocaleString()})\n\n剩余配额有限，请合理使用。配额将在每周重置。`;
+                const message = `⚠️ Token Usage Warning\n\nYou have used ${usagePercentageStr}% of your weekly Token quota (${(planData.weekly_tokens_used || 0).toLocaleString()} / ${planData.weekly_token_limit.toLocaleString()})\n\nRemaining quota is limited, please use wisely. Quota will reset weekly.`;
                 
-                // 使用 Electron 原生通知
+                // Use Electron native notification
                 if (window.aiShot.showTokenWarning) {
                   window.aiShot.showTokenWarning(message, usagePercentageStr);
                 } else {
-                  // 降级到浏览器通知
+                  // Fallback to browser notification
                   if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification('Token 使用率警告', {
-                      body: `您已使用 ${usagePercentageStr}% 的 Token 配额，剩余配额有限。`,
+                    new Notification('Token Usage Warning', {
+                      body: `You have used ${usagePercentageStr}% of your Token quota, remaining quota is limited.`,
                       icon: '/favicon.ico',
                       tag: 'token-warning'
                     });
                   } else if ('Notification' in window && Notification.permission !== 'denied') {
                     Notification.requestPermission().then(permission => {
                       if (permission === 'granted') {
-                        new Notification('Token 使用率警告', {
-                          body: `您已使用 ${usagePercentageStr}% 的 Token 配额，剩余配额有限。`,
+                        new Notification('Token Usage Warning', {
+                          body: `You have used ${usagePercentageStr}% of your Token quota, remaining quota is limited.`,
                           icon: '/favicon.ico',
                           tag: 'token-warning'
                         });
@@ -101,7 +101,7 @@ function App() {
                   }
                 }
                 
-                console.warn('⚠️ Token 使用率警告:', message);
+                console.warn('⚠️ Token usage warning:', message);
               }
             }
           }

@@ -86,7 +86,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         console.log('✅ Login successful, token saved:', !!token);
           setMessage('Login successful!');
         
-        // 触发自定义事件，通知其他组件认证状态已改变
+        // Trigger custom event to notify other components that authentication state has changed
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         
           setTimeout(() => {

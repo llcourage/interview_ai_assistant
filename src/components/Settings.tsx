@@ -81,7 +81,7 @@ export const Settings: React.FC = () => {
 
       const data = await response.json();
       
-      // 跳转到Stripe支付页面
+      // Redirect to Stripe payment page
       window.location.href = data.checkout_url;
     } catch (error) {
       console.error('Error creating checkout:', error);
@@ -149,7 +149,7 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Plan 信息 */}
+      {/* Plan information */}
       <section className="settings-section">
         <h2>📦 Subscription Plan</h2>
         

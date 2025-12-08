@@ -1,13 +1,13 @@
 /**
- * 检测是否运行在 Electron 桌面客户端中
+ * Detect if running in Electron desktop client
  */
 export const isElectron = (): boolean => {
-  // Electron 环境中会有 window.aiShot 对象
+  // Electron environment will have window.aiShot object
   return typeof window !== 'undefined' && window.aiShot !== undefined;
 };
 
 /**
- * 检测是否运行在网页浏览器中
+ * Detect if running in web browser
  */
 export const isWebBrowser = (): boolean => {
   return !isElectron();

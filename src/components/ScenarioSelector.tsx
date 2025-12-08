@@ -25,7 +25,7 @@ export const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({
   const [showCustomPromptDialog, setShowCustomPromptDialog] = useState(false);
   const [selectedSceneForCustomPrompt, setSelectedSceneForCustomPrompt] = useState<Scene | null>(null);
 
-  // 监听场景配置变化
+  // Listen to scene configuration changes
   useEffect(() => {
     const handleSceneConfigChange = () => {
       setConfig(getSceneConfig());
@@ -40,11 +40,11 @@ export const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({
     };
   }, []);
 
-  // 内置场景
+  // Built-in scenes
   const builtInScenes = config.scenes.filter(s => s.isBuiltIn);
   const customScenes = config.scenes.filter(s => !s.isBuiltIn);
 
-  // 各个场景
+  // Each scene
   const codingScene = builtInScenes.find(s => s.id === 'coding');
   const behavioralScene = builtInScenes.find(s => s.id === 'behavioral');
   const generalScene = builtInScenes.find(s => 
@@ -56,7 +56,7 @@ export const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({
     setConfig(getSceneConfig());
     window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
     onScenarioSelected?.();
-    // 延迟返回，让用户看到选择反馈
+    // Delay return to let user see selection feedback
     setTimeout(() => {
       onBack();
     }, 300);
@@ -82,7 +82,7 @@ export const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({
   const currentSceneName = getCurrentSceneName();
   const currentScene = config.scenes.find(s => s.id === config.currentSceneId);
 
-  // 获取场景的简短描述
+  // Get scene's brief description
   const getSceneDescription = (scene: Scene): string => {
     if (scene.id === 'coding') {
       return 'Your assistance in mock coding interviews';
@@ -91,7 +91,7 @@ export const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({
     } else if (scene.id === 'general-talking' || scene.id === 'general') {
       return 'Your assistance in general conversation practice';
     } else {
-      // 自定义场景使用名称或简短描述
+      // Custom scenes use name or brief description
       return scene.name;
     }
   };

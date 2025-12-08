@@ -13,7 +13,7 @@ import Overlay from './Overlay';
 import { isElectron } from './utils/isElectron';
 import { isAuthenticated } from './lib/auth';
 
-// Electron 客户端默认页面组件（检测登录状态，已登录显示 App，未登录显示 Login）
+// Electron client default page component (check login status, show App if logged in, show Login if not logged in)
 const ElectronDefaultPage: React.FC = () => {
   const [authStatus, setAuthStatus] = React.useState<boolean | null>(null);
   
@@ -25,7 +25,7 @@ const ElectronDefaultPage: React.FC = () => {
       try {
         const authenticated = await isAuthenticated();
         
-        // 只在状态变化时通知 Electron，避免重复调用
+        // Only notify Electron when status changes to avoid duplicate calls
         if (!isMounted) return;
         
         if (lastAuthStatus !== authenticated) {
@@ -33,7 +33,7 @@ const ElectronDefaultPage: React.FC = () => {
           lastAuthStatus = authenticated;
           setAuthStatus(authenticated);
           
-          // 如果已登录，通知 Electron 创建悬浮窗
+          // If logged in, notify Electron to create overlay window
           if (authenticated && window.aiShot?.userLoggedIn) {
             console.log('🔒 AppRouter - Calling userLoggedIn');
             await window.aiShot.userLoggedIn();
@@ -52,15 +52,15 @@ const ElectronDefaultPage: React.FC = () => {
     
     checkAuth();
     
-    // 监听认证状态变化事件（登录/登出时触发）
+    // Listen to authentication state change events (triggered on login/logout)
     const handleAuthStateChange = () => {
       console.log('🔒 AppRouter - Auth state change event received');
       checkAuth();
     };
     window.addEventListener('auth-state-changed', handleAuthStateChange);
     
-    // 监听 Electron IPC 的 auth:refresh 事件（OAuth 窗口关闭时触发）
-    // 注意：不要在 cleanup 中移除监听器，避免 React StrictMode 下监听器被删除
+    // Listen to Electron IPC auth:refresh event (triggered when OAuth window closes)
+    // Note: Don't remove listener in cleanup to avoid listener deletion in React StrictMode
     if (isElectron()) {
       const api = (window as any).aiShot;
       if (api?.onAuthRefresh) {
@@ -70,20 +70,20 @@ const ElectronDefaultPage: React.FC = () => {
           checkAuth();
         });
       } else {
-        console.warn('⚠️ AppRouter - aiShot.onAuthRefresh 不存在，无法监听 auth:refresh');
+        console.warn('⚠️ AppRouter - aiShot.onAuthRefresh does not exist, cannot listen to auth:refresh');
       }
     }
     
-    // 定期检查认证状态（替代 Supabase 的实时监听）
+    // Periodically check authentication status (replacement for Supabase real-time listening)
     const interval = setInterval(checkAuth, 5000);
     
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('auth-state-changed', handleAuthStateChange);
-      // 注意：不在 cleanup 中移除 Electron IPC 监听器
-      // 避免 React StrictMode 下 cleanup 导致监听器被删除
-      // 即使重复注册，也只是会触发多次回调，不会导致监听器丢失
+      // Note: Don't remove Electron IPC listener in cleanup
+      // Avoid listener deletion caused by cleanup in React StrictMode
+      // Even if registered multiple times, it will only trigger multiple callbacks, won't cause listener loss
     };
   }, []);
   

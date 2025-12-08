@@ -12,8 +12,8 @@ export const AuthCallback: React.FC = () => {
 
   useEffect(() => {
     const processCallback = async () => {
-      console.log('🔐 AuthCallback: 开始处理回调');
-      console.log('🔐 AuthCallback: 当前 URL:', window.location.href);
+      console.log('🔐 AuthCallback: Starting callback processing');
+      console.log('🔐 AuthCallback: Current URL:', window.location.href);
       console.log('🔐 AuthCallback: window.location.search:', window.location.search);
       console.log('🔐 AuthCallback: window.location.hash:', window.location.hash);
       
@@ -28,9 +28,9 @@ export const AuthCallback: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       
-      // 对于 Web 环境（BrowserRouter），参数在 search 中
-      // 对于 Electron 环境（HashRouter），参数可能在 hash 中
-      // Supabase OAuth 回调可能返回 access_token 在 hash 中（URL hash 模式）
+      // For Web environment (BrowserRouter), parameters are in search
+      // For Electron environment (HashRouter), parameters may be in hash
+      // Supabase OAuth callback may return access_token in hash (URL hash mode)
       let code: string | null = null;
       let state: string | null = null;
       let errorParam: string | null = null;
@@ -38,19 +38,19 @@ export const AuthCallback: React.FC = () => {
       let accessToken: string | null = null;
       let refreshToken: string | null = null;
       
-      // 首先检查 hash 中是否有 access_token（Supabase URL hash 回调模式）
+      // First check if there's access_token in hash (Supabase URL hash callback mode)
       if (window.location.hash) {
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         accessToken = hashParams.get('access_token');
         refreshToken = hashParams.get('refresh_token');
         if (accessToken) {
-          console.log('🔐 AuthCallback: 检测到 URL hash 中的 access_token（Supabase 直接回调模式）');
+          console.log('🔐 AuthCallback: Detected access_token in URL hash (Supabase direct callback mode)');
         }
       }
       
       if (isElectron()) {
-        // Electron 使用 HashRouter，参数在 hash 中
-        // hash 格式可能是: #/auth/callback?code=xxx&state=yyy
+        // Electron uses HashRouter, parameters are in hash
+        // Hash format may be: #/auth/callback?code=xxx&state=yyy
         const hashMatch = window.location.hash.match(/\?([^#]+)/);
         if (hashMatch) {
           const hashParams = new URLSearchParams(hashMatch[1]);
@@ -59,13 +59,13 @@ export const AuthCallback: React.FC = () => {
           if (!errorParam) errorParam = hashParams.get('error');
           if (!oauthUrl) oauthUrl = hashParams.get('oauth_url');
         }
-        // 也尝试从 searchParams 获取（如果 React Router 已经解析了）
+        // Also try to get from searchParams (if React Router has already parsed)
         if (!code) code = searchParams.get('code');
         if (!state) state = searchParams.get('state');
         if (!errorParam) errorParam = searchParams.get('error');
         if (!oauthUrl) oauthUrl = searchParams.get('oauth_url');
       } else {
-        // Web 使用 BrowserRouter，参数在 search 中
+        // Web uses BrowserRouter, parameters are in search
         if (!code) code = searchParams.get('code');
         if (!state) state = searchParams.get('state');
         if (!errorParam) errorParam = searchParams.get('error');
@@ -80,15 +80,15 @@ export const AuthCallback: React.FC = () => {
         isElectron: isElectron()
       });
       
-      // 检查是否是 Electron OAuth 窗口（有 oauth_url 参数）
+      // Check if Electron OAuth window (has oauth_url parameter)
       if (oauthUrl && isElectron()) {
-        // Electron OAuth 窗口：跳转到 OAuth URL
-        console.log('🔐 Electron OAuth 窗口：检测到 oauth_url 参数，跳转到 OAuth URL');
+        // Electron OAuth window: Redirect to OAuth URL
+        console.log('🔐 Electron OAuth window: Detected oauth_url parameter, redirecting to OAuth URL');
         console.log('🔐 OAuth URL:', oauthUrl.substring(0, 100) + '...');
         
-        // 保存 Supabase 配置到 localStorage（如果 API 返回了的话）
-        // 这些配置会在 handleOAuthCallback 中使用
-        // 对于 Electron，参数可能在 hash 中
+        // Save Supabase configuration to localStorage (if API returned it)
+        // These configurations will be used in handleOAuthCallback
+        // For Electron, parameters may be in hash
         let supabaseUrl: string | null = null;
         let supabaseAnonKey: string | null = null;
         if (isElectron()) {
@@ -104,10 +104,10 @@ export const AuthCallback: React.FC = () => {
         if (supabaseUrl && supabaseAnonKey) {
           localStorage.setItem('supabase_url', supabaseUrl);
           localStorage.setItem('supabase_anon_key', supabaseAnonKey);
-          console.log('🔐 已保存 Supabase 配置到 localStorage');
+          console.log('🔐 Saved Supabase configuration to localStorage');
         } else {
-          // 如果没有从 URL 参数获取，尝试从 API 获取
-          console.log('🔐 未从 URL 参数获取 Supabase 配置，尝试从 API 获取');
+          // If not obtained from URL parameters, try to get from API
+          console.log('🔐 Supabase configuration not obtained from URL parameters, trying to get from API');
           try {
             const { API_BASE_URL } = await import('./lib/api');
             const configResponse = await fetch(`${API_BASE_URL}/api/config/supabase`);
@@ -115,32 +115,32 @@ export const AuthCallback: React.FC = () => {
               const config = await configResponse.json();
               localStorage.setItem('supabase_url', config.supabase_url);
               localStorage.setItem('supabase_anon_key', config.supabase_anon_key);
-              console.log('🔐 从 API 获取并保存 Supabase 配置');
+              console.log('🔐 Obtained and saved Supabase configuration from API');
             }
           } catch (e) {
-            console.error('🔐 从 API 获取 Supabase 配置失败:', e);
+            console.error('🔐 Failed to get Supabase configuration from API:', e);
           }
         }
         
-        // 跳转到 OAuth URL
-        console.log('🔐 跳转到 OAuth URL...');
+        // Redirect to OAuth URL
+        console.log('🔐 Redirecting to OAuth URL...');
         window.location.href = oauthUrl;
         return;
       }
 
-      // code, state, errorParam 已经在上面获取了
+      // code, state, errorParam have been obtained above
 
       if (errorParam) {
         const errorMsg = `OAuth error: ${errorParam}`;
         setError(errorMsg);
         setLoading(false);
         
-        // 如果是 Electron OAuth 窗口，通过 IPC 发送错误
+        // If Electron OAuth window, send error via IPC
         if (isElectron() && (window as any).ipcRenderer) {
           try {
             (window as any).ipcRenderer.send('oauth-result', { success: false, error: errorMsg });
           } catch (e) {
-            console.error('无法发送 OAuth 错误到主进程:', e);
+            console.error('Failed to send OAuth error to main process:', e);
           }
         } else {
           setTimeout(() => {
@@ -150,19 +150,19 @@ export const AuthCallback: React.FC = () => {
         return;
       }
 
-      // 如果 hash 中有 access_token，直接使用（Supabase URL hash 回调模式）
+      // If access_token is in hash, use it directly (Supabase URL hash callback mode)
       if (accessToken) {
-        console.log('🔐 AuthCallback: 使用 URL hash 中的 access_token');
+        console.log('🔐 AuthCallback: Using access_token from URL hash');
         try {
-          // 直接使用 access_token 创建 session
+          // Directly use access_token to create session
           const session = {
             access_token: accessToken,
             refresh_token: refreshToken || '',
             token_type: 'bearer',
-            user: null as any // 稍后从 token 中解析
+            user: null as any // Will parse from token later
           };
           
-          // 解析 JWT token 获取用户信息
+          // Parse JWT token to get user information
           try {
             const payload = JSON.parse(atob(accessToken.split('.')[1]));
             session.user = {
@@ -170,16 +170,16 @@ export const AuthCallback: React.FC = () => {
               email: payload.email || ''
             };
           } catch (e) {
-            console.warn('无法解析 JWT token，稍后从 API 获取用户信息');
+            console.warn('Failed to parse JWT token, will get user info from API later');
           }
           
-          // 保存 token
+          // Save token
           const { saveToken } = await import('./lib/auth');
           saveToken(session);
           
-          // 调用后端 API 设置 session cookie
+          // Call backend API to set session cookie
           try {
-            console.log('🔐 AuthCallback: 调用后端 API 设置 session cookie');
+            console.log('🔐 AuthCallback: Calling backend API to set session cookie');
             const { API_BASE_URL } = await import('./lib/api');
             const response = await fetch(`${API_BASE_URL}/api/auth/set-session`, {
               method: 'POST',
@@ -193,18 +193,18 @@ export const AuthCallback: React.FC = () => {
             });
             
             if (response.ok) {
-              console.log('🔐 AuthCallback: 后端 session cookie 设置成功');
+              console.log('🔐 AuthCallback: Backend session cookie set successfully');
             } else {
-              console.warn('🔐 AuthCallback: 后端 session cookie 设置失败，但继续流程');
+              console.warn('🔐 AuthCallback: Backend session cookie set failed, but continuing flow');
             }
           } catch (e) {
-            console.error('🔐 AuthCallback: 设置 session cookie 失败:', e);
+            console.error('🔐 AuthCallback: Failed to set session cookie:', e);
           }
           
-          // 触发认证状态变化事件
+          // Trigger authentication state change event
           window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
           
-          // 检查是否有待处理的 plan 和 redirect
+          // Check if there's a pending plan and redirect
           const pendingPlan = localStorage.getItem('pendingPlan');
           const pendingRedirect = localStorage.getItem('pendingRedirect');
 
@@ -221,7 +221,7 @@ export const AuthCallback: React.FC = () => {
           }
           return;
         } catch (err: any) {
-          console.error('处理 access_token 失败:', err);
+          console.error('Failed to process access_token:', err);
           setError(err.message || 'Failed to process authentication');
           setLoading(false);
           setTimeout(() => {
@@ -236,12 +236,12 @@ export const AuthCallback: React.FC = () => {
         setError(errorMsg);
         setLoading(false);
         
-        // 如果是 Electron OAuth 窗口，通过 IPC 发送错误
+        // If Electron OAuth window, send error via IPC
         if (isElectron() && (window as any).ipcRenderer) {
           try {
             (window as any).ipcRenderer.send('oauth-result', { success: false, error: errorMsg });
           } catch (e) {
-            console.error('无法发送 OAuth 错误到主进程:', e);
+            console.error('Failed to send OAuth error to main process:', e);
           }
         } else {
           setTimeout(() => {
@@ -252,25 +252,25 @@ export const AuthCallback: React.FC = () => {
       }
 
       try {
-        console.log('🔐 AuthCallback: 开始处理 OAuth code');
+        console.log('🔐 AuthCallback: Starting OAuth code processing');
         console.log('🔐 AuthCallback: code length:', code ? code.length : 0);
         console.log('🔐 AuthCallback: state:', state || 'N/A');
         
         const session = await handleOAuthCallback(code, state || undefined);
-        console.log('🔐 AuthCallback: OAuth 回调处理成功');
+        console.log('🔐 AuthCallback: OAuth callback processing successful');
         console.log('🔐 AuthCallback: session access_token length:', session?.access_token ? session.access_token.length : 0);
         console.log('🔐 AuthCallback: session user:', session?.user?.email || 'N/A');
         
-        // 处理完 OAuth 回调后，调用后端 API 设置 session cookie
+        // After processing OAuth callback, call backend API to set session cookie
         try {
-          console.log('🔐 AuthCallback: 调用后端 API 设置 session cookie');
+          console.log('🔐 AuthCallback: Calling backend API to set session cookie');
           const { API_BASE_URL } = await import('./lib/api');
           const accessToken = session?.access_token || (typeof session === 'string' ? session : null);
           
           if (accessToken) {
             const response = await fetch(`${API_BASE_URL}/api/auth/set-session`, {
               method: 'POST',
-              credentials: 'include', // 携带 Cookie
+              credentials: 'include', // Include Cookie
               headers: {
                 'Content-Type': 'application/json',
               },
@@ -280,68 +280,68 @@ export const AuthCallback: React.FC = () => {
             });
             
             if (response.ok) {
-              console.log('🔐 AuthCallback: 后端 session cookie 设置成功');
+              console.log('🔐 AuthCallback: Backend session cookie set successfully');
             } else {
-              console.warn('🔐 AuthCallback: 后端 session cookie 设置失败，但继续流程');
+              console.warn('🔐 AuthCallback: Backend session cookie set failed, but continuing flow');
             }
           }
         } catch (e) {
-          console.error('🔐 AuthCallback: 设置 session cookie 失败:', e);
-          // 继续流程，即使设置 cookie 失败
+          console.error('🔐 AuthCallback: Failed to set session cookie:', e);
+          // Continue flow even if setting cookie fails
         }
         
-        // 如果是 Electron OAuth 窗口，通过 IPC 发送成功结果
+        // If Electron OAuth window, send success result via IPC
         if (isElectron()) {
           try {
-            console.log('🔐 AuthCallback: 检测到 Electron 环境，准备通过 IPC 发送 OAuth 结果');
+            console.log('🔐 AuthCallback: Detected Electron environment, preparing to send OAuth result via IPC');
             console.log('🔐 AuthCallback: code length:', code ? code.length : 0);
             console.log('🔐 AuthCallback: state:', state || 'N/A');
             
-            // 尝试多种方式发送 OAuth 结果
+            // Try multiple ways to send OAuth result
             const oauthResult = { 
               success: true, 
               code, 
               state: state || undefined 
             };
-            console.log('🔐 AuthCallback: 准备发送 oauth-result 消息:', JSON.stringify({
+            console.log('🔐 AuthCallback: Preparing to send oauth-result message:', JSON.stringify({
               success: oauthResult.success,
               hasCode: !!oauthResult.code,
               hasState: !!oauthResult.state
             }));
             
-            // 方法 1: 使用 aiShot.sendOAuthResult（如果可用）
+            // Method 1: Use aiShot.sendOAuthResult (if available)
             if ((window as any).aiShot?.sendOAuthResult) {
-              console.log('🔐 AuthCallback: 使用 aiShot.sendOAuthResult');
+              console.log('🔐 AuthCallback: Using aiShot.sendOAuthResult');
               (window as any).aiShot.sendOAuthResult(oauthResult);
             }
-            // 方法 2: 直接使用 ipcRenderer（如果暴露）
+            // Method 2: Directly use ipcRenderer (if exposed)
             else if ((window as any).ipcRenderer) {
-              console.log('🔐 AuthCallback: 使用 ipcRenderer.send');
+              console.log('🔐 AuthCallback: Using ipcRenderer.send');
               (window as any).ipcRenderer.send('oauth-result', oauthResult);
             }
-            // 方法 3: 尝试通过 window.postMessage（降级方案）
+            // Method 3: Try window.postMessage (fallback)
             else {
-              console.warn('🔐 AuthCallback: 无法找到 IPC 方法，尝试 postMessage');
+              console.warn('🔐 AuthCallback: Cannot find IPC method, trying postMessage');
               window.postMessage({ type: 'oauth-result', ...oauthResult }, '*');
             }
             
-            console.log('🔐 AuthCallback: IPC 消息已发送，等待主进程处理');
+            console.log('🔐 AuthCallback: IPC message sent, waiting for main process to handle');
             
-            // 显示成功消息
+            // Show success message
             setLoading(false);
-            setError(''); // 清除错误
-            return; // 不导航，让 Electron 主进程处理
+            setError(''); // Clear error
+            return; // Don't navigate, let Electron main process handle
           } catch (e: any) {
-            console.error('🔐 AuthCallback: 无法发送 OAuth 结果到主进程:', e);
-            console.error('🔐 AuthCallback: 错误详情:', e?.message || String(e), e?.stack);
-            // 降级到正常流程
+            console.error('🔐 AuthCallback: Failed to send OAuth result to main process:', e);
+            console.error('🔐 AuthCallback: Error details:', e?.message || String(e), e?.stack);
+            // Fallback to normal flow
           }
         }
         
-        // 触发自定义事件，通知其他组件认证状态已改变
+        // Trigger custom event to notify other components that authentication state has changed
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: true } }));
         
-        // 检查是否有待处理的 plan 和 redirect
+        // Check if there's a pending plan and redirect
         const pendingPlan = localStorage.getItem('pendingPlan');
         const pendingRedirect = localStorage.getItem('pendingRedirect');
 
@@ -350,7 +350,7 @@ export const AuthCallback: React.FC = () => {
           localStorage.removeItem('pendingRedirect');
           navigate(`${pendingRedirect}?plan=${pendingPlan}`);
         } else {
-          // 根据环境重定向
+          // Redirect based on environment
           if (isElectron()) {
             navigate('/app');
           } else {
@@ -363,12 +363,12 @@ export const AuthCallback: React.FC = () => {
         setError(errorMsg);
         setLoading(false);
         
-        // 如果是 Electron OAuth 窗口，通过 IPC 发送错误
+        // If Electron OAuth window, send error via IPC
         if (isElectron() && (window as any).ipcRenderer) {
           try {
             (window as any).ipcRenderer.send('oauth-result', { success: false, error: errorMsg });
           } catch (e) {
-            console.error('无法发送 OAuth 错误到主进程:', e);
+            console.error('Failed to send OAuth error to main process:', e);
           }
         } else {
           setTimeout(() => {

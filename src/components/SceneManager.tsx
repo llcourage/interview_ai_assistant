@@ -64,7 +64,7 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
 
   const handleDeleteScene = (sceneId: string) => {
     const scene = config.scenes.find(s => s.id === sceneId);
-    if (scene && !scene.isBuiltIn && window.confirm(`确定要删除场景 "${scene.name}" 吗？`)) {
+      if (scene && !scene.isBuiltIn && window.confirm(`Are you sure you want to delete scene "${scene.name}"?`)) {
       deleteScene(sceneId);
       setConfig(getSceneConfig());
       window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
@@ -98,7 +98,7 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
   const handleDeletePreset = (sceneId: string, presetId: string) => {
     const scene = config.scenes.find(s => s.id === sceneId);
     const preset = scene?.presets.find(p => p.id === presetId);
-    if (preset && scene && scene.presets.length > 1 && window.confirm(`确定要删除预设 "${preset.name}" 吗？`)) {
+    if (preset && scene && scene.presets.length > 1 && window.confirm(`Are you sure you want to delete preset "${preset.name}"?`)) {
       deletePreset(sceneId, presetId);
       setConfig(getSceneConfig());
       window.dispatchEvent(new CustomEvent('sceneConfigChanged'));

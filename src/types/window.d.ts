@@ -1,94 +1,94 @@
-// 全局 Window 接口类型声明
+// Global Window interface type declaration
 
 export interface AiShotAPI {
   /**
-   * 监听截屏完成事件
-   * @param callback 回调函数，接收 base64 编码的图片
+   * Listen to screenshot completion event
+   * @param callback Callback function that receives base64 encoded image
    */
   onScreenshotTaken: (callback: (base64Image: string) => void) => void;
 
   /**
-   * 监听发送截图请求事件
-   * @param callback 回调函数，接收 base64 编码的图片
+   * Listen to send screenshot request event
+   * @param callback Callback function that receives base64 encoded image
    */
   onSendScreenshotRequest: (callback: (base64Image: string) => void) => void;
 
   /**
-   * 监听截图错误事件
-   * @param callback 回调函数，接收错误消息
+   * Listen to screenshot error event
+   * @param callback Callback function that receives error message
    */
   onScreenshotError: (callback: (errorMessage: string) => void) => void;
 
   /**
-   * 手动触发截屏
-   * @returns Promise，返回 base64 编码的图片
+   * Manually trigger screenshot
+   * @returns Promise that returns base64 encoded image
    */
   captureScreen: () => Promise<string>;
 
   /**
-   * 发送图片到后端（保留接口，前端直接调用 HTTP API）
-   * @param imageBase64 base64 编码的图片
+   * Send image to backend (reserved interface, frontend directly calls HTTP API)
+   * @param imageBase64 base64 encoded image
    * @returns Promise
    */
   sendToBackend: (imageBase64: string) => Promise<{ success: boolean }>;
 
   /**
-   * 最小化悬浮窗
+   * Minimize overlay window
    */
   minimizeOverlay: () => void;
 
   /**
-   * 显示悬浮窗
+   * Show overlay window
    */
   showOverlay: () => void;
 
   /**
-   * 调整悬浮窗大小
-   * @param height 新的高度
+   * Resize overlay window
+   * @param height New height
    */
   resizeOverlay: (height: number) => void;
 
   /**
-   * 移动悬浮窗 (Local Shortcut)
-   * @param direction 方向 'up' | 'down' | 'left' | 'right'
-   * @param step 步长
+   * Move overlay window (Local Shortcut)
+   * @param direction Direction 'up' | 'down' | 'left' | 'right'
+   * @param step Step size
    */
   moveOverlay: (direction: 'up' | 'down' | 'left' | 'right', step?: number) => void;
 
   /**
-   * 控制点击穿透
-   * @param ignore true: 启用穿透, false: 禁用穿透
+   * Control click-through
+   * @param ignore true: Enable click-through, false: Disable click-through
    */
   setIgnoreMouseEvents: (ignore: boolean) => void;
 
   /**
-   * 打开主窗口
+   * Open main window
    */
   openMainWindow: () => void;
 
   /**
-   * 监听滚动事件
-   * @param callback 回调函数，接收方向 'up' | 'down'
+   * Listen to scroll event
+   * @param callback Callback function that receives direction 'up' | 'down'
    */
   onScrollContent: (callback: (direction: 'up' | 'down') => void) => void;
 
   /**
-   * 移除事件监听器
-   * @param channel 事件通道名称
+   * Remove event listener
+   * @param channel Event channel name
    */
   removeListener: (channel: string) => void;
 
   /**
-   * 用户登录/登出
+   * User login/logout
    */
   userLoggedIn: () => Promise<{ success: boolean }>;
   userLoggedOut: () => Promise<{ success: boolean }>;
 
   /**
-   * 本地语音转文字（使用本地 Whisper）
-   * @param audioData base64 编码的音频数据
-   * @param language 语言代码，默认为 'zh'
-   * @returns Promise，返回转写结果
+   * Local speech to text (using local Whisper)
+   * @param audioData base64 encoded audio data
+   * @param language Language code, default is 'zh'
+   * @returns Promise that returns transcription result
    */
   speechToTextLocal?: (
     audioData: string,
@@ -102,8 +102,8 @@ export interface AiShotAPI {
   }>;
 
   /**
-   * 获取所有场景
-   * @returns Promise，返回所有场景（内置、通用、自定义）
+   * Get all scenes
+   * @returns Promise that returns all scenes (built-in, general, custom)
    */
   getAllScenes?: () => Promise<{
     builtIn: any[];
@@ -112,47 +112,47 @@ export interface AiShotAPI {
   }>;
 
   /**
-   * 选择场景
-   * @param sceneId 场景 ID
-   * @param presetId 预设 ID
+   * Select scene
+   * @param sceneId Scene ID
+   * @param presetId Preset ID
    * @returns Promise
    */
   selectScenario?: (sceneId: string, presetId: string) => Promise<{ success: boolean; prompt: string }>;
 
   /**
-   * 通知场景已更新（刷新菜单）
+   * Notify that scene has been updated (refresh menu)
    */
   notifyScenarioUpdated?: () => void;
 
   /**
-   * 监听场景选择事件
-   * @param callback 回调函数
+   * Listen to scene selection event
+   * @param callback Callback function
    */
   onScenarioSelected?: (callback: (data: { sceneId: string; presetId: string; prompt: string }) => void) => void;
 
   /**
-   * 监听打开场景编辑器事件
-   * @param callback 回调函数
+   * Listen to open scene editor event
+   * @param callback Callback function
    */
   onOpenScenarioEditor?: (callback: (data: { mode: 'create' | 'edit'; scenario?: any }) => void) => void;
 
   /**
-   * Google OAuth 登录（Electron 专用）
-   * @returns Promise，返回包含 code 的对象
+   * Google OAuth login (Electron only)
+   * @returns Promise that returns object containing code
    */
   loginWithGoogle?: () => Promise<{ success: boolean; code?: string; error?: string }>;
 
   /**
-   * 选择文件夹（Electron 专用）
-   * @param options 选项，包含 title 和 defaultPath
-   * @returns Promise，返回包含 canceled 和 path 的对象
+   * Select folder (Electron only)
+   * @param options Options, containing title and defaultPath
+   * @returns Promise that returns object containing canceled and path
    */
   selectFolder?: (options?: { title?: string; defaultPath?: string }) => Promise<{ canceled: boolean; path: string | null; error?: string }>;
 
   /**
-   * 显示 Token 使用率警告（Electron 专用）
-   * @param message 警告消息
-   * @param usagePercentage 使用百分比
+   * Show Token usage warning (Electron only)
+   * @param message Warning message
+   * @param usagePercentage Usage percentage
    */
   showTokenWarning?: (message: string, usagePercentage: string) => void;
 }

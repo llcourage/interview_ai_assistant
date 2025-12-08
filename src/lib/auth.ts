@@ -1,5 +1,5 @@
 /**
- * 认证工具 - 通过 Vercel API 进行认证，不直接连接 Supabase
+ * Authentication utility - Authenticate via Vercel API, not directly connecting to Supabase
  */
 import { API_BASE_URL } from './api';
 
@@ -22,14 +22,14 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
 /**
- * 保存认证 token
+ * Save authentication token
  */
 export const saveToken = (token: AuthToken): void => {
   localStorage.setItem(TOKEN_KEY, JSON.stringify(token));
 };
 
 /**
- * 获取认证 token
+ * Get authentication token
  */
 export const getToken = (): AuthToken | null => {
   const tokenStr = localStorage.getItem(TOKEN_KEY);
@@ -42,7 +42,7 @@ export const getToken = (): AuthToken | null => {
 };
 
 /**
- * 清除认证 token
+ * Clear authentication token
  */
 export const clearToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
@@ -50,12 +50,12 @@ export const clearToken = (): void => {
 };
 
 /**
- * 获取 Authorization header
+ * Get Authorization header
  */
 export const getAuthHeader = (): string | null => {
   const token = getToken();
   if (!token) return null;
-  // 确保 token_type 格式正确（HTTP 标准要求首字母大写）
+  // Ensure token_type format is correct (HTTP standard requires first letter uppercase)
   const tokenType = token.token_type 
     ? token.token_type.charAt(0).toUpperCase() + token.token_type.slice(1).toLowerCase()
     : 'Bearer';
@@ -63,7 +63,7 @@ export const getAuthHeader = (): string | null => {
 };
 
 /**
- * 用户注册
+ * User registration
  */
 export const register = async (email: string, password: string): Promise<AuthToken> => {
   const response = await fetch(`${API_BASE_URL}/api/register`, {
@@ -85,7 +85,7 @@ export const register = async (email: string, password: string): Promise<AuthTok
 };
 
 /**
- * 用户登录
+ * User login
  */
 export const login = async (email: string, password: string): Promise<AuthToken> => {
   const response = await fetch(`${API_BASE_URL}/api/login`, {
@@ -107,40 +107,40 @@ export const login = async (email: string, password: string): Promise<AuthToken>
 };
 
 /**
- * 用户登出
+ * User logout
  */
 export const logout = async (): Promise<void> => {
-  // 清除本地 token
+  // Clear local token
   clearToken();
   
-  // 尝试清除服务器端的 session cookie
+  // Try to clear server-side session cookie
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
       method: 'POST',
-      credentials: 'include', // 携带 Cookie
+      credentials: 'include', // Include Cookie
       headers: {
         'Content-Type': 'application/json',
       },
     });
     
     if (response.ok) {
-      console.log('✅ 服务器 session cookie 已清除');
+      console.log('✅ Server session cookie cleared');
     } else {
-      console.warn('⚠️ 清除服务器 session cookie 失败，但继续登出流程');
+      console.warn('⚠️ Failed to clear server session cookie, but continuing logout flow');
     }
   } catch (error) {
-    console.warn('⚠️ 清除服务器 session cookie 时出错，但继续登出流程:', error);
-    // 即使清除服务器 cookie 失败，也继续登出流程
+    console.warn('⚠️ Error clearing server session cookie, but continuing logout flow:', error);
+    // Continue logout flow even if clearing server cookie fails
   }
   
-  // 触发认证状态变化事件，通知其他组件
+  // Trigger authentication state change event to notify other components
   window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { authenticated: false } }));
   
-  console.log('🚪 用户已登出');
+  console.log('🚪 User logged out');
 };
 
 /**
- * 获取当前用户信息
+ * Get current user information
  */
 export const getCurrentUser = async (): Promise<User | null> => {
   const token = getToken();
@@ -152,31 +152,31 @@ export const getCurrentUser = async (): Promise<User | null> => {
   try {
     const authHeader = getAuthHeader();
     if (!authHeader) {
-      console.log('🔒 getCurrentUser: 无 auth header');
+      console.log('🔒 getCurrentUser: No auth header');
       return null;
     }
 
     // Calling API to get current user
-    // 注意：在开发环境中，需要 credentials: 'include' 来携带 Cookie
+    // Note: In development environment, credentials: 'include' is needed to carry Cookie
     const apiUrl = `${API_BASE_URL}/api/me`;
-    console.log('🌐 getCurrentUser: 请求 API:', apiUrl);
-    console.log('🌐 getCurrentUser: 请求头:', { 
+    console.log('🌐 getCurrentUser: Requesting API:', apiUrl);
+    console.log('🌐 getCurrentUser: Request headers:', { 
       'Authorization': authHeader.substring(0, 20) + '...',
       'credentials': 'include'
     });
     
     const response = await fetch(apiUrl, {
-      credentials: 'include', // 携带 Cookie（用于跨域请求）
+      credentials: 'include', // Include Cookie (for cross-origin requests)
       headers: {
         'Authorization': authHeader,
       },
     });
 
-    console.log('🌐 getCurrentUser: 响应状态:', response.status, response.statusText);
+    console.log('🌐 getCurrentUser: Response status:', response.status, response.statusText);
 
     if (!response.ok) {
       console.error('🔒 getCurrentUser: API error', response.status, response.statusText);
-      // Token 可能已过期
+      // Token may have expired
       if (response.status === 401) {
         // 401 Unauthorized, clearing token
         clearToken();
@@ -195,96 +195,96 @@ export const getCurrentUser = async (): Promise<User | null> => {
 };
 
 /**
- * 检查是否已登录
- * 优先检查 localStorage 中的 token，如果没有则检查服务器 Cookie 会话
+ * Check if user is authenticated
+ * First check token in localStorage, if not found then check server Cookie session
  */
 export const isAuthenticated = async (): Promise<boolean> => {
-  console.log('🔑 isAuthenticated: 开始检查登录状态');
+  console.log('🔑 isAuthenticated: Starting authentication check');
   
-  // 1. 先检查 localStorage 中的 token（支持 Web 端的 token 登录）
+  // 1. First check token in localStorage (supports Web token login)
   const token = getToken();
   if (token) {
-    console.log('🔑 isAuthenticated: 找到 token，验证 token 有效性');
+    console.log('🔑 isAuthenticated: Found token, validating token');
   try {
     const user = await getCurrentUser();
     const authenticated = user !== null;
-      console.log('🔑 isAuthenticated: Token 验证完成，结果:', authenticated, user ? `用户: ${user.email}` : '无用户');
+      console.log('🔑 isAuthenticated: Token validation complete, result:', authenticated, user ? `User: ${user.email}` : 'No user');
       return authenticated;
     } catch (error) {
-      console.error('🔑 isAuthenticated: Token 验证失败:', error);
-      // Token 无效，继续检查服务器会话
+      console.error('🔑 isAuthenticated: Token validation failed:', error);
+      // Token invalid, continue checking server session
     }
   }
   
-  // 2. 没有 token 或 token 无效，检查服务器 Cookie 会话（Electron OAuth 流程）
-  console.log('🔑 isAuthenticated: 未找到有效 token，调用 /api/me 检查服务器会话');
+  // 2. No token or token invalid, check server Cookie session (Electron OAuth flow)
+  console.log('🔑 isAuthenticated: No valid token found, calling /api/me to check server session');
   try {
-    // 尝试获取 token（即使之前验证失败，也可能有无效的 token）
+    // Try to get token (even if previous validation failed, there might be an invalid token)
     const token = getToken();
     const authHeader = token ? getAuthHeader() : null;
     
-    // 检查是否是 Electron 环境
+    // Check if Electron environment
     const isElectronEnv = typeof window !== 'undefined' && (window as any).aiShot !== undefined;
     
-    // 构建请求头
+    // Build request headers
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };
     
-    // 对于 Electron 应用，优先使用 Authorization header（因为 Cookie 可能无法正确工作）
-    // 对于 Web 应用，同时发送 Cookie 和 Authorization header（双重保险）
+    // For Electron apps, prioritize Authorization header (because Cookie may not work correctly)
+    // For Web apps, send both Cookie and Authorization header (double insurance)
     if (authHeader) {
       headers['Authorization'] = authHeader;
       if (isElectronEnv) {
-        console.log('🔑 isAuthenticated: Electron 环境，优先使用 Authorization header');
+        console.log('🔑 isAuthenticated: Electron environment, prioritizing Authorization header');
       } else {
-        console.log('🔑 isAuthenticated: 同时发送 Cookie 和 Authorization header');
+        console.log('🔑 isAuthenticated: Sending both Cookie and Authorization header');
       }
     } else {
       if (isElectronEnv) {
-        console.log('🔑 isAuthenticated: Electron 环境，无 token，仅尝试 Cookie');
+        console.log('🔑 isAuthenticated: Electron environment, no token, only trying Cookie');
       } else {
-        console.log('🔑 isAuthenticated: 仅发送 Cookie（无 Authorization header）');
+        console.log('🔑 isAuthenticated: Only sending Cookie (no Authorization header)');
       }
     }
     
-    // 直接调用 API 检查服务器会话，使用 credentials: 'include' 携带 Cookie
+    // Directly call API to check server session, use credentials: 'include' to carry Cookie
     const response = await fetch(`${API_BASE_URL}/api/me`, {
-      credentials: 'include', // 携带 Cookie（用于跨域请求）
+      credentials: 'include', // Include Cookie (for cross-origin requests)
       headers,
     });
     
-    console.log('🌐 isAuthenticated: /api/me 响应状态:', response.status, response.statusText);
+    console.log('🌐 isAuthenticated: /api/me response status:', response.status, response.statusText);
     
     if (response.ok) {
       const user = await response.json();
-      console.log('🔑 isAuthenticated: 服务器返回已登录用户:', user.email || user.id);
+      console.log('🔑 isAuthenticated: Server returned logged-in user:', user.email || user.id);
       
-      // 如果服务器返回用户信息，保存到 localStorage（可选，用于后续请求）
+      // If server returns user info, save to localStorage (optional, for subsequent requests)
       if (user && user.id) {
-        // 注意：这里不保存完整的 token，因为服务器使用 Cookie 管理会话
-        // 但可以保存用户信息
+        // Note: Don't save full token here, as server uses Cookie to manage session
+        // But can save user info
         localStorage.setItem(USER_KEY, JSON.stringify(user));
       }
       
       return true;
     } else {
-      console.log('🔑 isAuthenticated: 服务器会话检查失败，状态码:', response.status);
+      console.log('🔑 isAuthenticated: Server session check failed, status code:', response.status);
       if (response.status === 401) {
-        // 401 Unauthorized，清除可能存在的无效 token
+        // 401 Unauthorized, clear any invalid token that may exist
         clearToken();
       }
       return false;
     }
   } catch (error) {
-    console.error('🔑 isAuthenticated: 服务器会话检查异常:', error);
+    console.error('🔑 isAuthenticated: Server session check exception:', error);
     return false;
   }
 };
 
 /**
- * 获取 Google OAuth 授权 URL
- * 同时获取 Supabase 配置（用于 OAuth 回调）
+ * Get Google OAuth authorization URL
+ * Also get Supabase configuration (for OAuth callback)
  */
 export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: string; supabaseUrl?: string; supabaseAnonKey?: string }> => {
   const params = new URLSearchParams();
@@ -298,7 +298,7 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
     let errorMessage = 'Failed to get Google OAuth URL';
     try {
       const error = await response.json();
-      // 处理不同的错误格式
+      // Handle different error formats
       if (error.detail) {
         errorMessage = error.detail;
       } else if (error.msg) {
@@ -308,14 +308,14 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
       } else if (error.error) {
         errorMessage = error.error;
       }
-      console.error('Google OAuth URL 错误:', {
+      console.error('Google OAuth URL error:', {
         status: response.status,
         statusText: response.statusText,
         error: error,
         apiUrl: `${API_BASE_URL}/api/auth/google/url`
       });
     } catch (e) {
-      console.error('解析错误响应失败:', e);
+      console.error('Failed to parse error response:', e);
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }
     throw new Error(errorMessage);
@@ -323,9 +323,9 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
   
   const data = await response.json();
   
-  // 确保返回的数据包含必要的字段
+  // Ensure returned data contains necessary fields
   if (!data.url) {
-    throw new Error('API 返回的数据中缺少 url 字段');
+    throw new Error('API returned data missing url field');
   }
   
   return {
@@ -336,13 +336,13 @@ export const getGoogleOAuthUrl = async (redirectTo?: string): Promise<{ url: str
 };
 
 /**
- * 使用 Google OAuth 登录
+ * Login with Google OAuth
  */
 export const loginWithGoogle = async (): Promise<void> => {
   try {
-    // 检查是否是 Electron 环境
+    // Check if Electron environment
     if (typeof window !== 'undefined' && (window as any).aiShot?.loginWithGoogle) {
-      // Electron 环境：使用 Electron OAuth 窗口，通过后端 API 处理
+      // Electron environment: Use Electron OAuth window, handled via backend API
       console.log('🔐 Electron environment: Handling OAuth login via Electron IPC');
       
       // Setup IPC listener as backup (in case main process sends token via IPC before promise resolves)
@@ -445,33 +445,33 @@ export const loginWithGoogle = async (): Promise<void> => {
       // If ipcTokenReceived is true, the IPC handler already handled everything
       return;
     } else {
-      // Web 环境：直接使用 Supabase JS SDK 生成 OAuth URL
-      // 这样 code_verifier 会保存在浏览器存储中，PKCE 流程才能正常工作
-      console.log('🔐 Web 环境：使用 Supabase JS SDK 生成 OAuth URL');
+      // Web environment: Directly use Supabase JS SDK to generate OAuth URL
+      // This way code_verifier will be saved in browser storage, PKCE flow can work properly
+      console.log('🔐 Web environment: Using Supabase JS SDK to generate OAuth URL');
       
-      // 先定义 redirectTo（在动态导入之前）
+      // Define redirectTo first (before dynamic import)
       const redirectTo = `${window.location.origin}/auth/callback`;
       
-      // 动态导入 Supabase 客户端
+      // Dynamically import Supabase client
       let createClient: any;
       try {
         const supabaseModule = await import('@supabase/supabase-js');
         createClient = supabaseModule.createClient;
       } catch (importError: any) {
-        console.error('🔐 动态导入 Supabase SDK 失败:', importError);
-        // 如果动态导入失败，降级到使用后端 API 获取 OAuth URL
-        console.log('🔐 降级：使用后端 API 获取 OAuth URL');
+        console.error('🔐 Failed to dynamically import Supabase SDK:', importError);
+        // If dynamic import fails, fallback to using backend API to get OAuth URL
+        console.log('🔐 Fallback: Using backend API to get OAuth URL');
         const { url } = await getGoogleOAuthUrl(redirectTo);
-        // 直接跳转到后端返回的 OAuth URL
+        // Directly redirect to OAuth URL returned by backend
         window.location.href = url;
         return;
       }
       
-      // 获取 Supabase 配置
+      // Get Supabase configuration
       let supabaseUrl = localStorage.getItem('supabase_url');
       let supabaseAnonKey = localStorage.getItem('supabase_anon_key');
       
-      // 如果 localStorage 中没有，从 API 获取
+      // If not in localStorage, get from API
       if (!supabaseUrl || !supabaseAnonKey) {
         try {
           const { API_BASE_URL } = await import('./api');
@@ -486,11 +486,11 @@ export const loginWithGoogle = async (): Promise<void> => {
             }
           }
         } catch (e) {
-          console.error('🔐 从 API 获取 Supabase 配置失败:', e);
+          console.error('🔐 Failed to get Supabase configuration from API:', e);
         }
       }
       
-      // 如果还是没有，使用环境变量或默认值
+      // If still not available, use environment variables or default values
       if (!supabaseUrl) {
         supabaseUrl = (import.meta.env as any).VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
       }
@@ -499,14 +499,14 @@ export const loginWithGoogle = async (): Promise<void> => {
       }
       
       if (!supabaseAnonKey) {
-        throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
+        throw new Error('Supabase ANON_KEY not configured. Please ensure VITE_SUPABASE_ANON_KEY environment variable is set, or API returned configuration.');
       }
       
-      // 创建 Supabase 客户端
+      // Create Supabase client
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       
-      // 使用 Supabase JS SDK 生成 OAuth URL（这样 code_verifier 会保存在浏览器存储中）
-      console.log('🔐 Web 环境：redirectTo:', redirectTo);
+      // Use Supabase JS SDK to generate OAuth URL (this way code_verifier will be saved in browser storage)
+      console.log('🔐 Web environment: redirectTo:', redirectTo);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -523,8 +523,8 @@ export const loginWithGoogle = async (): Promise<void> => {
         throw new Error('Failed to get OAuth URL from Supabase');
       }
       
-      console.log('🔐 Web 环境：跳转到 OAuth URL');
-      // 跳转到 Google 授权页面
+      console.log('🔐 Web environment: Redirecting to OAuth URL');
+      // Redirect to Google authorization page
       window.location.href = data.url;
     }
   } catch (error: any) {
@@ -534,12 +534,12 @@ export const loginWithGoogle = async (): Promise<void> => {
 };
 
 /**
- * 处理 OAuth 回调
- * Electron 环境：通过后端 API 处理，不直接连接 Supabase
- * Web 环境：使用前端 Supabase 客户端直接处理，避免 PKCE code_verifier 问题
+ * Handle OAuth callback
+ * Electron environment: Handled via backend API, not directly connecting to Supabase
+ * Web environment: Use frontend Supabase client to handle directly, avoiding PKCE code_verifier issues
  */
 export const handleOAuthCallback = async (code: string, state?: string, codeVerifier?: string): Promise<AuthToken> => {
-  // 检查是否是 Electron 环境
+  // Check if Electron environment
   const isElectronEnv = typeof window !== 'undefined' && (window as any).aiShot !== undefined;
   
   if (isElectronEnv) {
@@ -550,24 +550,24 @@ export const handleOAuthCallback = async (code: string, state?: string, codeVeri
     console.error('❌ Electron OAuth flow should receive token via postMessage from backend callback page');
     throw new Error('Electron OAuth callback handling has been moved to backend callback endpoint. This function is deprecated for Electron.');
   } else {
-    // Web 环境：使用前端 Supabase 客户端直接处理
-    console.log('🔐 Web 环境：使用 Supabase JS SDK 处理 OAuth 回调');
+    // Web environment: Use frontend Supabase client to handle directly
+    console.log('🔐 Web environment: Using Supabase JS SDK to handle OAuth callback');
     
-    // 动态导入 Supabase 客户端
+    // Dynamically import Supabase client
     let createClient: any;
     try {
       const supabaseModule = await import('@supabase/supabase-js');
       createClient = supabaseModule.createClient;
     } catch (importError: any) {
-      console.error('🔐 动态导入 Supabase SDK 失败:', importError);
-      throw new Error(`无法加载 Supabase SDK: ${importError.message || importError}. 请检查网络连接或刷新页面重试。`);
+      console.error('🔐 Failed to dynamically import Supabase SDK:', importError);
+      throw new Error(`Failed to load Supabase SDK: ${importError.message || importError}. Please check network connection or refresh page and try again.`);
     }
     
-    // 从 localStorage 获取 Supabase 配置（如果之前保存过）
+    // Get Supabase configuration from localStorage (if previously saved)
     let supabaseUrl = localStorage.getItem('supabase_url');
     let supabaseAnonKey = localStorage.getItem('supabase_anon_key');
     
-    // 如果 localStorage 中没有，尝试从 API 获取
+    // If not in localStorage, try to get from API
     if (!supabaseUrl || !supabaseAnonKey) {
       try {
         const configResponse = await fetch(`${API_BASE_URL}/api/config/supabase`);
@@ -575,18 +575,18 @@ export const handleOAuthCallback = async (code: string, state?: string, codeVeri
           const config = await configResponse.json();
           supabaseUrl = config.supabase_url;
           supabaseAnonKey = config.supabase_anon_key;
-          // 保存到 localStorage 供下次使用
+          // Save to localStorage for next use
           if (supabaseUrl && supabaseAnonKey) {
             localStorage.setItem('supabase_url', supabaseUrl);
             localStorage.setItem('supabase_anon_key', supabaseAnonKey);
           }
         }
       } catch (error) {
-        console.warn('无法从 API 获取 Supabase 配置，使用环境变量或默认值', error);
+        console.warn('Failed to get Supabase configuration from API, using environment variables or default values', error);
       }
     }
     
-    // 如果还是没有，使用环境变量或默认值
+    // If still not available, use environment variables or default values
     if (!supabaseUrl) {
       supabaseUrl = (import.meta.env as any).VITE_SUPABASE_URL || 'https://cjrblsalpfhugeatrhrr.supabase.co';
     }
@@ -596,29 +596,29 @@ export const handleOAuthCallback = async (code: string, state?: string, codeVeri
     }
     
     if (!supabaseAnonKey) {
-      console.error('❌ Supabase 配置获取失败:', {
+      console.error('❌ Supabase configuration fetch failed:', {
         fromLocalStorage: !!localStorage.getItem('supabase_anon_key'),
         fromEnv: !!(import.meta.env as any).VITE_SUPABASE_ANON_KEY,
         supabaseUrl,
         supabaseAnonKey: supabaseAnonKey ? '***' : '(empty)'
       });
-      throw new Error('Supabase ANON_KEY 未配置。请确保 VITE_SUPABASE_ANON_KEY 环境变量已设置，或 API 返回了配置。');
+      throw new Error('Supabase ANON_KEY not configured. Please ensure VITE_SUPABASE_ANON_KEY environment variable is set, or API returned configuration.');
     }
     
     if (!supabaseUrl) {
-      throw new Error('Supabase URL 未配置。');
+      throw new Error('Supabase URL not configured.');
     }
     
-    console.log('✅ 使用 Supabase 配置创建客户端:', {
+    console.log('✅ Creating client with Supabase configuration:', {
       url: supabaseUrl,
       keyLength: supabaseAnonKey.length
     });
     
-    // 创建 Supabase 客户端（使用动态配置）
+    // Create Supabase client (using dynamic configuration)
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
     
-    // 使用 Supabase JS SDK 的 exchangeCodeForSession
-    // 这样可以从浏览器存储中自动获取 code_verifier
+    // Use Supabase JS SDK's exchangeCodeForSession
+    // This way can automatically get code_verifier from browser storage
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     
     if (error) {
@@ -630,7 +630,7 @@ export const handleOAuthCallback = async (code: string, state?: string, codeVeri
       throw new Error('OAuth callback failed: No session or user data received');
     }
     
-    // 转换为我们的 AuthToken 格式
+    // Convert to our AuthToken format
     const token: AuthToken = {
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,

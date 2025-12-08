@@ -8,38 +8,38 @@ import { getAuthHeader } from './lib/auth';
 import { API_BASE_URL } from './lib/api';
 import { getCurrentPrompt } from './lib/sceneStorage';
 
-// 🚨 配置：最大保存对话轮数（防止 localStorage 过大）
+// 🚨 Configuration: Maximum number of conversations to save (prevent localStorage from being too large)
 const MAX_CONVERSATIONS_TO_SAVE = 50;
 
-// Session 类型定义
+// Session type definition
 interface SessionData {
   id: string;
   timestamp: number;
   conversations: Array<{
-    type: 'image' | 'text';  // 区分图片分析和文字对话
-    screenshots?: string[];   // 图片分析时有截图
-    userInput?: string;       // 文字对话时有用户输入
+    type: 'image' | 'text';  // Distinguish between image analysis and text conversation
+    screenshots?: string[];   // Screenshots when analyzing images
+    userInput?: string;       // User input when having text conversation
     response: string;
   }>;
 }
 
 const Overlay = () => {
-  // 当前 Session ID
+  // Current Session ID
   const [currentSessionId] = useState<string>(() => `session_${Date.now()}`);
   
-  // 获取认证 token 的辅助函数
+  // Helper function to get authentication token
   const getAuthToken = useCallback(async () => {
     const authHeader = getAuthHeader();
-    // 从 "Bearer token" 格式中提取 token
+    // Extract token from "Bearer token" format
     return authHeader ? authHeader.replace('Bearer ', '') : null;
   }, []);
   
-  // 📦 Plan 状态
+  // 📦 Plan state
   const [currentPlan, setCurrentPlan] = useState<'normal' | 'high'>(() => {
     return (localStorage.getItem('currentPlan') as 'normal' | 'high') || 'normal';
   });
   
-  // 📦 监听 localStorage 中 plan 的变化（与主窗口同步）
+  // 📦 Listen to plan changes in localStorage (sync with main window)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'currentPlan' && e.newValue) {
@@ -49,7 +49,7 @@ const Overlay = () => {
     
     window.addEventListener('storage', handleStorageChange);
     
-    // 也监听同窗口内的变化（通过自定义事件）
+    // Also listen to changes in the same window (via custom events)
     const handlePlanChange = (e: CustomEvent) => {
       const newPlan = e.detail as 'normal' | 'high';
       setCurrentPlan(newPlan);
@@ -63,7 +63,7 @@ const Overlay = () => {
     };
   }, []);
   
-  // Session 数据
+  // Session data
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<Array<{
@@ -73,13 +73,13 @@ const Overlay = () => {
     response: string;
   }>>([]);
   
-  // UI 状态
+  // UI state
   const [status, setStatus] = useState<string>('Waiting for screenshot...');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
-  const [userInput, setUserInput] = useState<string>(''); // 用户输入
+  const [userInput, setUserInput] = useState<string>(''); // User input
   
-  // 🎤 录音状态
+  // 🎤 Recording state
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -88,7 +88,7 @@ const Overlay = () => {
   
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const conversationEndRef = useRef<HTMLDivElement>(null); // 🚨 新增：对话底部标记
+  const conversationEndRef = useRef<HTMLDivElement>(null); // 🚨 New: Conversation bottom marker
 
   // 💾 Save current Session to localStorage
   const saveCurrentSession = useCallback(() => {
@@ -136,7 +136,7 @@ const Overlay = () => {
     window.location.reload();
   };
 
-  // 🎤 开始录音
+  // 🎤 Start recording
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -162,19 +162,19 @@ const Overlay = () => {
       setRecordingTime(0);
       setStatus('Recording...');
       
-      // 开始计时
+      // Start timer
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
       
-      console.log('🎤 开始录音');
+      console.log('🎤 Starting recording');
     } catch (error) {
-      console.error('❌ 录音失败:', error);
+      console.error('❌ Recording failed:', error);
       setStatus('Recording failed, please check microphone permissions');
     }
   }, []);
 
-  // 🎤 停止录音
+  // 🎤 Stop recording
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -186,11 +186,11 @@ const Overlay = () => {
       }
       
       setStatus('Recording stopped');
-      console.log('🎤 停止录音');
+      console.log('🎤 Stopping recording');
     }
   }, [isRecording]);
 
-  // 🎤 发送录音（使用本地 Whisper）
+  // 🎤 Send recording (using local Whisper)
   const sendRecording = useCallback(async () => {
     if (audioChunksRef.current.length === 0) {
       setStatus('No recording data');
@@ -203,52 +203,52 @@ const Overlay = () => {
     setStatus('Transcribing audio locally...');
     
     try {
-      // 获取认证token
+      // Get authentication token
       const token = await getAuthToken();
       if (!token) {
-        throw new Error('未登录，请先登录');
+        throw new Error('Not logged in, please login first');
       }
       
-      // 合并音频片段
+      // Merge audio chunks
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
       
-      // 🎤 使用本地 Whisper 转文字（不发送到云端）
+      // 🎤 Use local Whisper to convert speech to text (not sent to cloud)
       let transcribedText: string;
       
       if (!window.aiShot?.speechToTextLocal) {
-        throw new Error('语音转文字功能仅在桌面版可用。请使用 Electron 桌面应用。');
+        throw new Error('Speech-to-text feature is only available in desktop version. Please use Electron desktop app.');
       }
       
-      // 将 Blob 转为 ArrayBuffer，再转为 base64
+      // Convert Blob to ArrayBuffer, then to base64
       const arrayBuffer = await audioBlob.arrayBuffer();
-      // 在浏览器环境中，使用 btoa 而不是 Buffer
+      // In browser environment, use btoa instead of Buffer
       const uint8Array = new Uint8Array(arrayBuffer);
       const base64Audio = btoa(String.fromCharCode(...uint8Array));
       
-      console.log('🎤 调用本地 Whisper 转文字...');
+      console.log('🎤 Calling local Whisper to convert speech to text...');
       const result = await window.aiShot.speechToTextLocal(base64Audio, 'zh');
       
       if (result.success && result.text) {
         transcribedText = result.text;
-        console.log('✅ 本地语音转文字完成:', transcribedText);
+        console.log('✅ Local speech-to-text completed:', transcribedText);
       } else {
-        throw new Error(result.error || '本地语音转文字失败');
+        throw new Error(result.error || 'Local speech-to-text failed');
       }
       
-      // 将转写的文字作为用户输入
+      // Use transcribed text as user input
       setUserInput(transcribedText);
       setStatus('Thinking...');
       
-      // 发送文字到云端 ChatGPT API
+      // Send text to cloud ChatGPT API
       const context = conversationHistory.map(conv => {
         if (conv.type === 'image') {
-          return `[图片分析]\n${conv.response}`;
+          return `[Image Analysis]\n${conv.response}`;
         } else {
-          return `用户: ${conv.userInput}\nAI: ${conv.response}`;
+          return `User: ${conv.userInput}\nAI: ${conv.response}`;
         }
       }).join('\n\n');
       
-      // 🔗 使用云端 API（Vercel）
+      // 🔗 Use cloud API (Vercel)
       const chatResponse = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: {
@@ -266,14 +266,14 @@ const Overlay = () => {
       }
       
       const chatData = await chatResponse.json();
-      console.log('✅ 收到 AI 回复:', chatData);
+      console.log('✅ Received AI response:', chatData);
       
       setAiResponse(chatData.answer);
       setIsLoading(false);
       setStatus('Response complete');
       setTimeout(() => setStatus(''), 2000);
       
-      // 添加到对话历史
+      // Add to conversation history
       const newConversation = {
         type: 'text' as const,
         userInput: transcribedText,
@@ -299,7 +299,7 @@ const Overlay = () => {
     }
   }, [isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
-  // 💬 使用指定文本发送对话（用于录音转文字后）
+  // 💬 Send conversation with specified text (used after speech-to-text)
   const handleSendTextInputWithText = useCallback(async (text: string) => {
     if (!text.trim()) return;
     
@@ -309,18 +309,18 @@ const Overlay = () => {
     setStatus('Thinking...');
     
     try {
-      // 获取认证token
+      // Get authentication token
       const token = await getAuthToken();
       if (!token) {
-        throw new Error('未登录，请先登录');
+        throw new Error('Not logged in, please login first');
       }
       
-      // 构建上下文
+      // Build context
       const context = conversationHistory.map(conv => {
         if (conv.type === 'image') {
-          return `[图片分析]\n${conv.response}`;
+          return `[Image Analysis]\n${conv.response}`;
         } else {
-          return `用户: ${conv.userInput}\nAI: ${conv.response}`;
+          return `User: ${conv.userInput}\nAI: ${conv.response}`;
         }
       }).join('\n\n');
       
@@ -341,14 +341,14 @@ const Overlay = () => {
       }
       
       const data = await response.json();
-      console.log('✅ 收到 AI 回复:', data);
+      console.log('✅ Received AI response:', data);
       
       setAiResponse(data.answer);
       setIsLoading(false);
       setStatus('Response complete');
       setTimeout(() => setStatus(''), 2000);
       
-      // 添加到对话历史
+      // Add to conversation history
       const newConversation = {
         type: 'text' as const,
         userInput: text,
@@ -364,7 +364,7 @@ const Overlay = () => {
       });
       
       } catch (error: any) {
-        console.error('❌ 对话失败:', error);
+        console.error('❌ Conversation failed:', error);
         console.error('   - Error type:', error?.constructor?.name);
         console.error('   - Error message:', error?.message);
         console.error('   - API_BASE_URL:', API_BASE_URL);
@@ -389,7 +389,7 @@ const Overlay = () => {
       }
   }, [isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
-  // 💬 处理文字对话请求
+  // 💬 Handle text conversation request
   const handleSendTextInput = useCallback(async () => {
     if (!userInput.trim()) {
       setStatus('Please enter content');
@@ -398,21 +398,21 @@ const Overlay = () => {
     
     if (isLoading) return;
     
-    console.log(`💬 发送文字对话: ${userInput.substring(0, 50)}...`);
+    console.log(`💬 Sending text conversation: ${userInput.substring(0, 50)}...`);
     setIsLoading(true);
     setStatus('Thinking...');
     
     const currentInput = userInput;
-    setUserInput(''); // 清空输入框
+    setUserInput(''); // Clear input field
 
     try {
-      // 获取认证token
+      // Get authentication token
       const token = await getAuthToken();
       if (!token) {
-        throw new Error('未登录，请先登录');
+        throw new Error('Not logged in, please login first');
       }
       
-      // 🚨 获取当前 Prompt 模板并组合用户输入
+      // 🚨 Get current Prompt template and combine with user input
       const promptTemplate = getCurrentPrompt();
       const combinedInput = promptTemplate 
         ? `${promptTemplate}\n\nUser: ${currentInput}`
@@ -450,12 +450,12 @@ const Overlay = () => {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ 
-            user_input: combinedInput,  // 使用组合后的输入（包含 Prompt 模板）
-            context: context  // 传递完整上下文
+            user_input: combinedInput,  // Use combined input (includes Prompt template)
+            context: context  // Pass complete context
           }),
         });
       } catch (fetchError: any) {
-        console.error('❌ Fetch 请求失败:', {
+        console.error('❌ Fetch request failed:', {
           error: fetchError,
           errorType: fetchError?.constructor?.name,
           errorMessage: fetchError?.message,
@@ -466,7 +466,7 @@ const Overlay = () => {
         throw fetchError;
       }
 
-      console.log('📡 API 响应状态:', {
+      console.log('📡 API response status:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
@@ -475,7 +475,7 @@ const Overlay = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ API 错误响应:', {
+        console.error('❌ API error response:', {
           status: response.status,
           statusText: response.statusText,
           body: errorText
@@ -484,14 +484,14 @@ const Overlay = () => {
       }
 
       const data = await response.json();
-      console.log('✅ 收到 AI 回复:', data);
+      console.log('✅ Received AI response:', data);
       
       setAiResponse(data.answer);
       setIsLoading(false);
       setStatus('Response complete');
-      setTimeout(() => setStatus(''), 2000); // 2秒后清空状态
+      setTimeout(() => setStatus(''), 2000); // Clear status after 2 seconds
       
-      // 📝 添加到对话历史（文字类型）
+      // 📝 Add to conversation history (text type)
       const newConversation = {
         type: 'text' as const,
         userInput: currentInput,
@@ -499,9 +499,9 @@ const Overlay = () => {
       };
       setConversationHistory(prev => {
         const updated = [...prev, newConversation];
-        // 保存到 localStorage
+        // Save to localStorage
         setTimeout(() => saveCurrentSession(), 100);
-        // 🚨 滚动到底部
+        // 🚨 Scroll to bottom
         setTimeout(() => {
           conversationEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }, 150);
@@ -531,19 +531,19 @@ const Overlay = () => {
       
       setStatus(`Error: ${errorMsg}`);
       setAiResponse(userFriendlyError);
-      setUserInput(currentInput); // 恢复输入
+      setUserInput(currentInput); // Restore input
     }
   }, [userInput, isLoading, conversationHistory, saveCurrentSession, getAuthToken]);
 
-  // 简化穿透控制：根据专注模式决定是否穿透
+  // Simplify click-through control: decide based on focus mode
   useEffect(() => {
-    console.log('🎯 穿透控制模式:', isFocusMode ? '专注模式（不穿透）' : '穿透模式');
+    console.log('🎯 Click-through control mode:', isFocusMode ? 'Focus mode (no click-through)' : 'Click-through mode');
     
     if (isFocusMode) {
-      // 专注模式：完全不穿透，可以交互
+      // Focus mode: completely no click-through, can interact
       window.aiShot?.setIgnoreMouseEvents(false);
     } else {
-      // 穿透模式：动态检测按钮
+      // Click-through mode: dynamically detect buttons
       const handleMouseMove = (e: MouseEvent) => {
         const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
         const isOnButton = elementUnderMouse?.tagName === 'BUTTON' || 
@@ -558,7 +558,7 @@ const Overlay = () => {
 
       window.addEventListener('mousemove', handleMouseMove);
       
-      // 初始状态：穿透
+      // Initial state: click-through
       setTimeout(() => {
         window.aiShot?.setIgnoreMouseEvents(true, { forward: true });
       }, 100);
@@ -567,17 +567,17 @@ const Overlay = () => {
     }
   }, [isFocusMode]);
 
-  // 🎯 监听专注模式和内容变化，自动调整窗口高度
+  // 🎯 Listen to focus mode and content changes, automatically adjust window height
   useEffect(() => {
     const adjustWindowHeight = () => {
       if (!scrollContainerRef.current) {
         return;
       }
       
-      const headerHeight = 60; // 快捷键栏
-      const footerHeight = isFocusMode ? 120 : 0; // 输入框
+      const headerHeight = 60; // Shortcut bar
+      const footerHeight = isFocusMode ? 120 : 0; // Input box
       
-      // 🚨 新策略：根据"状态"决定高度，而不是测量 DOM
+      // 🚨 New strategy: decide height based on "state", not measuring DOM
       let contentHeight = 0;
       
       if (aiResponse) {
@@ -612,27 +612,27 @@ const Overlay = () => {
       
       let totalDesiredHeight = headerHeight + contentHeight + footerHeight;
       
-      console.log(`🎯 调整高度 (专注模式=${isFocusMode}):`);
-      console.log(`   - 内容估算: ${contentHeight}px (AI回复=${!!aiResponse}, 加载=${isLoading}, 截图=${screenshots.length})`);
-      console.log(`   - 总需高度: ${totalDesiredHeight}px`);
+      console.log(`🎯 Adjusting height (Focus mode=${isFocusMode}):`);
+      console.log(`   - Content estimate: ${contentHeight}px (AI response=${!!aiResponse}, Loading=${isLoading}, Screenshots=${screenshots.length})`);
+      console.log(`   - Total required height: ${totalDesiredHeight}px`);
       
       let targetHeight: number;
       
       if (isFocusMode) {
-        // 🎯 专注模式：最大 70% 屏幕高度，最小 400
+        // 🎯 Focus mode: max 70% screen height, min 400
         const screenHeight = window.screen.height;
         const maxHeightFocus = Math.floor(screenHeight * 0.7);
         targetHeight = Math.min(totalDesiredHeight, maxHeightFocus);
         targetHeight = Math.max(targetHeight, 400);
       } else {
-        // 🎯 穿透模式：最大 50% 屏幕高度，最小 250
+        // 🎯 Click-through mode: max 50% screen height, min 250
         const screenHeight = window.screen.height;
         const maxHeightNormal = Math.floor(screenHeight * 0.5);
         targetHeight = Math.min(totalDesiredHeight, maxHeightNormal);
         targetHeight = Math.max(targetHeight, 250);
       }
       
-      console.log(`   - 最终请求窗口高度: ${targetHeight}px`);
+      console.log(`   - Final requested window height: ${targetHeight}px`);
       
       const resizeFn = window.aiShot.resizeOverlay || (window.aiShot as any).adjustHeight;
       
@@ -641,7 +641,7 @@ const Overlay = () => {
       }
     };
     
-    // 延迟执行，确保 DOM 已更新
+    // Delay execution to ensure DOM is updated
     const t1 = setTimeout(adjustWindowHeight, 50);
     const t2 = setTimeout(adjustWindowHeight, 200);
     const t3 = setTimeout(adjustWindowHeight, 500);
@@ -651,17 +651,17 @@ const Overlay = () => {
     };
   }, [isFocusMode, aiResponse, screenshots.length, status, isLoading]);
 
-  // 🎯 监听 IPC 滚动事件 (Ctrl+Up/Down)
+  // 🎯 Listen to IPC scroll events (Ctrl+Up/Down)
   useEffect(() => {
     if (window.aiShot && window.aiShot.onScrollContent) {
       const handleScroll = (direction: 'up' | 'down') => {
-        console.log(`🖱️ 收到滚动指令: ${direction}`);
+        console.log(`🖱️ Received scroll command: ${direction}`);
         if (scrollContainerRef.current) {
           const step = 100;
           const currentScroll = scrollContainerRef.current.scrollTop;
           const maxScroll = scrollContainerRef.current.scrollHeight - scrollContainerRef.current.clientHeight;
           
-          console.log(`   当前状态: scrollTop=${currentScroll}, maxScroll=${maxScroll}, clientHeight=${scrollContainerRef.current.clientHeight}, scrollHeight=${scrollContainerRef.current.scrollHeight}`);
+          console.log(`   Current state: scrollTop=${currentScroll}, maxScroll=${maxScroll}, clientHeight=${scrollContainerRef.current.clientHeight}, scrollHeight=${scrollContainerRef.current.scrollHeight}`);
           
           const newScroll = direction === 'up' ? currentScroll - step : currentScroll + step;
           
@@ -669,9 +669,9 @@ const Overlay = () => {
             top: newScroll,
             behavior: 'auto'
           });
-          console.log(`   执行滚动: ${currentScroll} -> ${newScroll}`);
+          console.log(`   Executing scroll: ${currentScroll} -> ${newScroll}`);
         } else {
-          console.warn('⚠️ scrollContainerRef.current 不存在');
+          console.warn('⚠️ scrollContainerRef.current does not exist');
         }
       };
 
@@ -679,19 +679,19 @@ const Overlay = () => {
     }
   }, []);
 
-  // 监听 IPC 事件
+  // Listen to IPC events
   useEffect(() => {
-    console.log('Overlay 组件挂载完成，开始监听事件...');
+    console.log('Overlay component mounted, starting to listen to events...');
 
     const handleScreenshotTaken = (imageBase64: string) => {
-      console.log('收到截图，添加到列表');
-      console.log('图片数据前50字符:', imageBase64.substring(0, 50));
-      setScreenshots(prev => [...prev, imageBase64]); // 追加新截图
+      console.log('Received screenshot, adding to list');
+      console.log('Image data first 50 characters:', imageBase64.substring(0, 50));
+      setScreenshots(prev => [...prev, imageBase64]); // Append new screenshot
       setAiResponse(null);
       setStatus(`Captured ${screenshots.length + 1} screenshot(s), press Ctrl+Enter to analyze, Ctrl+D to clear`);
     };
 
-    // 📸 处理图片分析请求
+    // 📸 Handle image analysis request
     const handleSendScreenshotRequest = async () => {
       if (screenshots.length === 0) {
         setStatus('Please take a screenshot first (Ctrl+H)');
@@ -700,18 +700,18 @@ const Overlay = () => {
       
       if (isLoading) return;
       
-      console.log(`🚀 开始分析 ${screenshots.length} 张截图...`);
+      console.log(`🚀 Starting to analyze ${screenshots.length} screenshots...`);
       setIsLoading(true);
       setStatus('Analyzing images...');
 
       try {
-        // 获取认证token
+        // Get authentication token
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('未登录，请先登录');
+          throw new Error('Not logged in, please login first');
         }
         
-        // 移除所有截图的 data URL 前缀
+        // Remove data URL prefix from all screenshots
         const base64DataList = screenshots.map(img => 
           img.replace(/^data:image\/\w+;base64,/, '')
         );
@@ -733,11 +733,11 @@ const Overlay = () => {
           },
           body: JSON.stringify({ 
             image_base64: imageData,
-            prompt: promptTemplate || undefined  // 如果有 Prompt 模板，传递给后端
+            prompt: promptTemplate || undefined  // If there's a Prompt template, pass it to backend
           }),
         });
 
-        console.log('📡 API 响应状态:', {
+        console.log('📡 API response status:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
@@ -746,7 +746,7 @@ const Overlay = () => {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ API 错误响应:', {
+          console.error('❌ API error response:', {
             status: response.status,
             statusText: response.statusText,
             body: errorText
@@ -755,7 +755,7 @@ const Overlay = () => {
         }
 
         const data = await response.json();
-        console.log('✅ 收到 AI 回复:', data);
+        console.log('✅ Received AI response:', data);
         
         setAiResponse(data.answer);
         setIsLoading(false);
@@ -779,15 +779,15 @@ const Overlay = () => {
           return updated;
         });
         
-        // 🚨 分析完成后自动清空截图
+        // 🚨 Automatically clear screenshots after analysis completes
         setScreenshots([]);
-        console.log('🗑️ 截图已自动清空');
+        console.log('🗑️ Screenshots automatically cleared');
         
       } catch (error) {
-        console.error('❌ 分析失败:', error);
+        console.error('❌ Analysis failed:', error);
         setIsLoading(false);
         setStatus(`Analysis failed: ${error}`);
-        setAiResponse(`### 出错了\n\n请求后端失败。\n\n错误信息: ${error}`);
+        setAiResponse(`### Error\n\nFailed to request backend.\n\nError message: ${error}`);
       }
     };
 
@@ -804,20 +804,20 @@ const Overlay = () => {
         }
       };
     } else {
-      console.error('window.aiShot 未定义！IPC 桥接失败。');
+      console.error('window.aiShot is undefined! IPC bridge failed.');
       setStatus('IPC connection failed (preload not loaded)');
     }
   }, [screenshots, isLoading, saveCurrentSession]);
 
-  // 🎯 监听场景选择事件（从菜单）
+  // 🎯 Listen to scene selection events (from menu)
   useEffect(() => {
     if (window.aiShot?.onScenarioSelected) {
       const handleScenarioSelected = (data: { sceneId: string; presetId: string; prompt: string }) => {
         console.log('Scenario selected from menu in Overlay:', data);
-        // 更新场景配置
+        // Update scene configuration
         const { setCurrentScene } = require('./lib/sceneStorage');
         setCurrentScene(data.sceneId, data.presetId);
-        // 触发自定义事件通知其他组件
+        // Trigger custom event to notify other components
         window.dispatchEvent(new CustomEvent('sceneConfigChanged'));
       };
       
@@ -830,8 +830,8 @@ const Overlay = () => {
   }, []);
 
 
-  // 监听键盘事件（Ctrl+Left/Right 移动窗口，Ctrl+D 删除截图）
-  // Ctrl+Up/Down 由全局快捷键处理
+  // Listen to keyboard events (Ctrl+Left/Right to move window, Ctrl+D to delete screenshots)
+  // Ctrl+Up/Down handled by global shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.ctrlKey) return;
@@ -840,28 +840,28 @@ const Overlay = () => {
       
       switch (e.key.toLowerCase()) {
         case 'arrowleft':
-          // Ctrl+Left: 向左移动窗口
+          // Ctrl+Left: Move window left
           window.aiShot?.moveOverlay?.('left', 20);
           handled = true;
           break;
         case 'arrowright':
-          // Ctrl+Right: 向右移动窗口
+          // Ctrl+Right: Move window right
           window.aiShot?.moveOverlay?.('right', 20);
           handled = true;
           break;
         case 'd':
-          // Ctrl+D: 删除所有截图
-          console.log('🗑️ 清空所有截图');
+          // Ctrl+D: Delete all screenshots
+          console.log('🗑️ Clearing all screenshots');
           setScreenshots([]);
           setAiResponse(null);
           setStatus('Screenshots cleared');
           handled = true;
           break;
         case 't':
-          // 🎤 Ctrl+T: 开始/停止录音
+          // 🎤 Ctrl+T: Start/stop recording
           if (isRecording) {
             stopRecording();
-            // 停止后自动发送
+            // Automatically send after stopping
             setTimeout(() => {
               sendRecording();
             }, 500);
@@ -871,7 +871,7 @@ const Overlay = () => {
           handled = true;
           break;
         case 'enter':
-          // 🎤 Ctrl+Enter: 如果正在录音，则停止并发送；否则让全局快捷键处理（发送截图）
+          // 🎤 Ctrl+Enter: If recording, stop and send; otherwise let global shortcut handle (send screenshots)
           if (isRecording) {
             stopRecording();
             setTimeout(() => {
@@ -879,15 +879,15 @@ const Overlay = () => {
             }, 500);
             handled = true;
           }
-          // 如果不处理，让全局快捷键处理（发送截图）
+          // If not handled, let global shortcut handle (send screenshots)
           break;
         case 's':
         case 'S':
-          // Ctrl+S: 切换专注模式
+          // Ctrl+S: Toggle focus mode
           setIsFocusMode(prev => {
             const newMode = !prev;
-            console.log(newMode ? '🔒 专注模式：不透明+可选中' : '👻 穿透模式：透明+穿透');
-            // 🚨 如果正在加载（分析图片/对话），不覆盖状态，只在控制台提示
+            console.log(newMode ? '🔒 Focus mode: Opaque + selectable' : '👻 Click-through mode: Transparent + click-through');
+            // 🚨 If loading (analyzing image/conversation), don't override status, only log to console
             if (!isLoading) {
               setStatus(newMode ? 'Focus mode enabled' : 'Transparent mode enabled');
               setTimeout(() => setStatus(''), 2000);
@@ -898,7 +898,7 @@ const Overlay = () => {
           break;
         case 'n':
         case 'N':
-          // Ctrl+N: 创建新 Session
+          // Ctrl+N: Create new Session
           createNewSession();
           handled = true;
           break;
@@ -923,7 +923,7 @@ const Overlay = () => {
         display: 'flex', 
         flexDirection: 'column',
         width: '100%',
-        // 🚨 根据专注模式调整透明度
+        // 🚨 Adjust transparency based on focus mode
         background: isFocusMode ? 'rgba(0, 0, 0, 0.85)' : 'rgba(0, 0, 0, 0.15)',
         color: '#ffffff',
         borderRadius: '0 0 12px 12px',
@@ -937,7 +937,7 @@ const Overlay = () => {
         display: 'flex', 
         flexDirection: 'column', 
         flex: 1,
-        overflow: 'hidden' /* 🚨 关键：防止中间层被撑开 */
+        overflow: 'hidden' /* 🚨 Key: Prevent middle layer from being stretched */
       }}>
         {/* Shortcut Bar */}
         <div className="overlay-shortcuts-bar">
@@ -961,7 +961,7 @@ const Overlay = () => {
           </div>
         </div>
 
-        {/* 内容区域 */}
+        {/* Content area */}
         <div ref={scrollContainerRef} className="overlay-content-wrapper">
           <div className="overlay-content">
             {screenshots.length > 0 && (
@@ -993,17 +993,17 @@ const Overlay = () => {
               </div>
             )}
 
-            {/* 显示对话历史 */}
+            {/* Display conversation history */}
             {conversationHistory.length > 0 && (
               <div 
                 className={`conversation-history ${isFocusMode ? 'focus-mode' : 'penetrate-mode'}`}
                 style={{ 
-                  overflowY: isFocusMode ? 'auto' : 'visible', /* 🚨 穿透模式下不显示滚动条 */
-                  paddingRight: isFocusMode ? '0.5rem' : '0' /* 🚨 穿透模式下不留滚动条空间 */
+                  overflowY: isFocusMode ? 'auto' : 'visible', /* 🚨 Click-through mode: don't show scrollbar */
+                  paddingRight: isFocusMode ? '0.5rem' : '0' /* 🚨 Click-through mode: don't reserve scrollbar space */
                 }}
               >
                 {isFocusMode ? (
-                  // 🎯 专注模式：显示完整历史
+                  // 🎯 Focus mode: display complete history
                   <>
                     {conversationHistory.map((conv, index) => (
                       <div key={index} className="conversation-item">
@@ -1016,13 +1016,13 @@ const Overlay = () => {
                         )}
                         {conv.type === 'text' && conv.userInput && (
                           <div className="user-message">
-                            <div className="message-label">👤 你：</div>
+                            <div className="message-label">👤 You:</div>
                             <div className="message-text">{conv.userInput}</div>
                           </div>
                         )}
                         <div className="overlay-response" style={{
-                          maxHeight: '60vh', /* 专注模式下限制高度 */
-                          overflowY: 'auto' /* 专注模式下可滚动 */
+                          maxHeight: '60vh', /* Limit height in focus mode */
+                          overflowY: 'auto' /* Scrollable in focus mode */
                         }}>
                           <div className="response-label">🤖 AI：</div>
                           <div className="response-text markdown-content">
@@ -1036,11 +1036,11 @@ const Overlay = () => {
                         </div>
                       </div>
                     ))}
-                    {/* 🚨 底部标记，用于自动滚动 */}
+                    {/* 🚨 Bottom marker for auto-scroll */}
                     <div ref={conversationEndRef} style={{ height: '1px' }}></div>
                   </>
                 ) : (
-                  // 🎯 穿透模式：只显示最新一条
+                  // 🎯 Click-through mode: only show latest one
                   (() => {
                     const latestConv = conversationHistory[conversationHistory.length - 1];
                     return (
@@ -1048,19 +1048,19 @@ const Overlay = () => {
                         {latestConv.type === 'image' && latestConv.screenshots && (
                           <div className="conv-screenshots">
                             <div className="screenshots-label">
-                              📸 发送了 {latestConv.screenshots.length} 张截图
+                              📸 Sent {latestConv.screenshots.length} screenshots
                             </div>
                           </div>
                         )}
                         {latestConv.type === 'text' && latestConv.userInput && (
                           <div className="user-message">
-                            <div className="message-label">👤 你：</div>
+                            <div className="message-label">👤 You:</div>
                             <div className="message-text">{latestConv.userInput}</div>
                           </div>
                         )}
                         <div className="overlay-response" style={{
-                          maxHeight: '60vh', /* 限制高度 */
-                          overflowY: 'auto' /* 显示滚动条，可用 Ctrl+Up/Down */
+                          maxHeight: '60vh', /* Limit height */
+                          overflowY: 'auto' /* Show scrollbar, can use Ctrl+Up/Down */
                         }}>
                           <div className="response-label">🤖 AI：</div>
                           <div className="response-text markdown-content">
@@ -1079,10 +1079,10 @@ const Overlay = () => {
               </div>
             )}
 
-            {/* 当前正在加载但还没有历史记录时，显示单独的 AI 回复 */}
+            {/* When currently loading but no history yet, show separate AI response */}
             {aiResponse && conversationHistory.length === 0 && (
               <div className="overlay-response">
-                <div className="response-label">AI 回答：</div>
+                <div className="response-label">AI Answer:</div>
                 <div className="response-text markdown-content">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -1095,7 +1095,7 @@ const Overlay = () => {
             )}
           </div>
 
-          {/* 调试信息 */}
+          {/* Debug information */}
           {isFocusMode && (
             <div style={{ 
               padding: '0.5rem', 
@@ -1104,18 +1104,18 @@ const Overlay = () => {
               fontSize: '0.8rem',
               margin: '0 1rem 1rem 1rem'
             }}>
-              🐛 专注模式已激活 - 输入框应该在上方固定显示
+              🐛 Focus mode activated - Input box should be fixed at top
             </div>
           )}
         </div>
 
-        {/* 输入框：仅在专注模式下显示，放在 content-wrapper 外部，固定在底部 */}
+        {/* Input box: Only shown in focus mode, placed outside content-wrapper, fixed at bottom */}
         {isFocusMode && (
           <div className="chat-input-container" style={{ 
             backgroundColor: 'rgba(0, 0, 0, 0.6)',
             borderTop: '1px solid rgba(255, 255, 255, 0.2)',
             padding: '1rem',
-            flexShrink: 0 // 防止被挤压
+            flexShrink: 0 // Prevent being squeezed
           }}>
             <textarea
               value={userInput}
