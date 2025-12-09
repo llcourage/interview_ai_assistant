@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { Landing } from './Landing';
 import { Plans } from './Plans';
 import { Help } from './Help';
@@ -112,19 +113,22 @@ export const AppRouter: React.FC = () => {
   const isElectronClient = isElectron();
   
   return (
-    <Routes>
-      <Route path="/" element={isElectronClient ? <ElectronDefaultPage /> : <Landing />} />
-      <Route path="/plans" element={<Plans />} />
-      <Route path="/help" element={<Help />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
-      <Route path="/checkout" element={<Checkout />} />
-      <Route path="/success" element={<Success />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/app" element={<App />} />
-      <Route path="/overlay" element={<Overlay />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={isElectronClient ? <ElectronDefaultPage /> : <Landing />} />
+        <Route path="/plans" element={<Plans />} />
+        <Route path="/help" element={<Help />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/success" element={<Success />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/app" element={<App />} />
+        <Route path="/overlay" element={<Overlay />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      {!isElectronClient && <Analytics />}
+    </>
   );
 };
 
