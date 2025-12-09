@@ -288,12 +288,12 @@ const Overlay = () => {
         return updated;
       });
       
-      // 清空录音数据
+      // Clear recording data
       audioChunksRef.current = [];
       setRecordingTime(0);
       
     } catch (error) {
-      console.error('❌ 发送录音失败:', error);
+      console.error('❌ Failed to send recording:', error);
       setStatus(`Send failed: ${error}`);
       setIsLoading(false);
     }
@@ -372,16 +372,16 @@ const Overlay = () => {
         
         setIsLoading(false);
         const errorMsg = error?.message || String(error);
-        let userFriendlyError = `### 出错了\n\n请求后端失败。\n\n`;
+        let userFriendlyError = `### Error\n\nFailed to request backend.\n\n`;
         
         if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-          userFriendlyError += `**网络错误**: 无法连接到服务器。\n\n`;
-          userFriendlyError += `请检查：\n`;
-          userFriendlyError += `1. 网络连接是否正常\n`;
-          userFriendlyError += `2. API 服务器是否运行 (${API_BASE_URL})\n`;
-          userFriendlyError += `3. 浏览器控制台是否有更多错误信息\n`;
+          userFriendlyError += `**Network Error**: Unable to connect to server.\n\n`;
+          userFriendlyError += `Please check:\n`;
+          userFriendlyError += `1. Network connection is normal\n`;
+          userFriendlyError += `2. API server is running (${API_BASE_URL})\n`;
+          userFriendlyError += `3. Browser console for more error information\n`;
         } else {
-          userFriendlyError += `错误信息: ${errorMsg}`;
+          userFriendlyError += `Error message: ${errorMsg}`;
         }
         
         setStatus(`Error: ${errorMsg}`);
@@ -418,11 +418,11 @@ const Overlay = () => {
         ? `${promptTemplate}\n\nUser: ${currentInput}`
         : currentInput;
       
-      // 🚨 构建完整上下文：包含图片分析和文字对话
+      // 🚨 Build complete context: includes image analysis and text conversation
       const context = conversationHistory
         .map(conv => {
           if (conv.type === 'image') {
-            return `[用户发送了 ${conv.screenshots?.length || 0} 张截图]\nAI: ${conv.response}`;
+            return `[User sent ${conv.screenshots?.length || 0} screenshot(s)]\nAI: ${conv.response}`;
           } else {
             return `User: ${conv.userInput}\nAI: ${conv.response}`;
           }
@@ -430,7 +430,7 @@ const Overlay = () => {
         .join('\n\n');
       
       const requestUrl = `${API_BASE_URL}/api/chat`;
-      console.log('📡 发送 API 请求:', {
+      console.log('📡 Sending API request:', {
         url: requestUrl,
         method: 'POST',
         hasToken: !!token,
@@ -509,7 +509,7 @@ const Overlay = () => {
       });
       
     } catch (error: any) {
-      console.error('❌ 对话失败:', error);
+      console.error('❌ Conversation failed:', error);
       console.error('   - Error type:', error?.constructor?.name);
       console.error('   - Error message:', error?.message);
       console.error('   - API_BASE_URL:', API_BASE_URL);
@@ -517,16 +517,16 @@ const Overlay = () => {
       
       setIsLoading(false);
       const errorMsg = error?.message || String(error);
-      let userFriendlyError = `### 出错了\n\n请求后端失败。\n\n`;
+      let userFriendlyError = `### Error\n\nFailed to request backend.\n\n`;
       
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
-        userFriendlyError += `**网络错误**: 无法连接到服务器。\n\n`;
-        userFriendlyError += `请检查：\n`;
-        userFriendlyError += `1. 网络连接是否正常\n`;
-        userFriendlyError += `2. API 服务器是否运行 (${API_BASE_URL})\n`;
-        userFriendlyError += `3. 浏览器控制台是否有更多错误信息\n`;
+        userFriendlyError += `**Network Error**: Unable to connect to server.\n\n`;
+        userFriendlyError += `Please check:\n`;
+        userFriendlyError += `1. Network connection is normal\n`;
+        userFriendlyError += `2. API server is running (${API_BASE_URL})\n`;
+        userFriendlyError += `3. Browser console for more error information\n`;
       } else {
-        userFriendlyError += `错误信息: ${errorMsg}`;
+        userFriendlyError += `Error message: ${errorMsg}`;
       }
       
       setStatus(`Error: ${errorMsg}`);
@@ -581,32 +581,32 @@ const Overlay = () => {
       let contentHeight = 0;
       
       if (aiResponse) {
-        // 有 AI 回复：根据模式给不同的默认高度
+        // Has AI response: give different default height based on mode
         const screenHeight = window.screen.height;
         if (isFocusMode) {
-          // 专注模式：默认 70% 屏幕高度
-          contentHeight = Math.floor(screenHeight * 0.7) - 60 - 120; // 减去 header 和 footer
+          // Focus mode: default 70% screen height
+          contentHeight = Math.floor(screenHeight * 0.7) - 60 - 120; // Subtract header and footer
         } else {
-          // 穿透模式：默认 50% 屏幕高度
-          contentHeight = Math.floor(screenHeight * 0.5) - 60; // 减去 header
+          // Transparent mode: default 50% screen height
+          contentHeight = Math.floor(screenHeight * 0.5) - 60; // Subtract header
         }
       } else if (isLoading) {
-        // 正在加载：给足够空间显示截图 + 状态
-        // 如果有截图，按截图数量估算；否则给最小值
+        // Loading: give enough space to display screenshots + status
+        // If there are screenshots, estimate by screenshot count; otherwise give minimum
         if (screenshots.length > 0) {
-          const screenshotRowHeight = 180; // 增加到 180px 每行
+          const screenshotRowHeight = 180; // Increased to 180px per row
           const rows = Math.ceil(screenshots.length / 3);
-          contentHeight = rows * screenshotRowHeight + 100; // 截图 + 状态栏
+          contentHeight = rows * screenshotRowHeight + 100; // Screenshots + status bar
         } else {
-          contentHeight = 150; // 只有状态文字时
+          contentHeight = 150; // Only status text
         }
       } else if (screenshots.length > 0) {
-        // 只有截图：根据截图数量估算
-        const screenshotRowHeight = 180; // 增加到 180px 每行
-        const rows = Math.ceil(screenshots.length / 3); // 假设每行 3 张
-        contentHeight = rows * screenshotRowHeight + 80; // 截图 + 提示文字
+        // Only screenshots: estimate based on screenshot count
+        const screenshotRowHeight = 180; // Increased to 180px per row
+        const rows = Math.ceil(screenshots.length / 3); // Assume 3 per row
+        contentHeight = rows * screenshotRowHeight + 80; // Screenshots + hint text
       } else {
-        // 空状态：最小高度
+        // Empty state: minimum height
         contentHeight = 40;
       }
       
@@ -716,13 +716,13 @@ const Overlay = () => {
           img.replace(/^data:image\/\w+;base64,/, '')
         );
         
-        console.log(`📷 截图数据长度: ${base64DataList.map(d => d.length).join(', ')}`);
-        console.log(`📷 第一张截图前50字符: ${base64DataList[0].substring(0, 50)}`);
+        console.log(`📷 Screenshot data length: ${base64DataList.map(d => d.length).join(', ')}`);
+        console.log(`📷 First screenshot first 50 chars: ${base64DataList[0].substring(0, 50)}`);
         
-        // 如果只有一张图，发送字符串；多张图发送数组
+        // If only one image, send string; if multiple images, send array
         const imageData = base64DataList.length === 1 ? base64DataList[0] : base64DataList;
         
-        // 🚨 获取当前 Prompt 模板（用于图片分析）
+        // 🚨 Get current Prompt template (for image analysis)
         const promptTemplate = getCurrentPrompt();
         
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -760,9 +760,9 @@ const Overlay = () => {
         setAiResponse(data.answer);
         setIsLoading(false);
         setStatus('Analysis complete');
-        setTimeout(() => setStatus(''), 2000); // 2秒后清空状态
+        setTimeout(() => setStatus(''), 2000); // Clear status after 2 seconds
         
-        // 📝 添加到对话历史（图片类型）
+        // 📝 Add to conversation history (image type)
         const newConversation = {
           type: 'image' as const,
           screenshots: [...screenshots],
@@ -770,9 +770,9 @@ const Overlay = () => {
         };
         setConversationHistory(prev => {
           const updated = [...prev, newConversation];
-          // 保存到 localStorage
+          // Save to localStorage
           setTimeout(() => saveCurrentSession(), 100);
-          // 🚨 滚动到底部
+          // 🚨 Scroll to bottom
           setTimeout(() => {
             conversationEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
           }, 150);

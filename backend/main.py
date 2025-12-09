@@ -1595,7 +1595,7 @@ async def chat(
 3. Provide best practices and optimization suggestions
 4. Maintain concise, professional response style
 
-Please answer in Chinese, code defaults to Python."""
+Please answer in English, code defaults to Python."""
             })
             
             # Add context (if exists)
