@@ -412,12 +412,8 @@ const Overlay = () => {
         throw new Error('Not logged in, please login first');
       }
       
-      // 🚨 Get current Prompt template and combine with user input
-      const promptTemplate = getCurrentPrompt();
-      const combinedInput = promptTemplate 
-        ? `${promptTemplate}\n\nUser: ${currentInput}`
-        : currentInput;
-      
+      // 🚨 For text conversation, don't use prompt template (which is for image analysis)
+      // Just use user input directly and pass context for conversation continuity
       // 🚨 Build complete context: includes image analysis and text conversation
       const context = conversationHistory
         .map(conv => {
@@ -435,8 +431,6 @@ const Overlay = () => {
         method: 'POST',
         hasToken: !!token,
         inputLength: currentInput.length,
-        promptTemplateLength: promptTemplate.length,
-        combinedInputLength: combinedInput.length,
         API_BASE_URL: API_BASE_URL,
         contextLength: context.length
       });
@@ -450,8 +444,8 @@ const Overlay = () => {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ 
-            user_input: combinedInput,  // Use combined input (includes Prompt template)
-            context: context  // Pass complete context
+            user_input: currentInput,  // Use user input directly (no prompt template for text conversation)
+            context: context  // Pass complete context for conversation continuity
           }),
         });
       } catch (fetchError: any) {
@@ -998,8 +992,8 @@ const Overlay = () => {
               <div 
                 className={`conversation-history ${isFocusMode ? 'focus-mode' : 'penetrate-mode'}`}
                 style={{ 
-                  overflowY: isFocusMode ? 'auto' : 'visible', /* 🚨 Click-through mode: don't show scrollbar */
-                  paddingRight: isFocusMode ? '0.5rem' : '0' /* 🚨 Click-through mode: don't reserve scrollbar space */
+                  overflowY: isFocusMode ? 'visible' : 'visible', /* 🚨 Focus mode: use global scrollbar, not individual scroll */
+                  paddingRight: isFocusMode ? '0' : '0' /* 🚨 Focus mode: no padding needed, global scrollbar handles it */
                 }}
               >
                 {isFocusMode ? (
@@ -1021,8 +1015,8 @@ const Overlay = () => {
                           </div>
                         )}
                         <div className="overlay-response" style={{
-                          maxHeight: '60vh', /* Limit height in focus mode */
-                          overflowY: 'auto' /* Scrollable in focus mode */
+                          maxHeight: 'none', /* No height limit in focus mode, use global scroll */
+                          overflowY: 'visible' /* Use global scrollbar, not individual scroll */
                         }}>
                           <div className="response-label">🤖 AI：</div>
                           <div className="response-text markdown-content">

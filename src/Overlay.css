@@ -87,6 +87,12 @@
   /* pointer-events: auto; */
 }
 
+/* Focus mode: Enable global scrollbar */
+.overlay.focus-mode-active .overlay-content-wrapper {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 /* 滚动条样式 - 已移除，只保留 overlay-response 的滚动条 */
 
 .overlay-content {
@@ -317,6 +323,26 @@
 
 .overlay-response::-webkit-scrollbar-thumb:hover {
   background: rgba(102, 126, 234, 0.7);
+}
+
+/* Global scrollbar for focus mode */
+.overlay.focus-mode-active .overlay-content-wrapper::-webkit-scrollbar {
+  width: 10px;
+}
+
+.overlay.focus-mode-active .overlay-content-wrapper::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 5px;
+}
+
+.overlay.focus-mode-active .overlay-content-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.6);
+  border-radius: 5px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.overlay.focus-mode-active .overlay-content-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.8);
 }
 
 /* 聊天输入框容器 */
