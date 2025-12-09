@@ -54,8 +54,8 @@ contextBridge.exposeInMainWorld('aiShot', {
   },
 
   // Control click-through
-  setIgnoreMouseEvents: (ignore) => {
-    ipcRenderer.send('set-ignore-mouse-events', ignore);
+  setIgnoreMouseEvents: (ignore, options) => {
+    ipcRenderer.send('set-ignore-mouse-events', ignore, options);
   },
 
   // Open main window

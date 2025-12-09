@@ -1374,7 +1374,28 @@ ipcMain.handle('speech-to-text-local', async (event, audioData, language = 'zh')
       // Production: use packaged Python (needs configuration)
       // Here assumes Python is in system PATH, or you need to configure specific path
       pythonPath = process.platform === 'win32' ? 'python' : 'python3';
-      whisperScriptPath = path.join(process.resourcesPath, 'whisper_local.py');
+      // Try multiple possible paths for whisper_local.py
+      const possiblePaths = [
+        path.join(process.resourcesPath, 'whisper_local.py'), // extraResources location
+        path.join(__dirname, 'whisper_local.py'), // Same directory as main.js
+        path.join(app.getAppPath(), 'whisper_local.py'), // App path
+        path.join(path.dirname(process.execPath), 'resources', 'whisper_local.py') // Executable directory
+      ];
+      
+      whisperScriptPath = null;
+      for (const possiblePath of possiblePaths) {
+        if (fs.existsSync(possiblePath)) {
+          whisperScriptPath = possiblePath;
+          console.log(`✅ Found whisper_local.py at: ${whisperScriptPath}`);
+          break;
+        }
+      }
+      
+      if (!whisperScriptPath) {
+        console.error('❌ Could not find whisper_local.py in any of these locations:');
+        possiblePaths.forEach(p => console.error(`   - ${p}`));
+        throw new Error(`Whisper script not found. Please ensure whisper_local.py is included in the app package.`);
+      }
     }
     
     // Create temporary audio file

@@ -537,27 +537,9 @@ const Overlay = () => {
       // Focus mode: completely no click-through, can interact
       window.aiShot?.setIgnoreMouseEvents(false);
     } else {
-      // Click-through mode: dynamically detect buttons
-      const handleMouseMove = (e: MouseEvent) => {
-        const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
-        const isOnButton = elementUnderMouse?.tagName === 'BUTTON' || 
-                           elementUnderMouse?.closest('button');
-
-        if (isOnButton) {
-          window.aiShot?.setIgnoreMouseEvents(false);
-        } else {
-          window.aiShot?.setIgnoreMouseEvents(true, { forward: true });
-        }
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-      
-      // Initial state: click-through
-      setTimeout(() => {
-        window.aiShot?.setIgnoreMouseEvents(true, { forward: true });
-      }, 100);
-      
-      return () => window.removeEventListener('mousemove', handleMouseMove);
+      // Click-through mode: completely click-through, no interaction allowed
+      // All clicks will pass through the window
+      window.aiShot?.setIgnoreMouseEvents(true, { forward: true });
     }
   }, [isFocusMode]);
 

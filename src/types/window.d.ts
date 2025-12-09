@@ -58,8 +58,9 @@ export interface AiShotAPI {
   /**
    * Control click-through
    * @param ignore true: Enable click-through, false: Disable click-through
+   * @param options Optional options object with forward property
    */
-  setIgnoreMouseEvents: (ignore: boolean) => void;
+  setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void;
 
   /**
    * Open main window

@@ -60,7 +60,12 @@
       ],
       "icon": "resources/icon.ico",
       "sign": null,
-      "extraResources": []
+      "extraResources": [
+        {
+          "from": "electron/whisper_local.py",
+          "to": "whisper_local.py"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
