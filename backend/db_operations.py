@@ -45,8 +45,8 @@ async def get_user_plan(user_id: str) -> UserPlan:
                 plan_data = normalize_plan_data(direct_response.data[0])
                 return UserPlan(**plan_data)
             
-            # If no plan record found, create default NORMAL plan
-            print(f"User {user_id} has no plan record, creating default NORMAL plan")
+            # If no plan record found, create default START plan
+            print(f"User {user_id} has no plan record, creating default START plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ Failed to get user Plan: {e}")
@@ -58,13 +58,13 @@ async def get_user_plan(user_id: str) -> UserPlan:
             # Finally return a temporary object (not recommended, but at least won't crash)
             return UserPlan(
                 user_id=user_id,
-                plan=PlanType.NORMAL,
+                plan=PlanType.START,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             )
 
 
-async def create_user_plan(user_id: str, plan: PlanType = PlanType.NORMAL) -> UserPlan:
+async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> UserPlan:
     """Create user Plan"""
     try:
         supabase = get_supabase()
@@ -123,7 +123,9 @@ async def update_user_plan(
         supabase = get_supabase()
         
         # If plan is to be updated, check if quota needs to be reset (upgrading from start to other plan)
+        # or adjusted (downgrading to start plan)
         should_reset_quota = False
+        should_adjust_quota_for_start = False
         old_plan = None
         if plan is not None:
             # Get old plan
@@ -137,6 +139,10 @@ async def update_user_plan(
                         if old_plan == PlanType.START and plan != PlanType.START:
                             should_reset_quota = True
                             print(f"🔄 User {user_id} upgrading from start plan to {plan.value} plan, will reset quota")
+                        # If downgrading to start plan, need to adjust quota (cap at lifetime limit)
+                        elif old_plan != PlanType.START and plan == PlanType.START:
+                            should_adjust_quota_for_start = True
+                            print(f"🔄 User {user_id} downgrading to start plan, will adjust quota to lifetime limit")
             except Exception as e:
                 print(f"⚠️ Failed to check old plan (may be new user): {e}")
         
@@ -221,6 +227,44 @@ async def update_user_plan(
                         print(f"⚠️ Failed to create quota record: {create_error}")
             except Exception as quota_error:
                 print(f"⚠️ Error resetting quota: {quota_error}")
+                # Don't raise exception, because plan update already succeeded
+        
+        # If downgrading to start plan, adjust quota to lifetime limit
+        if should_adjust_quota_for_start and plan == PlanType.START:
+            try:
+                # Get current quota
+                quota = await get_user_quota(user_id)
+                current_tokens_used = getattr(quota, 'weekly_tokens_used', 0)
+                
+                # Get START plan lifetime limit
+                limits = PLAN_LIMITS[PlanType.START]
+                lifetime_token_limit = limits.get("lifetime_token_limit", 100_000)
+                
+                # Cap at lifetime limit (if user already used more than lifetime limit, set to limit)
+                adjusted_tokens = min(current_tokens_used, lifetime_token_limit)
+                
+                now = datetime.now()
+                quota_update_data = {
+                    "weekly_tokens_used": adjusted_tokens,
+                    "plan": plan.value,  # Update plan in quota
+                    "updated_at": now.isoformat()
+                }
+                
+                quota_response = supabase.table("usage_quotas").update(quota_update_data).eq("user_id", user_id).execute()
+                if quota_response.data:
+                    if adjusted_tokens < current_tokens_used:
+                        print(f"✅ Adjusted user {user_id} quota from {current_tokens_used:,} to {adjusted_tokens:,} (downgraded to start plan, capped at lifetime limit)")
+                    else:
+                        print(f"✅ Updated user {user_id} quota plan to start (tokens used: {adjusted_tokens:,}/{lifetime_token_limit:,})")
+                else:
+                    # Quota record may not exist, try to create
+                    try:
+                        await create_user_quota(user_id)
+                        print(f"✅ Created new quota record for user {user_id}")
+                    except Exception as create_error:
+                        print(f"⚠️ Failed to create quota record: {create_error}")
+            except Exception as quota_error:
+                print(f"⚠️ Error adjusting quota for start plan: {quota_error}")
                 # Don't raise exception, because plan update already succeeded
         
         return result

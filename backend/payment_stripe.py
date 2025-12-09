@@ -243,13 +243,13 @@ async def handle_subscription_updated(subscription: dict):
             )
             print(f"✅ User {user_id} subscription activated")
         elif status in ["canceled", "past_due", "unpaid"]:
-            # Subscription canceled or overdue, downgrade to normal
+            # Subscription canceled or overdue, downgrade to start plan
             await update_user_plan(
                 user_id=user_id,
-                plan=PlanType.NORMAL,
+                plan=PlanType.START,
                 subscription_status=status
             )
-            print(f"⚠️ User {user_id} subscription canceled/overdue, downgraded to normal")
+            print(f"⚠️ User {user_id} subscription canceled/overdue, downgraded to start plan")
     except Exception as e:
         print(f"❌ Failed to handle subscription update Webhook: {e}")
         raise
@@ -276,14 +276,14 @@ async def handle_subscription_deleted(subscription: dict):
         
         user_id = response.data["user_id"]
         
-        # Downgrade to normal
+        # Downgrade to start plan
         await update_user_plan(
             user_id=user_id,
-            plan=PlanType.NORMAL,
+            plan=PlanType.START,
             subscription_status="canceled"
         )
         
-        print(f"⚠️ User {user_id} subscription deleted, downgraded to normal")
+        print(f"⚠️ User {user_id} subscription deleted, downgraded to start plan")
     except Exception as e:
         print(f"❌ Failed to handle subscription deletion Webhook: {e}")
         raise

@@ -1312,9 +1312,9 @@ async def get_plan(http_request: Request):
     
     # Ensure plan field exists
     if not user_plan or not user_plan.plan:
-        # If plan doesn't exist, use default NORMAL plan
-        print(f"⚠️ User {current_user.id} plan is empty, using default NORMAL plan")
-        user_plan.plan = PlanType.NORMAL
+        # If plan doesn't exist, use default START plan
+        print(f"⚠️ User {current_user.id} plan is empty, using default START plan")
+        user_plan.plan = PlanType.START
     
     limits = PLAN_LIMITS[user_plan.plan]
     
