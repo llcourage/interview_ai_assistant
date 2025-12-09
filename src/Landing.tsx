@@ -16,7 +16,7 @@ export const Landing: React.FC = () => {
           
           <div className="video-container">
             <iframe
-              src="https://www.youtube.com/embed/VIDEO_ID"
+              src="https://www.youtube.com/embed/61psddHcFsA"
               title="Desktop AI Demo"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
