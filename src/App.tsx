@@ -526,17 +526,6 @@ function App() {
                         🗑️
                       </button>
                     </div>
-                    <div className="session-preview">
-                      <span className="conversation-count">
-                        {session.conversations.length} conversations
-                      </span>
-                      <span className="screenshot-count">
-                        {session.conversations.filter(c => c.type === 'image').length} images
-                      </span>
-                      <span className="screenshot-count">
-                        {session.conversations.filter(c => c.type === 'text').length} messages
-                      </span>
-                    </div>
                   </div>
                 ))}
               </div>

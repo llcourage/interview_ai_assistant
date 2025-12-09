@@ -378,21 +378,6 @@ section h2 {
   opacity: 1;
 }
 
-.session-preview {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: var(--app-text-secondary);
-}
-
-.conversation-count,
-.screenshot-count {
-  padding: 0.2rem 0.5rem;
-  background: var(--app-shortcut-bg);
-  border-radius: 4px;
-  color: var(--app-text);
-}
-
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;
