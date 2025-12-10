@@ -57,7 +57,8 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "appx"
       ],
       "icon": "resources/icon.ico",
       "sign": null,
@@ -66,7 +67,17 @@
           "from": "electron/whisper_local.py",
           "to": "whisper_local.py"
         }
-      ]
+      ],
+      "publisherName": "Desktop AI",
+      "verifyUpdateCodeSignature": false
+    },
+    "appx": {
+      "identityName": "InvestAILabsLLC.DesktopAI",
+      "publisher": "CN=0F9FA357-82A8-409A-93D5-BD23CD0CAB2C",
+      "publisherDisplayName": "InvestAI Labs LLC",
+      "applicationId": "DesktopAI",
+      "displayName": "Desktop AI",
+      "backgroundColor": "#1e1e2e"
     },
     "nsis": {
       "oneClick": false,
