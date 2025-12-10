@@ -124,7 +124,7 @@ export const Help: React.FC = () => {
           <div className="contact-info">
             <div className="contact-item">
               <h4>Email Support</h4>
-              <p>desktop_ai@outlook.com</p>
+              <p><a href="mailto:supports@desktopai.org" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>supports@desktopai.org</a></p>
               <p className="contact-description">Send us an email and we'll get back to you as soon as possible.</p>
             </div>
             
