@@ -56,7 +56,14 @@ async def register_user(email: str, password: str) -> Token:
         if not response.user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed"
+                detail="Registration failed: No user returned"
+            )
+        
+        # Check if session exists (may be None if email confirmation is required)
+        if not response.session:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Registration successful, but email verification is required. Please check your email to verify your account before logging in."
             )
         
         return Token(
@@ -67,6 +74,9 @@ async def register_user(email: str, password: str) -> Token:
                 "email": response.user.email
             }
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

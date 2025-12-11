@@ -21,11 +21,11 @@ let html = fs.readFileSync(distIndexHtml, 'utf8');
 // /assets/ -> ./assets/
 html = html.replace(/href="\/assets\//g, 'href="./assets/');
 html = html.replace(/src="\/assets\//g, 'src="./assets/');
-html = html.replace(/href="\/vite\.svg"/g, 'href="./vite.svg"');
+html = html.replace(/href="\/favicon\.png"/g, 'href="./favicon.png"');
 
 fs.writeFileSync(distIndexHtml, html, 'utf8');
 
 console.log('✅ 路径修复完成！');
 console.log('   已将 /assets/ 替换为 ./assets/');
-console.log('   已将 /vite.svg 替换为 ./vite.svg');
+console.log('   已将 /favicon.png 替换为 ./favicon.png');
 

@@ -66,6 +66,14 @@
         {
           "from": "electron/whisper_local.py",
           "to": "whisper_local.py"
+        },
+        {
+          "from": "resources/icon.ico",
+          "to": "resources/icon.ico"
+        },
+        {
+          "from": "resources/icon.png",
+          "to": "resources/icon.png"
         }
       ],
       "publisherName": "Desktop AI",
@@ -73,7 +81,7 @@
     },
     "appx": {
       "identityName": "InvestAILabsLLC.DesktopAI",
-      "publisher": "CN=0F9FA357-82A8-409A-93D5-BD23CD0CAB2C",
+      "publisher": "CN=Desktop AI, O=InvestAI Labs LLC",
       "publisherDisplayName": "InvestAI Labs LLC",
       "applicationId": "DesktopAI",
       "displayName": "Desktop AI",

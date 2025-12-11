@@ -50,7 +50,8 @@ export const Header: React.FC = () => {
         <div className="header-container">
           <div className="header-left">
             <h1 className="logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-              🔥 Desktop AI
+              <img src="/favicon.png" alt="Desktop AI" className="logo-img" />
+              Desktop AI
             </h1>
           </div>
           <div className="header-right">

@@ -58,3 +58,10 @@ COMMENT ON COLUMN usage_quotas.weekly_tokens_used IS 'Weekly tokens used by the 
 COMMENT ON COLUMN usage_quotas.weekly_token_limit IS 'Weekly token limit for the user plan';
 COMMENT ON COLUMN usage_quotas.lifetime_token_limit IS 'Lifetime token limit (for start plan, no reset)';
 
+
+
+
+
+
+
+

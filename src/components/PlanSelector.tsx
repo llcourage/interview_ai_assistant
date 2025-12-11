@@ -84,29 +84,6 @@ export const PlanSelector: React.FC<PlanSelectorProps> = ({
           </div>
           ))}
       </div>
-      
-      {currentPlan !== 'high' && (
-        <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}>
-          <p style={{ color: '#aaa', marginBottom: '0.5rem' }}>Want to upgrade your plan?</p>
-          <p style={{ color: '#888', fontSize: '0.9rem' }}>
-            Please visit the{' '}
-            <a
-              href="https://www.desktopai.org/plans"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: '#4CAF50',
-                textDecoration: 'underline',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              web interface
-            </a>
-            {' '}to upgrade or manage your subscription
-          </p>
-        </div>
-      )}
     </div>
   );
 };

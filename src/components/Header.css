@@ -36,6 +36,15 @@
   font-weight: 700;
   margin: 0;
   color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-left .logo .logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .header-right {

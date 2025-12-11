@@ -19,6 +19,51 @@ let currentScreenshot = null;
 
 const isDev = !app.isPackaged;
 
+// 🎨 Get icon path (works in both dev and production)
+function getIconPath() {
+  // Try multiple possible paths
+  const possiblePaths = [
+    // Development path
+    path.join(__dirname, '../resources/icon.ico'),
+  ];
+  
+  // Add production paths if available
+  if (process.resourcesPath) {
+    possiblePaths.push(path.join(process.resourcesPath, 'resources', 'icon.ico'));
+  }
+  
+  try {
+    if (app && app.getAppPath) {
+      const appPath = app.getAppPath();
+      possiblePaths.push(
+        path.join(appPath, 'resources', 'icon.ico'),
+        path.join(path.dirname(appPath), 'resources', 'icon.ico')
+      );
+    }
+  } catch (e) {
+    // app.getAppPath() might not be available yet, skip
+  }
+  
+  // Try each path
+  for (const iconPath of possiblePaths) {
+    try {
+      if (fs.existsSync(iconPath)) {
+        console.log(`✅ Icon found at: ${iconPath}`);
+        return iconPath;
+      }
+    } catch (e) {
+      // Continue to next path
+    }
+  }
+  
+  // If no icon found, log warning and return null (will use default)
+  console.warn('⚠️ Icon file not found, using default icon');
+  console.warn('   Searched paths:', possiblePaths);
+  return null;
+}
+
+const iconPath = getIconPath();
+
 // 📝 Setup log file
 const logDir = path.join(app.getPath('userData'), 'logs');
 if (!fs.existsSync(logDir)) {
@@ -251,7 +296,7 @@ function createMainWindow() {
       // ⚠️ Note: This is for development only, production should keep webSecurity enabled
       webSecurity: !isDev // Disabled in development, enabled in production
     },
-    icon: path.join(__dirname, '../resources/icon.png')
+    icon: iconPath
   });
 
   if (isDev) {
@@ -1516,7 +1561,7 @@ ipcMain.on('show-token-warning', (event, message, usagePercentage) => {
       const notification = new Notification({
         title: '⚠️ Token Usage Warning',
         body: `You have used ${usagePercentage}% of your Token quota. Remaining quota is limited. Please use wisely.`,
-        icon: path.join(__dirname, '../resources/icon.png'),
+        icon: iconPath,
         urgency: 'normal',
         timeoutType: 'never' // Don't auto-dismiss, let user close manually
       });
