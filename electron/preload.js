@@ -131,6 +131,11 @@ contextBridge.exposeInMainWorld('aiShot', {
     ipcRenderer.send('show-token-warning', message, usagePercentage);
   },
 
+  // 🚩 Report inappropriate AI content
+  reportInappropriateContent: (data) => {
+    return ipcRenderer.invoke('report-inappropriate-content', data);
+  },
+
   // 🔐 OAuth result (for OAuth window)
   sendOAuthResult: (result) => {
     ipcRenderer.send('oauth-result', result);

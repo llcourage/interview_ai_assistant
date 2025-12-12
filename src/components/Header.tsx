@@ -67,16 +67,15 @@ export const Header: React.FC = () => {
                   Profile
                 </button>
                 {!isElectron() && (
-                  <a
-                    href={DOWNLOAD_CONFIG.windows.url}
+                  <button
                     className="header-btn download-btn"
-                    download={DOWNLOAD_CONFIG.windows.filename}
+                    onClick={() => navigate('/download')}
                   >
                     <svg className="download-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     Free Download
-                  </a>
+                  </button>
                 )}
                 <button 
                   className="header-btn login-btn"
@@ -100,16 +99,15 @@ export const Header: React.FC = () => {
                   Sign Up
                 </button>
                 {!isElectron() && (
-                  <a
-                    href={DOWNLOAD_CONFIG.windows.url}
+                  <button
                     className="header-btn download-btn"
-                    download={DOWNLOAD_CONFIG.windows.filename}
+                    onClick={() => navigate('/download')}
                   >
                     <svg className="download-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     Free Download
-                  </a>
+                  </button>
                 )}
               </>
             )}
@@ -136,6 +134,12 @@ export const Header: React.FC = () => {
               onClick={() => navigate('/help')}
             >
               Helps
+            </button>
+            <button 
+              className={`nav-link ${location.pathname === '/contact' ? 'active' : ''}`}
+              onClick={() => navigate('/contact')}
+            >
+              Contact
             </button>
           </div>
         </div>

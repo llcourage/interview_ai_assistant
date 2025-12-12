@@ -156,6 +156,17 @@ export interface AiShotAPI {
    * @param usagePercentage Usage percentage
    */
   showTokenWarning?: (message: string, usagePercentage: string) => void;
+
+  /**
+   * Report inappropriate AI content (Electron only)
+   * @param data Report data containing content, context, and reason
+   * @returns Promise that returns success status
+   */
+  reportInappropriateContent?: (data: {
+    content: string;
+    context?: string;
+    reason?: string;
+  }) => Promise<{ success: boolean; message?: string; error?: string }>;
 }
 
 declare global {

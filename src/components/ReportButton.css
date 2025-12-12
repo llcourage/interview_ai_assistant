@@ -1,0 +1,114 @@
+/* Subtle report button - only visible on hover */
+.report-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.report-button:hover {
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Show button on hover of parent container */
+.overlay-response:hover .report-button,
+.ai-response-detail:hover .report-button,
+.conversation-item:hover .report-button {
+  opacity: 1;
+}
+
+/* Hide button in web version (only show in Electron) */
+.report-button:not([data-electron]) {
+  display: none;
+}
+
+/* Dialog overlay */
+.report-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(2px);
+}
+
+.report-dialog {
+  background: var(--app-bg, #1e1e2e);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.report-dialog h3 {
+  margin: 0 0 12px 0;
+  color: var(--app-text, #ffffff);
+  font-size: 18px;
+}
+
+.report-dialog p {
+  margin: 0 0 20px 0;
+  color: var(--app-text-secondary, rgba(255, 255, 255, 0.7));
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.report-dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.report-dialog-cancel,
+.report-dialog-submit {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.report-dialog-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--app-text, #ffffff);
+}
+
+.report-dialog-cancel:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.report-dialog-submit {
+  background: #667eea;
+  color: white;
+}
+
+.report-dialog-submit:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.report-dialog-cancel:disabled,
+.report-dialog-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

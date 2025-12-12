@@ -4,9 +4,11 @@ import { Analytics } from '@vercel/analytics/react';
 import { Landing } from './Landing';
 import { Plans } from './Plans';
 import { Help } from './Help';
+import { Contact } from './Contact';
 import { Checkout } from './Checkout';
 import { Success } from './Success';
 import { Profile } from './Profile';
+import { Download } from './Download';
 import App from './App';
 import { Login } from './Login';
 import { AuthCallback } from './AuthCallback';
@@ -118,6 +120,8 @@ export const AppRouter: React.FC = () => {
         <Route path="/" element={isElectronClient ? <ElectronDefaultPage /> : <Landing />} />
         <Route path="/plans" element={<Plans />} />
         <Route path="/help" element={<Help />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/download" element={<Download />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/checkout" element={<Checkout />} />

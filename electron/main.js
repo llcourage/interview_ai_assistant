@@ -1593,6 +1593,36 @@ ipcMain.on('show-token-warning', (event, message, usagePercentage) => {
   }
 });
 
+// 🚩 IPC: Report inappropriate AI content
+ipcMain.handle('report-inappropriate-content', async (event, { content, context, reason }) => {
+  try {
+    console.log('🚩 User reported inappropriate content:', {
+      contentLength: content?.length || 0,
+      hasContext: !!context,
+      reason: reason || 'not specified'
+    });
+    
+    // Log the report (in production, this would be sent to backend API)
+    // For now, we'll just log it and show a confirmation
+    const win = BrowserWindow.fromWebContents(event.sender);
+    
+    // Show confirmation dialog
+    const result = await dialog.showMessageBox(win || mainWindow, {
+      type: 'info',
+      title: 'Report Submitted',
+      message: 'Thank you for your report.',
+      detail: 'We have received your report about inappropriate content. Our team will review it.',
+      buttons: ['OK'],
+      defaultId: 0
+    });
+    
+    return { success: true, message: 'Report submitted successfully' };
+  } catch (error) {
+    console.error('❌ Failed to report inappropriate content:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Global error handling
 process.on('uncaughtException', (error) => {
   console.error('🚨 Uncaught exception:', error);

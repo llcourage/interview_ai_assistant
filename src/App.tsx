@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -11,9 +12,11 @@ import { ScenarioEditDialog } from './components/ScenarioEditDialog'
 import { ScenarioSelector } from './components/ScenarioSelector'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
+import ContactDialog from './components/ContactDialog'
 import { getCurrentSceneName } from './lib/sceneStorage'
 import { DOWNLOAD_CONFIG } from './constants/download'
 import { isElectron } from './utils/isElectron'
+import ReportButton from './components/ReportButton'
 
 // Session type definition
 interface SessionData {
@@ -30,6 +33,7 @@ interface SessionData {
 // aiShot API types are defined in src/types/window.d.ts
 
 function App() {
+  const navigate = useNavigate();
   const [authStatus, setAuthStatus] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
@@ -49,6 +53,7 @@ function App() {
   const [showScenarioSelector, setShowScenarioSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showContact, setShowContact] = useState(false);
 
   // 📦 Load Plan info from backend API (sync with web)
   useEffect(() => {
@@ -443,6 +448,14 @@ function App() {
             </button>
             <button 
               className="theme-toggle" 
+              onClick={() => setShowContact(true)}
+              title="Contact Us"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              📧 Contact
+            </button>
+            <button 
+              className="theme-toggle" 
               onClick={handleLogout}
               title="Logout"
               style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
@@ -457,10 +470,9 @@ function App() {
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
             {!isElectron() && (
-              <a
-                href={DOWNLOAD_CONFIG.windows.url}
+              <button
                 className="theme-toggle"
-                download={DOWNLOAD_CONFIG.windows.filename}
+                onClick={() => navigate('/download')}
                 title="Free Download"
                 style={{ 
                   fontSize: '0.9rem', 
@@ -468,14 +480,18 @@ function App() {
                   textDecoration: 'none',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.5rem'
+                  gap: '0.5rem',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer'
                 }}
               >
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 Free Download
-              </a>
+              </button>
             )}
           </div>
         </div>
@@ -572,7 +588,8 @@ function App() {
                       )}
 
                       {/* AI Response */}
-                      <div className="ai-response-detail">
+                      <div className="ai-response-detail" style={{ position: 'relative' }}>
+                        <ReportButton content={conv.response} context={conv.userInput || conv.screenshots?.join(', ') || ''} />
                         <h4>🤖 AI Response:</h4>
                         <div className="markdown-content">
                           <ReactMarkdown
@@ -637,6 +654,12 @@ function App() {
           onClose={() => setShowShortcuts(false)}
         />
       )}
+
+      {/* Contact Dialog */}
+      <ContactDialog
+        isOpen={showContact}
+        onClose={() => setShowContact(false)}
+      />
     </div>
   );
 }
