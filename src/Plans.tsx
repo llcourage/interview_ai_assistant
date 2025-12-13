@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuthHeader, getToken } from './lib/auth';
 import { API_BASE_URL } from './lib/api';
@@ -6,9 +6,57 @@ import { Header } from './components/Header';
 import { PlanCard } from './components/PlanCard';
 import './Plans.css';
 
+interface PlanInfo {
+  plan: string;
+}
+
 export const Plans: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(true);
+
+  useEffect(() => {
+    loadCurrentPlan();
+  }, []);
+
+  const loadCurrentPlan = async () => {
+    try {
+      const authHeader = getAuthHeader();
+      if (!authHeader) {
+        setLoadingPlan(false);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/plan`, {
+        headers: {
+          'Authorization': authHeader
+        }
+      });
+
+      if (response.ok) {
+        const data: PlanInfo = await response.json();
+        setCurrentPlan(data.plan);
+      }
+    } catch (error) {
+      console.error('Failed to load current plan:', error);
+    } finally {
+      setLoadingPlan(false);
+    }
+  };
+
+  const getPlanDisplayName = (plan: string | null): string => {
+    if (!plan) return '';
+    const names: Record<string, string> = {
+      'start': 'Start Plan',
+      'normal': 'Weekly Normal Plan',
+      'high': 'Monthly Normal Plan',
+      'ultra': 'Monthly Ultra Plan',
+      'premium': 'Monthly Premium Plan',
+      'internal': 'Internal Plan'
+    };
+    return names[plan] || plan;
+  };
 
   const handlePlanSelect = async (plan: 'start' | 'normal' | 'high' | 'ultra' | 'premium') => {
     setLoading(plan);
@@ -80,6 +128,13 @@ export const Plans: React.FC = () => {
         
         <h1 className="plans-title">Choose Your Plan</h1>
         <p className="plans-subtitle">Select the perfect plan for your needs</p>
+        
+        {!loadingPlan && currentPlan && (
+          <div className="current-plan-badge">
+            <span className="current-plan-label">Current Plan:</span>
+            <span className="current-plan-name">{getPlanDisplayName(currentPlan)}</span>
+          </div>
+        )}
         
         <div className="plans-grid">
           <PlanCard

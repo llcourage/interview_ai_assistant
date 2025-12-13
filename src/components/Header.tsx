@@ -135,12 +135,6 @@ export const Header: React.FC = () => {
             >
               Helps
             </button>
-            <button 
-              className={`nav-link ${location.pathname === '/contact' ? 'active' : ''}`}
-              onClick={() => navigate('/contact')}
-            >
-              Contact
-            </button>
           </div>
         </div>
       </nav>
