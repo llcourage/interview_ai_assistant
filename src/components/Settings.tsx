@@ -141,7 +141,7 @@ export const Settings: React.FC = () => {
       'normal': '$9.9/week',
       'high': '$19.9/month',
       'ultra': '$39.9/month',
-      'premium': '$59.9/month',
+      'premium': '$69.9/month',
       'internal': 'Internal'
     };
     return prices[plan] || 'N/A';
@@ -285,7 +285,7 @@ export const Settings: React.FC = () => {
             <div className="plan-option featured">
               <div className="badge">Upgrade</div>
               <h3>Monthly Premium Plan</h3>
-              <p className="price">$59.9/month</p>
+              <p className="price">$69.9/month</p>
               <ul>
                 <li>Great Model</li>
                 <li>20M tokens per month</li>

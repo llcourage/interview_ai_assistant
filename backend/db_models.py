@@ -14,7 +14,7 @@ class PlanType(str, Enum):
     NORMAL = "normal"    # Weekly plan $9.9/week - 1M tokens/week, gpt-4o-mini
     HIGH = "high"        # Monthly plan $19.9/month - 1M tokens/month, gpt-4o-mini
     ULTRA = "ultra"      # Monthly Ultra plan $39.9/month - 5M tokens/month, gpt-4o-mini
-    PREMIUM = "premium"  # Monthly Premium plan $59.9/month - 20M tokens/month, gpt-4o-mini
+    PREMIUM = "premium"  # Monthly Premium plan $69.9/month - 20M tokens/month, gpt-4o-mini
     INTERNAL = "internal"  # Internal plan - unlimited tokens, gpt-4o (not for sale, manually added in Supabase)
 
 

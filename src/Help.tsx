@@ -63,7 +63,7 @@ export const Help: React.FC = () => {
 
             <div className="plan-pricing-item">
               <h4>Monthly Premium Plan</h4>
-              <p className="plan-price">$59.9/month</p>
+              <p className="plan-price">$69.9/month</p>
             </div>
           </div>
 

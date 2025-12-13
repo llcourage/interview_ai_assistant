@@ -143,7 +143,7 @@ export const Plans: React.FC = () => {
               "~20-30 sessions",
               "Priority Support"
             ]}
-            price="$59.9"
+            price="$69.9"
             billing="/month"
             loading={loading === 'premium'}
             onSelect={() => handlePlanSelect('premium')}
