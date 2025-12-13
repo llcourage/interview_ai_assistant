@@ -1314,6 +1314,42 @@ async def get_plan(http_request: Request):
     else:
         print(f"✅ User {current_user.id} plan exists: {user_plan.plan.value}")
     
+    # 🔧 Fix: If user has active subscription but plan is 'start', sync from Stripe
+    if user_plan.plan == PlanType.START and user_plan.stripe_subscription_id and user_plan.subscription_status == 'active':
+        print(f"🔧 User {current_user.id} has active subscription but plan is 'start', syncing from Stripe...")
+        try:
+            from backend.payment_stripe import STRIPE_PRICE_IDS
+            
+            # Retrieve subscription from Stripe
+            subscription = stripe.Subscription.retrieve(user_plan.stripe_subscription_id)
+            
+            # Get price_id from subscription
+            if subscription.items and subscription.items.data and len(subscription.items.data) > 0:
+                price_id = subscription.items.data[0].price.id
+                
+                # Find plan from price_id (reverse lookup)
+                plan_from_stripe = None
+                for plan_type, stripe_price_id in STRIPE_PRICE_IDS.items():
+                    if stripe_price_id == price_id:
+                        plan_from_stripe = plan_type
+                        break
+                
+                if plan_from_stripe:
+                    print(f"✅ Found plan from Stripe: {plan_from_stripe.value} (price_id: {price_id})")
+                    # Update database with correct plan
+                    from backend.db_operations import update_user_plan
+                    user_plan = await update_user_plan(
+                        user_id=current_user.id,
+                        plan=plan_from_stripe
+                    )
+                    print(f"✅ Updated user {current_user.id} plan from 'start' to '{plan_from_stripe.value}'")
+                else:
+                    print(f"⚠️ Could not find plan for price_id: {price_id}")
+        except Exception as e:
+            print(f"⚠️ Failed to sync plan from Stripe: {e}")
+            import traceback
+            traceback.print_exc()
+    
     print(f"🔍 DEBUG /api/plan: Final plan value before returning: {user_plan.plan.value}")
     
     limits = PLAN_LIMITS[user_plan.plan]
