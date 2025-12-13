@@ -35,8 +35,24 @@ async def get_user_plan(user_id: str) -> UserPlan:
         response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
         
         print(f"🔍 DEBUG get_user_plan: user_id={user_id}")
-        print(f"🔍 DEBUG get_user_plan: response.data={response.data}")
-        print(f"🔍 DEBUG get_user_plan: response.data type={type(response.data)}")
+        print(f"🔍 DEBUG get_user_plan: response={response}, response type={type(response)}")
+        
+        # Check if response is None (happens on 406/403 errors)
+        if response is None:
+            print(f"⚠️ get_user_plan: response is None, likely due to 406/403 error, trying direct query")
+            direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
+            if direct_response and direct_response.data and len(direct_response.data) > 0:
+                print(f"🔍 DEBUG get_user_plan: Direct query found data, plan={direct_response.data[0].get('plan')}")
+                plan_data = normalize_plan_data(direct_response.data[0])
+                user_plan = UserPlan(**plan_data)
+                print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}")
+                return user_plan
+            else:
+                # No data found, will create default plan below
+                print(f"⚠️ User {user_id} has no plan record (response was None), will create default START plan")
+                return await create_user_plan(user_id)
+        
+        print(f"🔍 DEBUG get_user_plan: response.data={response.data}, response.data type={type(response.data)}")
         
         if response.data:
             print(f"🔍 DEBUG get_user_plan: Raw plan value from DB: {response.data.get('plan')}")
@@ -52,9 +68,9 @@ async def get_user_plan(user_id: str) -> UserPlan:
             print(f"🔍 DEBUG get_user_plan: response.data is None/empty, trying direct query")
             direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
             
-            print(f"🔍 DEBUG get_user_plan: direct_response.data={direct_response.data}")
+            print(f"🔍 DEBUG get_user_plan: direct_response={direct_response}, direct_response.data={direct_response.data if direct_response else 'None'}")
             
-            if direct_response.data and len(direct_response.data) > 0:
+            if direct_response and direct_response.data and len(direct_response.data) > 0:
                 print(f"🔍 DEBUG get_user_plan: Direct query found data, plan={direct_response.data[0].get('plan')}")
                 plan_data = normalize_plan_data(direct_response.data[0])
                 print(f"🔍 DEBUG get_user_plan: After normalize_plan_data: {plan_data}")

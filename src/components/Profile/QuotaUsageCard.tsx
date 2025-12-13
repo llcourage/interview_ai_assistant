@@ -22,11 +22,17 @@ export const QuotaUsageCard: React.FC<QuotaUsageCardProps> = ({
   const isWarning = usagePercentage >= 80;
   const isDanger = usagePercentage >= 90;
   const isLifetime = plan === 'start';
+  const isMonthly = plan === 'high' || plan === 'ultra' || plan === 'premium';
+  const isWeekly = plan === 'normal';
 
   return (
     <div className="quota-card card">
       <h2 className="card-title">
-        {isLifetime ? 'Lifetime Token Quota Usage' : 'Weekly Token Quota Usage'}
+        {isLifetime 
+          ? 'Lifetime Token Quota Usage' 
+          : isMonthly 
+            ? 'Monthly Token Quota Usage' 
+            : 'Weekly Token Quota Usage'}
       </h2>
       
       <div className="quota-usage-content">
@@ -65,7 +71,11 @@ export const QuotaUsageCard: React.FC<QuotaUsageCardProps> = ({
         {isWarning && (
           <div className="quota-warning-banner">
             ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited.
-            {!isLifetime && ' Quota will reset weekly.'}
+            {isLifetime 
+              ? '' 
+              : isMonthly 
+                ? ' Quota will reset monthly.' 
+                : ' Quota will reset weekly.'}
           </div>
         )}
       </div>

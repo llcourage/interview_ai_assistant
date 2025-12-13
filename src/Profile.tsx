@@ -12,6 +12,8 @@ interface PlanInfo {
   plan: string;
   weekly_token_limit?: number;
   weekly_tokens_used?: number;
+  monthly_token_limit?: number;
+  monthly_tokens_used?: number;
   features: string[];
   subscription_info?: {
     subscription_id: string;
@@ -125,8 +127,18 @@ export const Profile: React.FC = () => {
             onManagePlan={handleManagePlan}
           />
             <QuotaUsageCard
-              monthlyTokenLimit={planInfo?.weekly_token_limit}
-              monthlyTokensUsed={planInfo?.weekly_tokens_used}
+              monthlyTokenLimit={
+                // For monthly plans (high, ultra, premium), use monthly_token_limit
+                // For weekly plans (normal) or lifetime plans (start), use weekly_token_limit
+                planInfo?.plan === 'high' || planInfo?.plan === 'ultra' || planInfo?.plan === 'premium'
+                  ? planInfo?.monthly_token_limit
+                  : planInfo?.weekly_token_limit
+              }
+              monthlyTokensUsed={
+                planInfo?.plan === 'high' || planInfo?.plan === 'ultra' || planInfo?.plan === 'premium'
+                  ? planInfo?.monthly_tokens_used
+                  : planInfo?.weekly_tokens_used
+              }
               plan={planInfo?.plan}
             />
           </div>

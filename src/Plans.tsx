@@ -25,13 +25,34 @@ export const Plans: React.FC = () => {
   // 监听认证状态变化，登录后自动重新查询
   useEffect(() => {
     const handleAuthStateChange = async () => {
-      // 等待一小段时间确保token已保存
-      await new Promise(resolve => setTimeout(resolve, 200));
-      const authenticated = await isAuthenticated();
-      if (authenticated) {
-        console.log('🔒 Plans: Auth state changed, reloading plan from database');
-        loadCurrentPlan();
-      }
+      // 等待更长时间确保token已保存并同步到服务器
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 重试机制：最多重试3次，每次间隔500ms
+      let retries = 0;
+      const maxRetries = 3;
+      
+      const tryLoadPlan = async () => {
+        const authenticated = await isAuthenticated();
+        if (authenticated) {
+          console.log(`🔒 Plans: Auth state changed, reloading plan from database (attempt ${retries + 1}/${maxRetries})`);
+          await loadCurrentPlan();
+          
+          // 如果加载失败且还有重试次数，继续重试
+          if (retries < maxRetries - 1) {
+            retries++;
+            await new Promise(resolve => setTimeout(resolve, 500));
+            return tryLoadPlan();
+          }
+        } else if (retries < maxRetries - 1) {
+          // 如果还没认证，等待后重试
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return tryLoadPlan();
+        }
+      };
+      
+      await tryLoadPlan();
     };
 
     window.addEventListener('auth-state-changed', handleAuthStateChange);

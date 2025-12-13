@@ -62,6 +62,13 @@ def get_supabase() -> Client:
     """
     if not supabase_client:
         raise Exception("Supabase client not initialized, please check environment variable configuration")
+    
+    # Debug: Log which key is being used (only first time to avoid spam)
+    if not hasattr(get_supabase, '_logged'):
+        using_service_role = bool(SUPABASE_SERVICE_ROLE_KEY)
+        print(f"🔍 DEBUG get_supabase: Using {'SERVICE_ROLE_KEY' if using_service_role else 'ANON_KEY'} (RLS bypass: {using_service_role})")
+        get_supabase._logged = True
+    
     return supabase_client
 
 
