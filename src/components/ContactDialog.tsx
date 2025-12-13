@@ -9,7 +9,7 @@ interface ContactDialogProps {
 const ContactDialog: React.FC<ContactDialogProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  const contactEmail = 'support@desktopai.org'; // 可以改为实际的联系邮箱
+  const contactEmail = 'support@desktopai.org'; // Can be changed to the actual contact email
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(contactEmail).then(() => {

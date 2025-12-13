@@ -47,18 +47,23 @@ export const Help: React.FC = () => {
             </div>
 
             <div className="plan-pricing-item">
-              <h4>Normal Plan</h4>
+              <h4>Weekly Normal Plan</h4>
+              <p className="plan-price">$9.9/week</p>
+            </div>
+
+            <div className="plan-pricing-item">
+              <h4>Monthly Normal Plan</h4>
               <p className="plan-price">$19.9/month</p>
             </div>
 
             <div className="plan-pricing-item">
-              <h4>High Plan</h4>
+              <h4>Monthly Ultra Plan</h4>
               <p className="plan-price">$39.9/month</p>
             </div>
 
             <div className="plan-pricing-item">
-              <h4>Ultra Plan</h4>
-              <p className="plan-price">$69.9/month</p>
+              <h4>Monthly Premium Plan</h4>
+              <p className="plan-price">$59.9/month</p>
             </div>
           </div>
 
@@ -131,7 +136,7 @@ export const Help: React.FC = () => {
             <div className="contact-item">
               <h4>Response Time</h4>
               <p>We typically respond within 24 hours</p>
-              <p className="contact-description">For Ultra Plan users, priority support ensures faster response times.</p>
+              <p className="contact-description">For Monthly Ultra Plan users, priority support ensures faster response times.</p>
             </div>
             
             <div className="contact-item">

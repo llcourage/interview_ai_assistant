@@ -11,9 +11,10 @@ from pydantic import BaseModel
 class PlanType(str, Enum):
     """User subscription plan types"""
     START = "start"      # Starter plan - 100k tokens lifetime, no reset, gpt-4o-mini
-    NORMAL = "normal"    # Weekly plan $9.99/week - 1M tokens/week, gpt-4o-mini
-    HIGH = "high"        # Monthly plan $19.99/month - 1M tokens/month, gpt-4o-mini
-    ULTRA = "ultra"      # Pro plan $39.99/month - 5M tokens/month, gpt-4o-mini
+    NORMAL = "normal"    # Weekly plan $9.9/week - 1M tokens/week, gpt-4o-mini
+    HIGH = "high"        # Monthly plan $19.9/month - 1M tokens/month, gpt-4o-mini
+    ULTRA = "ultra"      # Monthly Ultra plan $39.9/month - 5M tokens/month, gpt-4o-mini
+    PREMIUM = "premium"  # Monthly Premium plan $59.9/month - 20M tokens/month, gpt-4o-mini
     INTERNAL = "internal"  # Internal plan - unlimited tokens, gpt-4o (not for sale, manually added in Supabase)
 
 
@@ -83,6 +84,12 @@ PLAN_LIMITS = {
         "is_lifetime": False,  # Monthly quota, resets monthly
         "models": ["gpt-4o-mini"],  # All paid plans use gpt-4o-mini
         "features": ["basic_chat", "image_analysis"]
+    },
+    PlanType.PREMIUM: {
+        "monthly_token_limit": 20_000_000,  # 20M tokens per month
+        "is_lifetime": False,  # Monthly quota, resets monthly
+        "models": ["gpt-4o-mini"],  # All paid plans use gpt-4o-mini
+        "features": ["basic_chat", "image_analysis", "priority_support"]
     },
     PlanType.INTERNAL: {
         "monthly_token_limit": None,  # Unlimited tokens

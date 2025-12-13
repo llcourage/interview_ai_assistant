@@ -10,7 +10,7 @@ export const Plans: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState<string | null>(null);
 
-  const handlePlanSelect = async (plan: 'start' | 'normal' | 'high' | 'ultra') => {
+  const handlePlanSelect = async (plan: 'start' | 'normal' | 'high' | 'ultra' | 'premium') => {
     setLoading(plan);
     
     try {
@@ -96,43 +96,57 @@ export const Plans: React.FC = () => {
           />
 
           <PlanCard
-            name="Weekly Plan"
+            name="Weekly Normal Plan"
             features={[
               "Great Model",
               "1M Tokens per week",
               "~2-3 sessions"
             ]}            
-            price="$9.99"
+            price="$9.9"
             billing="/week"
             loading={loading === 'normal'}
             onSelect={() => handlePlanSelect('normal')}
           />
 
           <PlanCard
-            name="Monthly Plan"
+            name="Monthly Normal Plan"
             features={[
               "Great Model",
               "1M Tokens per month",
               "~2-3 sessions"
             ]}
-            price="$19.99"
+            price="$19.9"
             billing="/month"
             loading={loading === 'high'}
             onSelect={() => handlePlanSelect('high')}
           />
 
           <PlanCard
-            name="Pro Plan"
-            recommended
+            name="Monthly Ultra Plan"
             features={[
               "Great Model",
               "5M Tokens per month",
               "~10-15 sessions"
             ]}
-            price="$39.99"
+            price="$39.9"
             billing="/month"
             loading={loading === 'ultra'}
             onSelect={() => handlePlanSelect('ultra')}
+          />
+
+          <PlanCard
+            name="Monthly Premium Plan"
+            recommended
+            features={[
+              "Great Model",
+              "20M Tokens per month",
+              "~20-30 sessions",
+              "Priority Support"
+            ]}
+            price="$59.9"
+            billing="/month"
+            loading={loading === 'premium'}
+            onSelect={() => handlePlanSelect('premium')}
           />
         </div>
       </div>

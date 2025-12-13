@@ -16,7 +16,7 @@ export const Contact: React.FC = () => {
           <h1>Contact Us</h1>
           
           <div className="contact-info-card">
-            <h2>📧 如有问题，请联系我们</h2>
+            <h2>📧 Contact Us</h2>
             <p className="contact-intro">
               If you encounter any inappropriate AI-generated content or have other concerns, 
               please don't hesitate to reach out to us.

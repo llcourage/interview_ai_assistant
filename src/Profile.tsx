@@ -46,7 +46,7 @@ export const Profile: React.FC = () => {
       await loadPlanInfo();
     } catch (err) {
       console.error('Auth check error:', err);
-      setError('加载用户信息失败');
+      setError('Failed to load user information');
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export const Profile: React.FC = () => {
       window.dispatchEvent(new CustomEvent('planChanged', { detail: plan }));
     } catch (err: any) {
       console.error('❌ Error loading plan info:', err);
-      const errorMsg = err?.message || '加载Plan信息失败，请检查网络连接和服务器状态';
+      const errorMsg = err?.message || 'Failed to load Plan information. Please check your network connection and server status';
       setError(errorMsg);
       setPlanInfo(null);
     }

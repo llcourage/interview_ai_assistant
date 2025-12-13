@@ -70,7 +70,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         <button
           className="prompt-editor-toggle"
           onClick={onToggleCollapse}
-          title="展开 Prompt 编辑器"
+          title="Expand Prompt Editor"
         >
           <span>📝</span>
           <span>Prompt Template</span>
@@ -95,13 +95,13 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
                 onClick={handleSave}
                 disabled={!hasChanges}
               >
-                保存
+                Save
               </button>
               <button
                 className="prompt-editor-btn prompt-editor-btn-cancel"
                 onClick={handleCancel}
               >
-                取消
+                Cancel
               </button>
             </>
           ) : (
@@ -109,14 +109,14 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
               className="prompt-editor-btn prompt-editor-btn-edit"
               onClick={() => setIsEditing(true)}
             >
-              编辑
+              Edit
             </button>
           )}
           {onToggleCollapse && (
             <button
               className="prompt-editor-btn prompt-editor-btn-collapse"
               onClick={onToggleCollapse}
-              title="折叠"
+              title="Collapse"
             >
               ▼
             </button>
@@ -130,19 +130,19 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
             className="prompt-editor-textarea"
             value={prompt}
             onChange={(e) => handlePromptChange(e.target.value)}
-            placeholder="输入 Prompt 模板..."
+            placeholder="Enter Prompt template..."
             rows={6}
           />
         ) : (
           <div className="prompt-editor-display">
-            {prompt || <span className="prompt-editor-empty">暂无 Prompt 模板</span>}
+            {prompt || <span className="prompt-editor-empty">No Prompt template</span>}
           </div>
         )}
       </div>
       
       {!isEditing && prompt && (
         <div className="prompt-editor-hint">
-          💡 此 Prompt 会在发送消息时自动添加到用户输入前
+          💡 This Prompt will be automatically prepended to user input when sending messages
         </div>
       )}
     </div>

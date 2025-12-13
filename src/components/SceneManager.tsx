@@ -111,7 +111,7 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
     <div className="scene-manager-overlay" onClick={onClose}>
       <div className="scene-manager-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="scene-manager-header">
-          <h2>场景管理</h2>
+          <h2>Scene Management</h2>
           <button className="scene-manager-close" onClick={onClose}>×</button>
         </div>
 
@@ -120,20 +120,20 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
             <div className="scene-manager-add-scene">
               <input
                 type="text"
-                placeholder="场景名称"
+                placeholder="Scene Name"
                 value={newSceneName}
                 onChange={(e) => setNewSceneName(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAddScene()}
                 autoFocus
               />
               <div className="scene-manager-actions">
-                <button onClick={handleAddScene}>添加</button>
-                <button onClick={() => { setShowAddScene(false); setNewSceneName(''); }}>取消</button>
+                <button onClick={handleAddScene}>Add</button>
+                <button onClick={() => { setShowAddScene(false); setNewSceneName(''); }}>Cancel</button>
               </div>
             </div>
           ) : (
             <button className="scene-manager-add-btn" onClick={() => setShowAddScene(true)}>
-              + 新建场景
+              + New Scene
             </button>
           )}
 
@@ -156,20 +156,20 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
                       autoFocus
                     />
                   ) : (
-                    <h3>{scene.name} {scene.isBuiltIn && <span className="built-in-badge">内置</span>}</h3>
+                    <h3>{scene.name} {scene.isBuiltIn && <span className="built-in-badge">Built-in</span>}</h3>
                   )}
                   <div className="scene-manager-scene-actions">
                     {!scene.isBuiltIn && (
                       <>
                         {editingScene?.id === scene.id ? (
                           <>
-                            <button onClick={() => handleUpdateScene(scene.id, editingScene.name)}>保存</button>
-                            <button onClick={() => setEditingScene(null)}>取消</button>
+                            <button onClick={() => handleUpdateScene(scene.id, editingScene.name)}>Save</button>
+                            <button onClick={() => setEditingScene(null)}>Cancel</button>
                           </>
                         ) : (
                           <>
-                            <button onClick={() => setEditingScene(scene)}>重命名</button>
-                            <button onClick={() => handleDeleteScene(scene.id)} className="delete-btn">删除</button>
+                            <button onClick={() => setEditingScene(scene)}>Rename</button>
+                            <button onClick={() => handleDeleteScene(scene.id)} className="delete-btn">Delete</button>
                           </>
                         )}
                       </>
@@ -182,19 +182,19 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
                     <div className="scene-manager-add-preset">
                       <input
                         type="text"
-                        placeholder="预设名称"
+                        placeholder="Preset Name"
                         value={newPresetName}
                         onChange={(e) => setNewPresetName(e.target.value)}
                       />
                       <textarea
-                        placeholder="Prompt 模板"
+                        placeholder="Prompt Template"
                         value={newPresetPrompt}
                         onChange={(e) => setNewPresetPrompt(e.target.value)}
                         rows={4}
                       />
                       <div className="scene-manager-actions">
-                        <button onClick={() => handleAddPreset(scene.id)}>添加</button>
-                        <button onClick={() => { setShowAddPreset(null); setNewPresetName(''); setNewPresetPrompt(''); }}>取消</button>
+                        <button onClick={() => handleAddPreset(scene.id)}>Add</button>
+                        <button onClick={() => { setShowAddPreset(null); setNewPresetName(''); setNewPresetPrompt(''); }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
@@ -202,7 +202,7 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
                       className="scene-manager-add-preset-btn"
                       onClick={() => setShowAddPreset(scene.id)}
                     >
-                      + 添加预设
+                      + Add Preset
                     </button>
                   )}
 
@@ -223,8 +223,8 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
                               rows={4}
                             />
                             <div className="scene-manager-actions">
-                              <button onClick={() => handleUpdatePreset(scene.id, preset.id, editingPreset.preset.name, editingPreset.preset.prompt)}>保存</button>
-                              <button onClick={() => setEditingPreset(null)}>取消</button>
+                              <button onClick={() => handleUpdatePreset(scene.id, preset.id, editingPreset.preset.name, editingPreset.preset.prompt)}>Save</button>
+                              <button onClick={() => setEditingPreset(null)}>Cancel</button>
                             </div>
                           </div>
                         ) : (
@@ -232,9 +232,9 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ isOpen, onClose }) =
                             <div className="scene-manager-preset-header">
                               <strong>{preset.name}</strong>
                               <div className="scene-manager-preset-actions">
-                                <button onClick={() => setEditingPreset({ sceneId: scene.id, preset })}>编辑</button>
+                                <button onClick={() => setEditingPreset({ sceneId: scene.id, preset })}>Edit</button>
                                 {scene.presets.length > 1 && (
-                                  <button onClick={() => handleDeletePreset(scene.id, preset.id)} className="delete-btn">删除</button>
+                                  <button onClick={() => handleDeletePreset(scene.id, preset.id)} className="delete-btn">Delete</button>
                                 )}
                               </div>
                             </div>

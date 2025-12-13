@@ -53,7 +53,7 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleUpgradePlan = async (plan: 'normal' | 'high') => {
+  const handleUpgradePlan = async (plan: 'normal' | 'high' | 'ultra' | 'premium') => {
     setLoading(true);
     setMessage(null);
 
@@ -125,16 +125,24 @@ export const Settings: React.FC = () => {
 
   const getPlanDisplayName = (plan: string) => {
     const names: Record<string, string> = {
-      'normal': 'Normal Plan',
-      'high': 'High Plan'
+      'start': 'Start Plan',
+      'normal': 'Weekly Normal Plan',
+      'high': 'Monthly Normal Plan',
+      'ultra': 'Monthly Ultra Plan',
+      'premium': 'Monthly Premium Plan',
+      'internal': 'Internal Plan'
     };
     return names[plan] || plan;
   };
 
   const getPlanPrice = (plan: string) => {
     const prices: Record<string, string> = {
-      'normal': '$19.9/month',
-      'high': '$29.9/month'
+      'start': 'Free',
+      'normal': '$9.9/week',
+      'high': '$19.9/month',
+      'ultra': '$39.9/month',
+      'premium': '$59.9/month',
+      'internal': 'Internal'
     };
     return prices[plan] || 'N/A';
   };
@@ -232,27 +240,72 @@ export const Settings: React.FC = () => {
           <div className="upgrade-options">
             <div className="plan-option featured">
               <div className="badge">Upgrade</div>
-              <h3>High Plan</h3>
-              <p className="price">$29.9/month</p>
+              <h3>Monthly Normal Plan</h3>
+              <p className="price">$19.9/month</p>
               <ul>
-                <li>GPT-4o model (full version)</li>
-                <li>Access to gpt-4o-mini</li>
-                <li>500K tokens per month</li>
+                <li>Great Model</li>
+                <li>1M tokens per month</li>
+                <li>~2-3 sessions</li>
               </ul>
               <button 
                 className="upgrade-button"
                 onClick={() => handleUpgradePlan('high')}
                 disabled={loading}
               >
-                Upgrade to High
+                Upgrade to Monthly Normal
               </button>
             </div>
           </div>
         )}
 
         {planInfo && planInfo.plan === 'high' && (
+          <div className="upgrade-options">
+            <div className="plan-option featured">
+              <div className="badge">Upgrade</div>
+              <h3>Monthly Ultra Plan</h3>
+              <p className="price">$39.9/month</p>
+              <ul>
+                <li>Great Model</li>
+                <li>5M tokens per month</li>
+                <li>~10-15 sessions</li>
+              </ul>
+              <button 
+                className="upgrade-button"
+                onClick={() => handleUpgradePlan('ultra')}
+                disabled={loading}
+              >
+                Upgrade to Monthly Ultra
+              </button>
+            </div>
+          </div>
+        )}
+
+        {planInfo && planInfo.plan === 'ultra' && (
+          <div className="upgrade-options">
+            <div className="plan-option featured">
+              <div className="badge">Upgrade</div>
+              <h3>Monthly Premium Plan</h3>
+              <p className="price">$59.9/month</p>
+              <ul>
+                <li>Great Model</li>
+                <li>20M tokens per month</li>
+                <li>~20-30 sessions</li>
+                <li>Priority Support</li>
+              </ul>
+              <button 
+                className="upgrade-button"
+                onClick={() => handleUpgradePlan('premium')}
+                disabled={loading}
+              >
+                Upgrade to Monthly Premium
+              </button>
+            </div>
+          </div>
+        )}
+
+        {planInfo && planInfo.plan === 'premium' && (
           <div className="plan-actions">
-            <p className="plan-message">🎉 You are using the highest level High Plan!</p>
+            <p className="plan-message">🎉 You are using the highest level Monthly Premium Plan!</p>
           </div>
         )}
 

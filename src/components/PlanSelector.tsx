@@ -15,28 +15,28 @@ export const PlanSelector: React.FC<PlanSelectorProps> = ({
   const plans = [
     {
       id: 'normal' as PlanType,
-      name: 'Normal Plan',
+      name: 'Weekly Normal Plan',
       icon: '⚡',
-      price: '$19.9/month',
-      description: 'GPT-4o-mini model, 1M tokens per month',
+      price: '$9.9/week',
+      description: 'Great Model, 1M tokens per week',
       features: [
-        'GPT-4o-mini model',
-        '1M tokens per month',
-        'Vision support (screenshots)',
-        'Fast & affordable'
+        'Great Model',
+        '1M tokens per week',
+        '~2-3 sessions',
+        'Vision support (screenshots)'
       ],
       color: '#50C878'
     },
     {
       id: 'high' as PlanType,
-      name: 'High Plan',
+      name: 'Monthly Normal Plan',
       icon: '👑',
-      price: '$29.9/month',
-      description: 'GPT-4o model (full version), 1M tokens per month',
+      price: '$19.9/month',
+      description: 'Great Model, 1M tokens per month',
       features: [
-        'GPT-4o model (full version)',
-        'Access to gpt-4o-mini',
+        'Great Model',
         '1M tokens per month',
+        '~2-3 sessions',
         'Vision support (screenshots)'
       ],
       color: '#FFD700'

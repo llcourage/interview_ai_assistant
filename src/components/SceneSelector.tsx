@@ -72,7 +72,7 @@ export const SceneSelector: React.FC<SceneSelectorProps> = ({ onSceneChange }) =
             <button
               className="preset-select-button"
               onClick={() => setShowPresets(!showPresets)}
-              title="选择预设"
+              title="Select Preset"
             >
               {currentPreset?.name || 'Select Preset'}
               <span className="preset-arrow">▼</span>

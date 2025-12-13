@@ -20,7 +20,8 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_IDS = {
     PlanType.NORMAL: os.getenv("STRIPE_PRICE_NORMAL", "price_xxx"),
     PlanType.HIGH: os.getenv("STRIPE_PRICE_HIGH", "price_yyy"),
-    PlanType.ULTRA: os.getenv("STRIPE_PRICE_ULTRA", "price_zzz")
+    PlanType.ULTRA: os.getenv("STRIPE_PRICE_ULTRA", "price_zzz"),
+    PlanType.PREMIUM: os.getenv("STRIPE_PRICE_PREMIUM", "price_premium")
 }
 
 
@@ -47,7 +48,7 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
             raise ValueError("STRIPE_SECRET_KEY not configured, please set in environment variables")
         
         price_id = STRIPE_PRICE_IDS.get(plan)
-        if not price_id or price_id in ["price_xxx", "price_yyy", "price_zzz"]:
+        if not price_id or price_id in ["price_xxx", "price_yyy", "price_zzz", "price_premium"]:
             raise ValueError(
                 f"Stripe Price ID not found for {plan}. "
                 f"Current value: {price_id}. "
@@ -70,45 +71,9 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
                 except Exception as e:
                     print(f"⚠️ Failed to update Customer email: {e}")
             
-            # Check if user already has active subscription
-            if user_plan_data.stripe_subscription_id:
-                try:
-                    # If subscription exists, directly update subscription (Stripe will automatically handle proration and refund)
-                    subscription = stripe.Subscription.retrieve(user_plan_data.stripe_subscription_id)
-                    
-                    # Update subscription price (Stripe will automatically handle proration)
-                    updated_subscription = stripe.Subscription.modify(
-                        user_plan_data.stripe_subscription_id,
-                        items=[{
-                            'id': subscription['items']['data'][0].id,
-                            'price': price_id,
-                        }],
-                        proration_behavior='always_invoice',  # Immediately prorate billing/refund
-                        metadata={
-                            "user_id": user_id,
-                            "plan": plan.value
-                        }
-                    )
-                    
-                    # Update plan in database
-                    await update_user_plan(
-                        user_id=user_id,
-                        plan=plan,
-                        subscription_status="active"
-                    )
-                    
-                    print(f"✅ User {user_id} subscription upgraded to {plan.value} plan (Stripe automatically handled proration/refund)")
-                    
-                    # Return success_url, let user redirect to success page
-                    return {
-                        "checkout_url": success_url,
-                        "message": "Subscription upgraded successfully"
-                    }
-                except stripe.error.StripeError as e:
-                    print(f"⚠️ Failed to update subscription: {e}, will create new checkout session")
-                    # If update fails, continue creating new checkout session
-            
-            # If no active subscription, create new Checkout Session
+            # Always create a new Checkout Session to ensure payment is processed
+            # Even if user has existing subscription, they must complete payment through Stripe
+            # Stripe will handle subscription updates and proration automatically via webhook
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=["card"],
