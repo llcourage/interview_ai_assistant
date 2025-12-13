@@ -70,9 +70,14 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> Use
         supabase = get_supabase()
         now = datetime.now()
         
+        # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
+        plan_value = plan.value
+        if plan_value == 'starter':
+            plan_value = 'start'
+        
         plan_data = {
             "user_id": user_id,
-            "plan": plan.value,
+            "plan": plan_value,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat()
         }
@@ -160,7 +165,11 @@ async def update_user_plan(
         # Note: If creating new record (via webhook), plan will always be passed
         # If partial update (plan is None), only update other fields
         if plan is not None:
-            data["plan"] = plan.value
+            # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
+            plan_value = plan.value
+            if plan_value == 'starter':
+                plan_value = 'start'
+            data["plan"] = plan_value
         
         # These fields are only updated when they have values
         if stripe_customer_id is not None:
@@ -171,6 +180,17 @@ async def update_user_plan(
             data["subscription_status"] = subscription_status
         if plan_expires_at is not None:
             data["plan_expires_at"] = plan_expires_at.isoformat()
+        
+        # Before upsert, check if existing record has 'starter' value and fix it
+        try:
+            existing_response = supabase.table("user_plans").select("plan").eq("user_id", user_id).maybe_single().execute()
+            if existing_response.data and existing_response.data.get("plan") == 'starter':
+                # Fix existing 'starter' value to 'start' before upsert
+                supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
+                print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
+        except Exception as fix_error:
+            # If fix fails, continue with upsert (may be new user)
+            print(f"⚠️ Could not fix existing plan: {fix_error}")
         
         # Use upsert, with user_id as unique key
         # Insert if record doesn't exist, update if exists
