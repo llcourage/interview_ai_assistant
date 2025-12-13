@@ -1,8 +1,8 @@
 """
-Vercel Serverless Function 适配器
-将 FastAPI 应用适配为 Vercel Serverless Function
+Vercel Serverless Function Adapter
+Adapts FastAPI application to Vercel Serverless Function
 
-Vercel Python runtime 要求 handler 必须是一个继承自 BaseHTTPRequestHandler 的类
+Vercel Python runtime requires handler to be a class inheriting from BaseHTTPRequestHandler
 """
 import sys
 import os
@@ -10,29 +10,29 @@ import json
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler
 
-# 添加 backend 目录到路径
+# Add backend directory to path
 backend_path = Path(__file__).parent.parent / "backend"
 if str(backend_path) not in sys.path:
     sys.path.insert(0, str(backend_path))
 
-# 延迟加载 FastAPI 应用
+# Lazy load FastAPI application
 _app = None
 
 def get_app():
-    """获取或创建 FastAPI 应用（延迟导入）"""
+    """Get or create FastAPI application (lazy import)"""
     global _app
     if _app is None:
         try:
             from main import app
             _app = app
         except Exception as exc:
-            # 记录详细的导入错误
+            # Log detailed import error
             import traceback
             error_trace = traceback.format_exc()
             error_details = str(exc)  # Capture error details in local variable
-            print(f"⚠️ 导入 FastAPI 应用时出错: {exc}")
-            print(f"详细错误信息:\n{error_trace}")
-            # 创建一个错误应用
+            print(f"⚠️ Error importing FastAPI application: {exc}")
+            print(f"Detailed error information:\n{error_trace}")
+            # Create an error application
             from fastapi import FastAPI, Request
             error_app = FastAPI()
             
@@ -58,7 +58,7 @@ def get_app():
     return _app
 
 class handler(BaseHTTPRequestHandler):
-    """Vercel Python 函数入口 - 必须继承 BaseHTTPRequestHandler"""
+    """Vercel Python function entry point - must inherit from BaseHTTPRequestHandler"""
     
     def do_GET(self):
         self._handle_request()
@@ -79,34 +79,34 @@ class handler(BaseHTTPRequestHandler):
         self._handle_request()
     
     def _handle_request(self):
-        """处理所有 HTTP 请求 - 直接调用 FastAPI ASGI app"""
+        """Handle all HTTP requests - directly call FastAPI ASGI app"""
         try:
-            # 打印日志到 Vercel（使用 print，会被 Vercel 捕获）
-            print(f"🔥 Vercel Function 收到请求: {self.command} {self.path}")
+            # Print logs to Vercel (using print, will be captured by Vercel)
+            print(f"🔥 Vercel Function received request: {self.command} {self.path}")
             print(f"   - User-Agent: {self.headers.get('User-Agent', 'N/A')}")
             print(f"   - Origin: {self.headers.get('Origin', 'N/A')}")
             print(f"   - Content-Type: {self.headers.get('Content-Type', 'N/A')}")
             print(f"   - Method: {self.command}")
             print(f"   - Path (self.path): {self.path}")
-            # 打印所有相关 headers 以调试路径问题
+            # Print all relevant headers to debug path issues
             for header_name in ['X-Rewrite-Url', 'X-Original-Url', 'X-Forwarded-Uri', 'X-Forwarded-Path']:
                 header_value = self.headers.get(header_name)
                 if header_value:
                     print(f"   - {header_name}: {header_value}")
-            # 打印所有 headers（用于调试）
+            # Print all headers (for debugging)
             print(f"   - All headers: {dict(self.headers)}")
             
-            # 获取 FastAPI 应用
+            # Get FastAPI application
             app = get_app()
             
-            # 构建 ASGI scope
+            # Build ASGI scope
             scope = self._build_scope()
             
-            # 创建消息队列
+            # Create message queues
             receive_queue = []
             send_queue = []
             
-            # 读取请求体
+            # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length > 0:
                 body = self.rfile.read(content_length)
@@ -122,7 +122,7 @@ class handler(BaseHTTPRequestHandler):
                     "more_body": False
                 })
             
-            # 异步处理请求
+            # Process request asynchronously
             import asyncio
             
             async def run_app():
@@ -132,10 +132,10 @@ class handler(BaseHTTPRequestHandler):
                 async def send(message):
                     send_queue.append(message)
                 
-                # 直接调用 FastAPI app（它是 ASGI 应用）
+                # Directly call FastAPI app (it's an ASGI application)
                 await app(scope, receive, send)
             
-            # 运行异步应用
+            # Run async application
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
@@ -144,7 +144,7 @@ class handler(BaseHTTPRequestHandler):
             
             loop.run_until_complete(run_app())
             
-            # 处理响应
+            # Process response
             status = 200
             headers = []
             body = b""
@@ -156,13 +156,13 @@ class handler(BaseHTTPRequestHandler):
                 elif message["type"] == "http.response.body":
                     body += message.get("body", b"")
             
-            # 记录响应状态（特别是 405 错误）
+            # Log response status (especially 405 errors)
             if status == 405:
                 print(f"⚠️ Method Not Allowed (405) for {self.command} {self.path}")
                 print(f"   This usually means the route exists but doesn't support {self.command} method")
             
-            # 发送响应
-            # FastAPI 的 CORSMiddleware 已经设置了所有必要的 CORS 头部，不需要手动添加
+            # Send response
+            # FastAPI's CORSMiddleware has already set all necessary CORS headers, no need to add manually
             self.send_response(status)
             for header, value in headers:
                 self.send_header(header.decode() if isinstance(header, bytes) else header,
@@ -173,17 +173,17 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            print(f"❌ 处理请求时出错: {e}")
-            print(f"详细错误信息:\n{error_trace}")
+            print(f"❌ Error processing request: {e}")
+            print(f"Detailed error information:\n{error_trace}")
             
-            # 返回错误响应
+            # Return error response
             error_body = json.dumps({
                 "error": "Internal server error",
                 "details": str(e),
                 "traceback": error_trace
             }).encode("utf-8")
             
-            # 错误响应也需要正确的 CORS 头部
+            # Error response also needs correct CORS headers
             origin = self.headers.get('Origin', '')
             allowed_origins = [
                 "http://localhost:5173",
@@ -197,31 +197,31 @@ class handler(BaseHTTPRequestHandler):
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Access-Control-Allow-Credentials", "true")
             else:
-                # 如果不在白名单，使用默认值（但不使用 *，因为会与 credentials 冲突）
+                # If not in whitelist, use default (but don't use *, as it conflicts with credentials)
                 self.send_header("Access-Control-Allow-Origin", "https://www.desktopai.org")
             self.end_headers()
             self.wfile.write(error_body)
     
     def _build_scope(self):
-        """构建 ASGI scope"""
+        """Build ASGI scope"""
         import urllib.parse
         
-        # 解析路径和查询字符串
-        # Vercel 会将 /api/* 重写到 /api/index，但 self.path 应该保持原始路径
-        # 例如：请求 /api/auth/exchange-code 时，self.path 应该是 "/api/auth/exchange-code"
-        # 而不是 "/api/index"
+        # Parse path and query string
+        # Vercel will rewrite /api/* to /api/index, but self.path should maintain original path
+        # For example: when requesting /api/auth/exchange-code, self.path should be "/api/auth/exchange-code"
+        # not "/api/index"
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
         query_string = parsed_path.query.encode()
         
-        # 如果路径是 /api/index，可能是直接访问或路径丢失
-        # 尝试从 header 中恢复原始路径
+        # If path is /api/index, might be direct access or path lost
+        # Try to recover original path from headers
         if path == "/api/index" or path.startswith("/api/index"):
             print(f"   - ⚠️ Detected rewrite: path is {path}, attempting to recover original path")
-            # Vercel 可能在不同的 header 中传递原始路径
+            # Vercel might pass original path in different headers
             original_path = None
             
-            # 尝试多个可能的 header
+            # Try multiple possible headers
             for header_name in ['X-Rewrite-Url', 'X-Original-Url', 'X-Forwarded-Uri', 'X-Forwarded-Path']:
                 header_value = self.headers.get(header_name)
                 if header_value:
@@ -237,18 +237,18 @@ class handler(BaseHTTPRequestHandler):
             else:
                 print(f"   - ⚠️ Warning: Path is {path} but no original path found in headers")
                 print(f"   - ⚠️ This may cause routing issues. Checking if Vercel preserves path in self.path...")
-                # 根据 Vercel 文档，self.path 应该保持原始路径
-                # 如果这里仍然是 /api/index，可能是 Vercel 的行为变化
-                # 在这种情况下，我们需要依赖 FastAPI 的路由匹配
+                # According to Vercel docs, self.path should maintain original path
+                # If it's still /api/index here, might be a change in Vercel behavior
+                # In this case, we need to rely on FastAPI route matching
         
         print(f"   - ✅ Final path for FastAPI: {path}")
         
-        # 构建 headers
+        # Build headers
         headers = []
         for key, value in self.headers.items():
             headers.append((key.lower().encode(), value.encode()))
         
-        # 获取 host
+        # Get host
         host = self.headers.get('Host', 'localhost')
         if ':' in host:
             server_host, server_port = host.split(':', 1)

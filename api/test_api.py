@@ -1,13 +1,13 @@
 """
-简单的 API 测试端点
-用于验证 Vercel 函数是否正常工作
+Simple API test endpoint
+Used to verify that Vercel functions are working correctly
 """
 from http.server import BaseHTTPRequestHandler
 import json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        """处理 GET 请求"""
+        """Handle GET requests"""
         try:
             response_data = {
                 "status": "ok",
@@ -33,9 +33,9 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(error_body)
     
     def do_POST(self):
-        """处理 POST 请求"""
+        """Handle POST requests"""
         try:
-            # 读取请求体
+            # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
             

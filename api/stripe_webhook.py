@@ -1,6 +1,6 @@
 """
-Stripe Webhook 端点
-使用 Vercel 官方要求的格式：继承 BaseHTTPRequestHandler 的 handler 类
+Stripe Webhook Endpoint
+Uses Vercel's required format: handler class inheriting from BaseHTTPRequestHandler
 """
 from http.server import BaseHTTPRequestHandler
 import os
@@ -13,10 +13,10 @@ from urllib.error import HTTPError
 from datetime import datetime
 
 class handler(BaseHTTPRequestHandler):
-    """Vercel Python 函数入口 - 必须是继承 BaseHTTPRequestHandler 的 handler 类"""
+    """Vercel Python function entry point - must be a handler class inheriting from BaseHTTPRequestHandler"""
     
     def do_GET(self):
-        """处理 GET 请求（健康检查）"""
+        """Handle GET requests (health check)"""
         try:
             body = {
                 "status": "ok",
@@ -36,26 +36,26 @@ class handler(BaseHTTPRequestHandler):
             self._send_error(500, str(e))
     
     def do_POST(self):
-        """处理 POST 请求（Stripe Webhook）"""
+        """Handle POST requests (Stripe Webhook)"""
         try:
-            # 读取请求体
+            # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
             body_bytes = self.rfile.read(content_length)
             body_str = body_bytes.decode('utf-8')
             
-            # 获取 webhook secret
+            # Get webhook secret
             webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
             if not webhook_secret:
                 self._send_error(500, "Webhook secret not configured")
                 return
             
-            # 获取签名
+            # Get signature
             sig_header = self.headers.get("stripe-signature") or self.headers.get("Stripe-Signature")
             if not sig_header:
                 self._send_error(400, "Missing stripe-signature header")
                 return
             
-            # 手动验证 webhook 签名
+            # Manually verify webhook signature
             signatures = {}
             for item in sig_header.split(","):
                 parts = item.split("=", 1)
@@ -69,13 +69,13 @@ class handler(BaseHTTPRequestHandler):
                 self._send_error(400, "Invalid signature format")
                 return
             
-            # 检查时间戳（防止重放攻击）
+            # Check timestamp (prevent replay attacks)
             current_time = int(time.time())
-            if abs(current_time - int(timestamp)) > 300:  # 5 分钟
+            if abs(current_time - int(timestamp)) > 300:  # 5 minutes
                 self._send_error(400, "Timestamp too old")
                 return
             
-            # 计算签名
+            # Calculate signature
             signed_payload = f"{timestamp}.{body_str}"
             expected_signature = hmac.new(
                 webhook_secret.encode(),
@@ -83,27 +83,27 @@ class handler(BaseHTTPRequestHandler):
                 hashlib.sha256
             ).hexdigest()
             
-            # 验证签名
+            # Verify signature
             if not hmac.compare_digest(expected_signature, signature):
                 self._send_error(400, "Invalid signature")
                 return
             
-            # 解析事件
+            # Parse event
             try:
                 event = json.loads(body_str)
             except json.JSONDecodeError as e:
                 self._send_error(400, f"Invalid JSON: {str(e)}")
                 return
             
-            # 处理事件
+            # Process event
             event_type = event.get("type")
-            print(f"🔍 收到 Stripe 事件: {event_type}")
+            print(f"🔍 Received Stripe event: {event_type}")
             
             try:
                 result = self._handle_stripe_event(event_type, event)
-                print(f"✅ 事件处理成功: {event_type}")
+                print(f"✅ Event processed successfully: {event_type}")
                 
-                # 返回成功响应
+                # Return success response
                 response_body = json.dumps(result).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -113,10 +113,10 @@ class handler(BaseHTTPRequestHandler):
             except Exception as event_error:
                 import traceback
                 error_details = traceback.format_exc()
-                error_msg = f"处理事件 {event_type} 失败: {type(event_error).__name__}: {str(event_error)}"
+                error_msg = f"Failed to process event {event_type}: {type(event_error).__name__}: {str(event_error)}"
                 print(f"❌ {error_msg}")
                 print(error_details)
-                # 仍然返回 200，但记录错误（Stripe 要求快速响应）
+                # Still return 200, but log error (Stripe requires fast response)
                 error_response = {
                     "status": "error",
                     "event_type": event_type,
@@ -124,7 +124,7 @@ class handler(BaseHTTPRequestHandler):
                     "traceback": error_details
                 }
                 response_body = json.dumps(error_response).encode("utf-8")
-                self.send_response(200)  # Stripe 要求返回 200，即使处理失败
+                self.send_response(200)  # Stripe requires 200 even if processing fails
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
@@ -133,16 +133,16 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            error_msg = f"Webhook 处理失败: {type(e).__name__}: {str(e)}"
+            error_msg = f"Webhook processing failed: {type(e).__name__}: {str(e)}"
             print(f"❌ {error_msg}")
             print(error_details)
             self._send_error(500, error_msg)
     
     def _handle_stripe_event(self, event_type, event):
-        """处理 Stripe 事件"""
+        """Handle Stripe events"""
         try:
-            print(f"🔍 开始处理 Stripe 事件: {event_type}")
-            print(f"🔍 事件数据: {json.dumps(event, indent=2)[:500]}...")  # 只打印前500字符
+            print(f"🔍 Starting to process Stripe event: {event_type}")
+            print(f"🔍 Event data: {json.dumps(event, indent=2)[:500]}...")  # Only print first 500 chars
             
             supabase_url = os.getenv("SUPABASE_URL")
             supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
@@ -153,15 +153,15 @@ class handler(BaseHTTPRequestHandler):
                 raise Exception(error_msg)
             
             def supabase_request(method, table, data=None, filters=None):
-                """使用 HTTP 请求调用 Supabase API"""
+                """Call Supabase API using HTTP requests"""
                 try:
                     url = f"{supabase_url}/rest/v1/{table}"
                     if filters:
                         url += "?" + "&".join([f"{k}=eq.{v}" for k, v in filters.items()])
                     
-                    print(f"🔍 Supabase 请求: {method} {url}")
+                    print(f"🔍 Supabase request: {method} {url}")
                     if data:
-                        print(f"🔍 请求数据: {json.dumps(data, indent=2)[:300]}...")
+                        print(f"🔍 Request data: {json.dumps(data, indent=2)[:300]}...")
                     
                     req = Request(url)
                     req.add_header("apikey", supabase_key)
@@ -181,27 +181,27 @@ class handler(BaseHTTPRequestHandler):
                     try:
                         response = urlopen(req, timeout=10)
                         result = json.loads(response.read().decode())
-                        print(f"✅ Supabase 响应成功: {len(result) if isinstance(result, list) else 1} 条记录")
+                        print(f"✅ Supabase response successful: {len(result) if isinstance(result, list) else 1} record(s)")
                         return {"data": result if isinstance(result, list) else [result]}
                     except HTTPError as e:
                         error_body = e.read().decode() if hasattr(e, 'read') else str(e)
                         print(f"❌ Supabase HTTP Error {e.code}: {error_body}")
                         if e.code == 404:
-                            print(f"⚠️ 404 - 记录不存在，返回空数据")
+                            print(f"⚠️ 404 - Record not found, returning empty data")
                             return {"data": []}
                         raise Exception(f"Supabase HTTP {e.code}: {error_body}")
                     except Exception as e:
-                        print(f"❌ Supabase 请求异常: {type(e).__name__}: {str(e)}")
+                        print(f"❌ Supabase request exception: {type(e).__name__}: {str(e)}")
                         raise
                 except Exception as e:
                     import traceback
-                    print(f"❌ supabase_request 失败: {type(e).__name__}: {str(e)}")
+                    print(f"❌ supabase_request failed: {type(e).__name__}: {str(e)}")
                     print(traceback.format_exc())
                     raise
             
             if event_type == "customer.subscription.created":
                 try:
-                    # 订阅创建（通常由 checkout.session.completed 触发，但为了完整性也处理）
+                    # Subscription created (usually triggered by checkout.session.completed, but handle for completeness)
                     subscription = event.get("data", {}).get("object", {})
                     customer_id = subscription.get("customer")
                     subscription_id = subscription.get("id")
@@ -211,33 +211,33 @@ class handler(BaseHTTPRequestHandler):
                     if not customer_id:
                         raise Exception("Missing customer_id in subscription")
                     
-                    # 从数据库查找用户
+                    # Find user from database
                     response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
                     
                     if not response["data"]:
-                        # 如果用户记录不存在，可能是通过其他方式创建的订阅，记录日志但不处理
-                        print(f"⚠️ 订阅创建但未找到用户: customer_id={customer_id}")
+                        # If user record doesn't exist, subscription might be created through other means, log but don't process
+                        print(f"⚠️ Subscription created but user not found: customer_id={customer_id}")
                         return {"status": "warning", "message": "User not found for subscription creation"}
                     
                     user_id = response["data"][0]["user_id"]
                     
-                    # 更新订阅ID（如果还没有）
+                    # Update subscription ID (if not already set)
                     supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                         "stripe_subscription_id": subscription_id,
                         "subscription_status": "active",
                         "updated_at": datetime.now().isoformat()
                     })
-                    print(f"✅ 用户 {user_id} 订阅已创建")
+                    print(f"✅ User {user_id} subscription created")
                     return {"status": "success", "event_type": event_type}
                 except Exception as e:
                     import traceback
-                    print(f"❌ 处理 customer.subscription.created 失败: {type(e).__name__}: {str(e)}")
+                    print(f"❌ Failed to process customer.subscription.created: {type(e).__name__}: {str(e)}")
                     print(traceback.format_exc())
                     raise
             
             elif event_type == "checkout.session.completed":
                 try:
-                    # 支付成功
+                    # Payment successful
                     session = event.get("data", {}).get("object", {})
                     user_id = session.get("metadata", {}).get("user_id")
                     plan_value = session.get("metadata", {}).get("plan", "normal")
@@ -249,9 +249,9 @@ class handler(BaseHTTPRequestHandler):
                     if not user_id:
                         raise Exception("Missing user_id in session metadata")
                     
-                    # 检查记录是否存在
+                    # Check if record exists
                     response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
-                    print(f"🔍 当前用户记录: {response['data']}")
+                    print(f"🔍 Current user record: {response['data']}")
                     
                     update_data = {
                         "plan": plan_value,
@@ -262,13 +262,13 @@ class handler(BaseHTTPRequestHandler):
                     }
                     
                     if response["data"]:
-                        # 更新现有记录
-                        print(f"📝 更新用户 {user_id} 的 plan 为 {plan_value}")
+                        # Update existing record
+                        print(f"📝 Updating user {user_id} plan to {plan_value}")
                         result = supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
-                        print(f"✅ 更新结果: {result}")
+                        print(f"✅ Update result: {result}")
                     else:
-                        # 创建新记录
-                        print(f"📝 创建新用户 {user_id} 的 plan 记录: {plan_value}")
+                        # Create new record
+                        print(f"📝 Creating new user {user_id} plan record: {plan_value}")
                         insert_data = {
                             "user_id": user_id,
                             "plan": plan_value,
@@ -276,25 +276,25 @@ class handler(BaseHTTPRequestHandler):
                             **update_data
                         }
                         result = supabase_request("POST", "user_plans", insert_data)
-                        print(f"✅ 创建结果: {result}")
+                        print(f"✅ Create result: {result}")
                     
-                    # 验证更新是否成功
+                    # Verify update was successful
                     verify_response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
                     if verify_response["data"]:
                         current_plan = verify_response["data"][0].get("plan")
-                        print(f"✅ 验证: 用户 {user_id} 当前 plan 为 {current_plan}")
+                        print(f"✅ Verified: User {user_id} current plan is {current_plan}")
                     
-                    print(f"✅ 用户 {user_id} 已升级到 {plan_value} plan")
+                    print(f"✅ User {user_id} upgraded to {plan_value} plan")
                     return {"status": "success", "event_type": event_type, "user_id": user_id, "plan": plan_value}
                 except Exception as e:
                     import traceback
-                    print(f"❌ 处理 checkout.session.completed 失败: {type(e).__name__}: {str(e)}")
+                    print(f"❌ Failed to process checkout.session.completed: {type(e).__name__}: {str(e)}")
                     print(traceback.format_exc())
                     raise
             
             elif event_type == "customer.subscription.updated":
                 try:
-                    # 订阅更新
+                    # Subscription updated
                     subscription = event.get("data", {}).get("object", {})
                     customer_id = subscription.get("customer")
                     status = subscription.get("status")
@@ -304,11 +304,11 @@ class handler(BaseHTTPRequestHandler):
                     if not customer_id:
                         raise Exception("Missing customer_id in subscription")
                     
-                    # 从数据库查找用户
+                    # Find user from database
                     response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
                     
                     if not response["data"]:
-                        print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
+                        print(f"⚠️ User not found with stripe_customer_id={customer_id}")
                         return {"status": "warning", "message": "User not found"}
                     
                     user_id = response["data"][0]["user_id"]
@@ -318,25 +318,25 @@ class handler(BaseHTTPRequestHandler):
                             "subscription_status": "active",
                             "updated_at": datetime.now().isoformat()
                         })
-                        print(f"✅ 用户 {user_id} 订阅已激活")
+                        print(f"✅ User {user_id} subscription activated")
                     elif status in ["canceled", "past_due", "unpaid"]:
                         supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                             "plan": "starter",
                             "subscription_status": status,
                             "updated_at": datetime.now().isoformat()
                         })
-                        print(f"⚠️ 用户 {user_id} 订阅已取消/逾期，降级为 starter")
+                        print(f"⚠️ User {user_id} subscription canceled/overdue, downgraded to starter")
                     
                     return {"status": "success", "event_type": event_type}
                 except Exception as e:
                     import traceback
-                    print(f"❌ 处理 customer.subscription.updated 失败: {type(e).__name__}: {str(e)}")
+                    print(f"❌ Failed to process customer.subscription.updated: {type(e).__name__}: {str(e)}")
                     print(traceback.format_exc())
                     raise
             
             elif event_type == "customer.subscription.deleted":
                 try:
-                    # 订阅删除
+                    # Subscription deleted
                     subscription = event.get("data", {}).get("object", {})
                     customer_id = subscription.get("customer")
                     
@@ -345,11 +345,11 @@ class handler(BaseHTTPRequestHandler):
                     if not customer_id:
                         raise Exception("Missing customer_id in subscription")
                     
-                    # 从数据库查找用户
+                    # Find user from database
                     response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
                     
                     if not response["data"]:
-                        print(f"⚠️ 未找到 stripe_customer_id={customer_id} 的用户")
+                        print(f"⚠️ User not found with stripe_customer_id={customer_id}")
                         return {"status": "warning", "message": "User not found"}
                     
                     user_id = response["data"][0]["user_id"]
@@ -359,27 +359,27 @@ class handler(BaseHTTPRequestHandler):
                         "subscription_status": "canceled",
                         "updated_at": datetime.now().isoformat()
                     })
-                    print(f"⚠️ 用户 {user_id} 订阅已删除，降级为 starter")
+                    print(f"⚠️ User {user_id} subscription deleted, downgraded to starter")
                     return {"status": "success", "event_type": event_type}
                 except Exception as e:
                     import traceback
-                    print(f"❌ 处理 customer.subscription.deleted 失败: {type(e).__name__}: {str(e)}")
+                    print(f"❌ Failed to process customer.subscription.deleted: {type(e).__name__}: {str(e)}")
                     print(traceback.format_exc())
                     raise
         
-            # 未知事件类型
-            print(f"⚠️ 未知事件类型: {event_type}")
+            # Unknown event type
+            print(f"⚠️ Unknown event type: {event_type}")
             return {"status": "success", "event_type": event_type, "message": "Event processed"}
             
         except Exception as e:
             import traceback
-            error_msg = f"处理 Stripe 事件失败: {type(e).__name__}: {str(e)}"
+            error_msg = f"Failed to process Stripe event: {type(e).__name__}: {str(e)}"
             print(f"❌ {error_msg}")
             print(traceback.format_exc())
             raise Exception(error_msg)
     
     def _send_error(self, status_code, message):
-        """发送错误响应"""
+        """Send error response"""
         try:
             error_body = json.dumps({"error": message}).encode("utf-8")
             self.send_response(status_code)
