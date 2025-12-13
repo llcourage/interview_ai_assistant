@@ -205,13 +205,18 @@ async def update_user_plan(
             import traceback
             traceback.print_exc()
         
-        # CRITICAL FIX: If plan is None (partial update) but existing record has 'starter', 
-        # we must include 'plan': 'start' in data to prevent constraint violation
-        # This ensures that upsert will update the 'starter' value to 'start'
-        # Even if the fix above failed, we still need to include plan in data
-        if plan is None and existing_plan_value == 'starter':
-            print(f"⚠️ Plan is None but existing record has 'starter', adding 'plan': 'start' to data to prevent constraint violation")
-            data["plan"] = "start"
+        # CRITICAL FIX: If plan is None (partial update), we must include 'plan' in data
+        # to prevent database from using default value 'starter' (which violates constraint)
+        # This is especially important for new users (no existing record)
+        if plan is None:
+            # If existing record has 'starter', fix it
+            if existing_plan_value == 'starter':
+                print(f"⚠️ Plan is None but existing record has 'starter', adding 'plan': 'start' to data to prevent constraint violation")
+                data["plan"] = "start"
+            # If no existing record (new user), set default to 'start' to avoid database default 'starter'
+            elif existing_plan_value is None:
+                print(f"⚠️ Plan is None and no existing record (new user), adding 'plan': 'start' to data to prevent database default 'starter'")
+                data["plan"] = "start"
         
         # Use upsert, with user_id as unique key
         # Insert if record doesn't exist, update if exists
