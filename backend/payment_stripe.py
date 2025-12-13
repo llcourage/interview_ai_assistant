@@ -191,29 +191,62 @@ async def handle_subscription_updated(subscription: dict):
     try:
         customer_id = subscription["customer"]
         status = subscription["status"]
+        subscription_id = subscription.get("id")
         
-        # Find user from database
-        # Note: Need to find user via stripe_customer_id
-        # You need to add a function in db_operations.py
-        from backend.db_supabase import get_supabase
-        supabase = get_supabase()
+        # Find user from database using admin client
+        from backend.db_supabase import get_supabase_admin
+        supabase = get_supabase_admin()
         
-        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).maybe_single().execute()
+        # Use direct query instead of maybe_single() to avoid 406 errors
+        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).execute()
         
-        if not response.data:
+        if not response.data or len(response.data) == 0:
             print(f"⚠️ User not found with stripe_customer_id={customer_id}")
             return
         
-        user_id = response.data["user_id"]
+        user_id = response.data[0]["user_id"]
         
         # Update subscription status
         if status == "active":
-            # Subscription activated
-            await update_user_plan(
-                user_id=user_id,
-                subscription_status="active"
-            )
-            print(f"✅ User {user_id} subscription activated")
+            # Subscription activated - need to get plan from subscription price_id
+            plan = None
+            
+            # Get price_id from subscription items
+            items = subscription.get("items", {}).get("data", [])
+            if items and len(items) > 0:
+                price_id = items[0].get("price", {}).get("id")
+                
+                if price_id:
+                    # Map price_id to plan
+                    # Reverse lookup: find plan by price_id
+                    for plan_type, plan_price_id in STRIPE_PRICE_IDS.items():
+                        if plan_price_id == price_id:
+                            plan = plan_type
+                            break
+                    
+                    if plan:
+                        print(f"🔍 Subscription {subscription_id}: price_id={price_id}, mapped to plan={plan.value}")
+                    else:
+                        print(f"⚠️ Unknown price_id: {price_id} for subscription {subscription_id}")
+                        print(f"   Available price_ids: {list(STRIPE_PRICE_IDS.values())}")
+            
+            # Update user plan with correct plan type
+            if plan:
+                await update_user_plan(
+                    user_id=user_id,
+                    plan=plan,
+                    subscription_status="active"
+                )
+                print(f"✅ User {user_id} subscription activated, plan updated to {plan.value}")
+            else:
+                # If can't determine plan, just update status (but log warning)
+                print(f"⚠️ Warning: Could not determine plan for subscription {subscription_id}, only updating status")
+                await update_user_plan(
+                    user_id=user_id,
+                    subscription_status="active"
+                )
+                print(f"✅ User {user_id} subscription activated (plan not updated)")
+                
         elif status in ["canceled", "past_due", "unpaid"]:
             # Subscription canceled or overdue, downgrade to start plan
             await update_user_plan(
@@ -224,6 +257,8 @@ async def handle_subscription_updated(subscription: dict):
             print(f"⚠️ User {user_id} subscription canceled/overdue, downgraded to start plan")
     except Exception as e:
         print(f"❌ Failed to handle subscription update Webhook: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 
