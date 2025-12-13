@@ -30,7 +30,9 @@ def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
 async def get_user_plan(user_id: str) -> UserPlan:
     """Get user Plan"""
     try:
-        supabase = get_supabase()
+        # Use admin client to ensure we can read all data (bypass RLS)
+        # This is important because regular client might be blocked by RLS policies
+        supabase = get_supabase_admin()
         # Use direct query (not maybe_single) to avoid 406 errors when no record exists
         # 406 happens when maybe_single() expects exactly 1 row but finds 0
         response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
@@ -77,12 +79,24 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> Use
     """Create user Plan using admin client (SERVICE_ROLE_KEY) to bypass RLS
     
     Uses upsert to prevent duplicate inserts if plan already exists
+    If record exists, preserves existing fields (stripe_subscription_id, etc.)
     """
     try:
         # Use admin client (SERVICE_ROLE_KEY) to bypass RLS
         supabase_admin = get_supabase_admin()
         now = datetime.now()
         
+        # First, try to get existing plan
+        existing_response = supabase_admin.table("user_plans").select("*").eq("user_id", user_id).execute()
+        existing_data = None
+        if existing_response and existing_response.data and len(existing_response.data) > 0:
+            existing_data = existing_response.data[0]
+            print(f"🔍 DEBUG create_user_plan: Found existing plan record, returning existing plan: plan={existing_data.get('plan')}, stripe_customer_id={existing_data.get('stripe_customer_id')}, stripe_subscription_id={existing_data.get('stripe_subscription_id')}")
+            # If record already exists, return it instead of overwriting
+            plan_data = normalize_plan_data(existing_data)
+            return UserPlan(**plan_data)
+        
+        # No existing record, create new one
         # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
         plan_value = plan.value
         if plan_value == 'starter':
@@ -97,7 +111,7 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> Use
         
         # Use upsert with on_conflict to handle race conditions
         # If user_id already exists, update the plan; otherwise insert
-        print(f"🔍 DEBUG create_user_plan: Upserting plan for user {user_id}, plan={plan_value}")
+        print(f"🔍 DEBUG create_user_plan: Creating new plan for user {user_id}, plan={plan_value}")
         response = supabase_admin.table("user_plans").upsert(
             plan_data,
             on_conflict="user_id"
