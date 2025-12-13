@@ -28,7 +28,7 @@ export const Help: React.FC = () => {
             <li><strong>Image Analysis:</strong> Take screenshots of coding problems, interview questions, or any visual content</li>
             <li><strong>Text Chat:</strong> Ask questions directly and get AI-powered responses</li>
             <li><strong>Multiple AI Models:</strong> Access to state-of-the-art AI models based on your plan</li>
-            <li><strong>Token-Based Usage:</strong> Fair usage system with weekly or lifetime token allocation</li>
+            <li><strong>Token-Based Usage:</strong> Fair usage system with monthly or lifetime token allocation</li>
           </ul>
         </div>
       )
@@ -48,17 +48,17 @@ export const Help: React.FC = () => {
 
             <div className="plan-pricing-item">
               <h4>Normal Plan</h4>
-              <p className="plan-price">$19.9/week</p>
+              <p className="plan-price">$19.9/month</p>
             </div>
 
             <div className="plan-pricing-item">
               <h4>High Plan</h4>
-              <p className="plan-price">$39.9/week</p>
+              <p className="plan-price">$39.9/month</p>
             </div>
 
             <div className="plan-pricing-item">
               <h4>Ultra Plan</h4>
-              <p className="plan-price">$69.9/week</p>
+              <p className="plan-price">$69.9/month</p>
             </div>
           </div>
 
@@ -79,7 +79,7 @@ export const Help: React.FC = () => {
 
           <div className="faq-item">
             <h4>What are tokens and how do they work?</h4>
-            <p>Tokens are units used to measure AI usage. Each request (both input and output) consumes tokens. Paid plans include 1M tokens per week, which reset every week. The Start Plan includes 100K lifetime tokens with no reset.</p>
+            <p>Tokens are units used to measure AI usage. Each request (both input and output) consumes tokens. Paid plans include 1M tokens per month, which reset every month. The Start Plan includes 100K lifetime tokens with no reset.</p>
           </div>
 
           <div className="faq-item">
@@ -89,7 +89,7 @@ export const Help: React.FC = () => {
 
           <div className="faq-item">
             <h4>What payment methods do you accept?</h4>
-            <p>We accept all major credit cards and process payments securely through Stripe. Payments are billed weekly for all paid plans.</p>
+            <p>We accept all major credit cards and process payments securely through Stripe. Payments are billed monthly for all paid plans.</p>
           </div>
 
           <div className="faq-item">
@@ -108,8 +108,8 @@ export const Help: React.FC = () => {
           </div>
 
           <div className="faq-item">
-            <h4>How do weekly token resets work?</h4>
-            <p>For paid plans, your token quota resets every week on a natural weekly cycle. The Start Plan has a lifetime token allocation that never resets. You can check your token usage in your profile settings.</p>
+            <h4>How do monthly token resets work?</h4>
+            <p>For paid plans, your token quota resets every month on a natural monthly cycle. The Start Plan has a lifetime token allocation that never resets. You can check your token usage in your profile settings.</p>
           </div>
         </div>
       )

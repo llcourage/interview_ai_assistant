@@ -167,7 +167,9 @@ class PlanResponse(BaseModel):
     plan: str
     weekly_token_limit: Optional[int] = None
     weekly_tokens_used: Optional[int] = None
-    features: list[str]
+    monthly_token_limit: Optional[int] = None
+    monthly_tokens_used: Optional[int] = None
+    features: list[str] = []
     subscription_info: Optional[dict] = None
 
 
@@ -209,20 +211,12 @@ async def get_api_client_for_user(user_id: str, plan: PlanType) -> tuple[AsyncOp
     )
     
     # Select model based on plan
-    # Start Plan: uses gpt-4o-mini
-    # Normal Plan: uses gpt-4o-mini
-    # High Plan: uses gpt-5-mini
-    # Ultra Plan: uses gpt-4o
-    if plan == PlanType.START:
-        model = "gpt-4o-mini"  # Start Plan uses mini
-    elif plan == PlanType.NORMAL:
-        model = "gpt-4o-mini"  # Normal Plan uses mini
-    elif plan == PlanType.HIGH:
-        model = "gpt-5-mini"  # High Plan uses gpt-5-mini
-    elif plan == PlanType.ULTRA:
-        model = "gpt-4o"  # Ultra Plan uses gpt-4o
+    # Internal Plan: uses gpt-4o
+    # All other plans: use gpt-4o-mini
+    if plan == PlanType.INTERNAL:
+        model = "gpt-4o"  # Only Internal Plan uses gpt-4o
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported plan type: {plan}")
+        model = "gpt-4o-mini"  # All other plans (START, NORMAL, HIGH, ULTRA) use gpt-4o-mini
     
     return client, model
 
@@ -1325,8 +1319,9 @@ async def get_plan(http_request: Request):
     if user_plan.plan != PlanType.START:
         subscription_info = await get_subscription_info(current_user.id)
     
-    # Support weekly quota and lifetime quota
+    # Support weekly, monthly, and lifetime quota
     weekly_token_limit = limits.get("weekly_token_limit")
+    monthly_token_limit = limits.get("monthly_token_limit")
     lifetime_token_limit = limits.get("lifetime_token_limit")
     is_lifetime = limits.get("is_lifetime", False)
     
@@ -1335,11 +1330,14 @@ async def get_plan(http_request: Request):
         weekly_token_limit = lifetime_token_limit
     
     weekly_tokens_used = getattr(quota, 'weekly_tokens_used', 0)
+    monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
     
     return PlanResponse(
         plan=user_plan.plan.value,
         weekly_token_limit=weekly_token_limit,
         weekly_tokens_used=weekly_tokens_used,
+        monthly_token_limit=monthly_token_limit,
+        monthly_tokens_used=monthly_tokens_used,
         features=limits["features"],
         subscription_info=subscription_info
     )
@@ -1637,24 +1635,34 @@ Please answer in English, code defaults to Python."""
         # 7. Increment quota count (allow slight overage, clamp to limit)
         # Once OpenAI returns success, must return result to user and deduct tokens
         limits = PLAN_LIMITS[user_plan.plan]
-        weekly_token_limit = limits.get("weekly_token_limit")
-        lifetime_token_limit = limits.get("lifetime_token_limit")
-        is_lifetime = limits.get("is_lifetime", False)
+        is_unlimited = limits.get("is_unlimited", False)
         
-        # For lifetime quota, use lifetime_token_limit
-        if is_lifetime and lifetime_token_limit is not None:
-            weekly_token_limit = lifetime_token_limit
-        
-        # Get current quota, calculate billable tokens (clamp to remaining quota)
-        quota_before = await get_user_quota(current_user.id)
-        current_tokens_used = getattr(quota_before, 'weekly_tokens_used', 0)
-        
-        if weekly_token_limit is not None and weekly_token_limit > 0:
-            remaining_quota = weekly_token_limit - current_tokens_used
-            # Clamp: if exceeds remaining quota, only deduct remaining quota portion
-            billable_tokens = min(total_tokens, max(0, remaining_quota))
-        else:
+        # Internal Plan: unlimited, use all tokens
+        if is_unlimited:
             billable_tokens = total_tokens
+        else:
+            weekly_token_limit = limits.get("weekly_token_limit")
+            monthly_token_limit = limits.get("monthly_token_limit")
+            lifetime_token_limit = limits.get("lifetime_token_limit")
+            is_lifetime = limits.get("is_lifetime", False)
+            
+            # For lifetime quota, use lifetime_token_limit
+            if is_lifetime and lifetime_token_limit is not None:
+                weekly_token_limit = lifetime_token_limit
+            
+            # Get current quota, calculate billable tokens (clamp to remaining quota)
+            quota_before = await get_user_quota(current_user.id)
+            
+            if weekly_token_limit is not None and weekly_token_limit > 0:
+                current_tokens_used = getattr(quota_before, 'weekly_tokens_used', 0)
+                remaining_quota = weekly_token_limit - current_tokens_used
+                billable_tokens = min(total_tokens, max(0, remaining_quota))
+            elif monthly_token_limit is not None and monthly_token_limit > 0:
+                current_tokens_used = getattr(quota_before, 'monthly_tokens_used', 0)
+                remaining_quota = monthly_token_limit - current_tokens_used
+                billable_tokens = min(total_tokens, max(0, remaining_quota))
+            else:
+                billable_tokens = total_tokens
         
         # 8. Record usage log (use actual tokens, success=True)
         await log_usage(

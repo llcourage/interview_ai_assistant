@@ -8,7 +8,7 @@
 CREATE TABLE IF NOT EXISTS user_plans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    plan VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (plan IN ('start', 'normal', 'high', 'ultra')),
+    plan VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (plan IN ('start', 'normal', 'high', 'ultra', 'internal')),
     stripe_customer_id VARCHAR(255),
     stripe_subscription_id VARCHAR(255),
     subscription_status VARCHAR(50),

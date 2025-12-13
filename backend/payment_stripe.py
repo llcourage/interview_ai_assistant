@@ -38,6 +38,10 @@ async def create_checkout_session(user_id: str, plan: PlanType, success_url: str
         dict: Dictionary containing checkout_url
     """
     try:
+        # Prevent Internal Plan from being purchased
+        if plan == PlanType.INTERNAL:
+            raise ValueError("Internal Plan cannot be purchased through checkout. It can only be manually assigned in Supabase.")
+        
         # Check Stripe API Key
         if not stripe.api_key or stripe.api_key == "":
             raise ValueError("STRIPE_SECRET_KEY not configured, please set in environment variables")

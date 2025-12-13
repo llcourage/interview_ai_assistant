@@ -11,9 +11,10 @@ from pydantic import BaseModel
 class PlanType(str, Enum):
     """User subscription plan types"""
     START = "start"      # Starter plan - 100k tokens lifetime, no reset, gpt-4o-mini
-    NORMAL = "normal"    # Paid plan $19.9/week
-    HIGH = "high"        # Paid plan $39/week
-    ULTRA = "ultra"      # Premium plan $69/week - uses gpt-4o
+    NORMAL = "normal"    # Weekly plan $9.99/week - 1M tokens/week, gpt-4o-mini
+    HIGH = "high"        # Monthly plan $19.99/month - 1M tokens/month, gpt-4o-mini
+    ULTRA = "ultra"      # Pro plan $39.99/month - 5M tokens/month, gpt-4o-mini
+    INTERNAL = "internal"  # Internal plan - unlimited tokens, gpt-4o (not for sale, manually added in Supabase)
 
 
 class UserPlan(BaseModel):
@@ -51,6 +52,7 @@ class UsageQuota(BaseModel):
     user_id: str
     plan: PlanType
     weekly_tokens_used: int = 0  # Tokens used this week
+    monthly_tokens_used: int = 0  # Tokens used this month
     quota_reset_date: datetime  # Quota reset date
     created_at: datetime
     updated_at: datetime
@@ -67,20 +69,27 @@ PLAN_LIMITS = {
     PlanType.NORMAL: {
         "weekly_token_limit": 1_000_000,  # 1M tokens per week
         "is_lifetime": False,  # Weekly quota, resets weekly
-        "models": ["gpt-4o-mini"],  # Great Model
-        "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
+        "models": ["gpt-4o-mini"],  # All paid plans use gpt-4o-mini
+        "features": ["basic_chat", "image_analysis"]
     },
     PlanType.HIGH: {
-        "weekly_token_limit": 1_000_000,  # 1M tokens per week
-        "is_lifetime": False,  # Weekly quota, resets weekly
-        "models": ["gpt-5-mini"],  # Exceptional Model
-        "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support"]
+        "monthly_token_limit": 1_000_000,  # 1M tokens per month
+        "is_lifetime": False,  # Monthly quota, resets monthly
+        "models": ["gpt-4o-mini"],  # All paid plans use gpt-4o-mini
+        "features": ["basic_chat", "image_analysis"]
     },
     PlanType.ULTRA: {
-        "weekly_token_limit": 1_000_000,  # 1M tokens per week
-        "is_lifetime": False,  # Weekly quota, resets weekly
-        "models": ["gpt-4o"],  # State of the Art Model
-        "features": ["basic_chat", "image_analysis", "speech_to_text", "priority_support", "advanced_reasoning"]
+        "monthly_token_limit": 5_000_000,  # 5M tokens per month
+        "is_lifetime": False,  # Monthly quota, resets monthly
+        "models": ["gpt-4o-mini"],  # All paid plans use gpt-4o-mini
+        "features": ["basic_chat", "image_analysis"]
+    },
+    PlanType.INTERNAL: {
+        "monthly_token_limit": None,  # Unlimited tokens
+        "is_lifetime": False,  # Monthly quota (but unlimited)
+        "is_unlimited": True,  # Mark as unlimited
+        "models": ["gpt-4o"],  # Only Internal Plan uses gpt-4o
+        "features": ["basic_chat", "image_analysis", "priority_support", "advanced_reasoning"]
     }
 }
 

@@ -87,7 +87,7 @@ export const Plans: React.FC = () => {
             features={[
               "Great Model",
               "100K Tokens Lifetime",
-              "No Weekly Reset"
+              "No Monthly Reset"
             ]}
             price="Free"
             billing=""
@@ -96,39 +96,41 @@ export const Plans: React.FC = () => {
           />
 
           <PlanCard
-            name="Normal Plan"
+            name="Weekly Plan"
             features={[
               "Great Model",
-              "1M Tokens per week"
+              "1M Tokens per week",
+              "~2-3 sessions"
             ]}            
-            price="$19.9"
+            price="$9.99"
             billing="/week"
             loading={loading === 'normal'}
             onSelect={() => handlePlanSelect('normal')}
           />
 
           <PlanCard
-            name="High Plan"
+            name="Monthly Plan"
             features={[
-              "Exceptional Model",
-              "1M Tokens per week"
+              "Great Model",
+              "1M Tokens per month",
+              "~2-3 sessions"
             ]}
-            price="$39.9"
-            billing="/week"
+            price="$19.99"
+            billing="/month"
             loading={loading === 'high'}
             onSelect={() => handlePlanSelect('high')}
           />
 
           <PlanCard
-            name="Ultra Plan"
+            name="Pro Plan"
             recommended
             features={[
-              "State of the Art Model",
-              "1M Tokens per week",
-              "Priority Support"
+              "Great Model",
+              "5M Tokens per month",
+              "~10-15 sessions"
             ]}
-            price="$69.9"
-            billing="/week"
+            price="$39.99"
+            billing="/month"
             loading={loading === 'ultra'}
             onSelect={() => handlePlanSelect('ultra')}
           />

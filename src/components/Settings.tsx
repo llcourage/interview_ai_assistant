@@ -133,8 +133,8 @@ export const Settings: React.FC = () => {
 
   const getPlanPrice = (plan: string) => {
     const prices: Record<string, string> = {
-      'normal': '$19.9/week',
-      'high': '$29.9/week'
+      'normal': '$19.9/month',
+      'high': '$29.9/month'
     };
     return prices[plan] || 'N/A';
   };
@@ -167,7 +167,7 @@ export const Settings: React.FC = () => {
             <div className="plan-usage">
               <div className="usage-item">
                   <div className="usage-header">
-                    <label>Weekly Token Quota Usage</label>
+                    <label>Monthly Token Quota Usage</label>
                     <span className="usage-percentage">
                       {(((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) * 100).toFixed(1)}%
                     </span>
@@ -197,7 +197,7 @@ export const Settings: React.FC = () => {
               </div>
                   {((planInfo.weekly_tokens_used || 0) / planInfo.weekly_token_limit) >= 0.8 && (
                     <div className="usage-warning-banner">
-                      ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited. Quota will reset monthly.
+                      ⚠️ Your quota usage has exceeded 80%. Remaining quota is limited. Quota will reset at the beginning of each month.
                     </div>
                   )}
                 </div>
@@ -233,7 +233,7 @@ export const Settings: React.FC = () => {
             <div className="plan-option featured">
               <div className="badge">Upgrade</div>
               <h3>High Plan</h3>
-              <p className="price">$29.9/week</p>
+              <p className="price">$29.9/month</p>
               <ul>
                 <li>GPT-4o model (full version)</li>
                 <li>Access to gpt-4o-mini</li>

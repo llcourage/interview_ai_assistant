@@ -12,16 +12,16 @@ from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIM
 
 
 def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Compatible with old data: convert 'starter' plan to 'normal', map monthly_tokens_used to weekly_tokens_used"""
+    """Compatible with old data: convert 'starter' plan to 'normal', ensure both weekly and monthly fields exist"""
     if isinstance(data, dict):
         data = data.copy()  # Create copy to avoid modifying original data
         if data.get('plan') == 'starter':
             data['plan'] = 'normal'
-        # Compatible with old database column names: map monthly_tokens_used to weekly_tokens_used
-        if 'monthly_tokens_used' in data and 'weekly_tokens_used' not in data:
-            data['weekly_tokens_used'] = data['monthly_tokens_used']
-        if 'monthly_token_limit' in data and 'weekly_token_limit' not in data:
-            data['weekly_token_limit'] = data['monthly_token_limit']
+        # Ensure both weekly and monthly fields exist for backward compatibility
+        if 'weekly_tokens_used' not in data:
+            data['weekly_tokens_used'] = 0
+        if 'monthly_tokens_used' not in data:
+            data['monthly_tokens_used'] = 0
     return data
 
 
@@ -346,9 +346,11 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             original_plan = response.data.get('plan')
             
             quota_data = normalize_plan_data(response.data)
-            # Ensure weekly_tokens_used field exists (compatible with old data)
+            # Ensure weekly_tokens_used and monthly_tokens_used fields exist (compatible with old data)
             if 'weekly_tokens_used' not in quota_data:
                 quota_data['weekly_tokens_used'] = 0
+            if 'monthly_tokens_used' not in quota_data:
+                quota_data['monthly_tokens_used'] = 0
             quota = UsageQuota(**quota_data)
             
             # If converted from 'starter', update database
@@ -360,36 +362,56 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 except Exception as update_error:
                     print(f"⚠️ Failed to update quota plan: {update_error}")
             
-            # Check if quota needs to be reset (reset by calendar month)
+            # Check if quota needs to be reset based on plan type
             # For lifetime quota (start plan), skip reset
             user_plan = await get_user_plan(user_id)
             limits = PLAN_LIMITS.get(user_plan.plan, {})
             is_lifetime = limits.get("is_lifetime", False)
+            is_unlimited = limits.get("is_unlimited", False)
             
             now = datetime.now()
+            should_reset_weekly = False
             should_reset_monthly = False
             
-            # Lifetime quota doesn't reset
-            if not is_lifetime:
+            # Lifetime and unlimited quotas don't reset
+            if not is_lifetime and not is_unlimited:
+                weekly_token_limit = limits.get("weekly_token_limit")
+                monthly_token_limit = limits.get("monthly_token_limit")
+                
                 if quota.quota_reset_date:
                     reset_date = quota.quota_reset_date
                     if isinstance(reset_date, str):
                         reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
                     
-                    # quota_reset_date is "last reset time", if current year/month ≠ last reset year/month, need to reset
                     reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
-                    should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
+                    
+                    # Check weekly reset (for weekly plans)
+                    if weekly_token_limit is not None:
+                        now_year, now_week, _ = now.isocalendar()
+                        reset_year, reset_week, _ = reset_date_no_tz.isocalendar()
+                        should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
+                    
+                    # Check monthly reset (for monthly plans)
+                    if monthly_token_limit is not None:
+                        should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
                 else:
                     # If no reset date, treat as need to reset
-                    should_reset_monthly = True
+                    if weekly_token_limit is not None:
+                        should_reset_weekly = True
+                    if monthly_token_limit is not None:
+                        should_reset_monthly = True
             
-            if should_reset_monthly:
+            if should_reset_weekly or should_reset_monthly:
                 # Reset directly here to avoid calling reset_user_quota causing recursion
                 update_data = {
-                    "weekly_tokens_used": 0,
                     "quota_reset_date": now.isoformat(),  # Set to current time (last reset time)
                     "updated_at": now.isoformat()
                 }
+                
+                if should_reset_weekly:
+                    update_data["weekly_tokens_used"] = 0
+                if should_reset_monthly:
+                    update_data["monthly_tokens_used"] = 0
                 
                 supabase = get_supabase()
                 response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
@@ -397,10 +419,16 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 if response.data:
                     quota_data = normalize_plan_data(response.data[0])
                     quota = UsageQuota(**quota_data)
-                    print(f"📅 Reset user {user_id} weekly token quota (reset by week)")
+                    if should_reset_weekly:
+                        print(f"📅 Reset user {user_id} weekly token quota (reset by week)")
+                    if should_reset_monthly:
+                        print(f"📅 Reset user {user_id} monthly token quota (reset by calendar month)")
                 else:
                     # If update fails, at least update in-memory object
-                    quota.weekly_tokens_used = 0
+                    if should_reset_weekly:
+                        quota.weekly_tokens_used = 0
+                    if should_reset_monthly:
+                        quota.monthly_tokens_used = 0
                     quota.quota_reset_date = now
             
             return quota
@@ -423,6 +451,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 user_id=user_id,
                 plan=user_plan.plan,
                 weekly_tokens_used=0,
+                monthly_tokens_used=0,
                 quota_reset_date=now,  # Last reset time = current time
                 created_at=now,
                 updated_at=now
@@ -437,6 +466,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 user_id=user_id,
                 plan=PlanType.NORMAL,
                 weekly_tokens_used=0,
+                monthly_tokens_used=0,
                 quota_reset_date=now,  # Last reset time = current time
                 created_at=now,
                 updated_at=now
@@ -456,6 +486,7 @@ async def create_user_quota(user_id: str) -> UsageQuota:
             "user_id": user_id,
             "plan": user_plan.plan.value,
             "weekly_tokens_used": 0,
+            "monthly_tokens_used": 0,
             "quota_reset_date": now.isoformat(),  # Last reset time = current time
             "created_at": now.isoformat(),
             "updated_at": now.isoformat()
@@ -489,13 +520,27 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
             "updated_at": datetime.now().isoformat()
         }
         
-        # Add token usage to weekly_tokens_used
+        # Add token usage based on plan type
         if tokens_used > 0:
-            current_tokens = getattr(quota, 'weekly_tokens_used', 0)
-            update_data["weekly_tokens_used"] = current_tokens + tokens_used
-        
-        # Backward compatible: also write to monthly_tokens_used (if database column name hasn't changed)
-        # Note: denormalize_quota_data function removed, directly use weekly_tokens_used
+            user_plan = await get_user_plan(user_id)
+            limits = PLAN_LIMITS[user_plan.plan]
+            
+            # Check if plan uses weekly or monthly quota
+            weekly_token_limit = limits.get("weekly_token_limit")
+            monthly_token_limit = limits.get("monthly_token_limit")
+            
+            if weekly_token_limit is not None:
+                # Weekly plan: increment weekly_tokens_used
+                current_tokens = getattr(quota, 'weekly_tokens_used', 0)
+                update_data["weekly_tokens_used"] = current_tokens + tokens_used
+            elif monthly_token_limit is not None:
+                # Monthly plan: increment monthly_tokens_used
+                current_tokens = getattr(quota, 'monthly_tokens_used', 0)
+                update_data["monthly_tokens_used"] = current_tokens + tokens_used
+            else:
+                # Lifetime plan or unlimited: increment weekly_tokens_used (for tracking)
+                current_tokens = getattr(quota, 'weekly_tokens_used', 0)
+                update_data["weekly_tokens_used"] = current_tokens + tokens_used
         
         response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
@@ -512,13 +557,16 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
 
 
 async def reset_user_quota(user_id: str) -> UsageQuota:
-    """Reset user quota (reset weekly_tokens_used by week)
+    """Reset user quota based on plan type (weekly or monthly)
     
     Note: quota_reset_date is defined as "last reset time" (last_reset_at), not "next reset time"
-    Reset judgment: current week ≠ quota_reset_date week → reset (calculated by ISO week)
+    - Weekly plans: reset by ISO week
+    - Monthly plans: reset by calendar month
     """
     try:
         supabase = get_supabase()
+        user_plan = await get_user_plan(user_id)
+        limits = PLAN_LIMITS[user_plan.plan]
         
         # Query database directly to avoid calling get_user_quota causing recursion
         response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
@@ -527,11 +575,11 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         
         if not response or not response.data:
             # If no record, create one
-            user_plan = await get_user_plan(user_id)
             quota_data = {
                 "user_id": user_id,
                 "plan": user_plan.plan.value,
                 "weekly_tokens_used": 0,
+                "monthly_tokens_used": 0,
                 "quota_reset_date": now.isoformat(),  # Last reset time = current time
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat()
@@ -548,9 +596,13 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         quota_raw = normalize_plan_data(response.data[0])
         quota = UsageQuota(**quota_raw)
         
-        # Check if weekly reset is needed: reset by ISO week
-        # quota_reset_date is "last reset time", if current week ≠ last reset week, need to reset
+        # Determine reset type based on plan
+        weekly_token_limit = limits.get("weekly_token_limit")
+        monthly_token_limit = limits.get("monthly_token_limit")
+        is_lifetime = limits.get("is_lifetime", False)
+        
         should_reset_weekly = False
+        should_reset_monthly = False
         
         if quota.quota_reset_date:
             reset_date = quota.quota_reset_date
@@ -559,31 +611,50 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
             
             reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
             
-            # Use ISO week calculation (year + ISO week number)
-            now_year, now_week, _ = now.isocalendar()
-            reset_year, reset_week, _ = reset_date_no_tz.isocalendar()
-            should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
+            # Check weekly reset (for weekly plans)
+            if weekly_token_limit is not None and not is_lifetime:
+                now_year, now_week, _ = now.isocalendar()
+                reset_year, reset_week, _ = reset_date_no_tz.isocalendar()
+                should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
+            
+            # Check monthly reset (for monthly plans)
+            if monthly_token_limit is not None:
+                should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
         else:
             # If no reset date, treat as need to reset
-            should_reset_weekly = True
+            if weekly_token_limit is not None and not is_lifetime:
+                should_reset_weekly = True
+            if monthly_token_limit is not None:
+                should_reset_monthly = True
         
         update_data = {
             "updated_at": now.isoformat()
         }
         
-        # If need to reset weekly quota
+        # Reset based on plan type
         if should_reset_weekly:
             update_data["weekly_tokens_used"] = 0
-            update_data["quota_reset_date"] = now.isoformat()  # Update to current time (last reset time)
+            update_data["quota_reset_date"] = now.isoformat()
+            print(f"📅 Reset user {user_id} weekly token quota (reset by week)")
+        
+        if should_reset_monthly:
+            update_data["monthly_tokens_used"] = 0
+            update_data["quota_reset_date"] = now.isoformat()
             print(f"📅 Reset user {user_id} monthly token quota (reset by calendar month)")
         
-        update_response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
-        
-        if update_response.data:
-            quota_data = normalize_plan_data(update_response.data[0])
-            return UsageQuota(**quota_data)
+        # Only update if reset is needed
+        if should_reset_weekly or should_reset_monthly:
+            update_response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
+            
+            if update_response.data:
+                quota_data = normalize_plan_data(update_response.data[0])
+                return UsageQuota(**quota_data)
+            else:
+                raise Exception("Failed to reset quota")
         else:
-            raise Exception("Failed to reset quota")
+            # No reset needed, return existing quota
+            return quota
+            
     except Exception as e:
         print(f"❌ Failed to reset user quota: {e}")
         raise
@@ -604,13 +675,20 @@ async def check_rate_limit(user_id: str, estimated_tokens: int = 0) -> tuple[boo
         quota = await get_user_quota(user_id)
         limits = PLAN_LIMITS[user_plan.plan]
         
+        # Internal Plan: unlimited quota, always allow
+        is_unlimited = limits.get("is_unlimited", False)
+        if is_unlimited:
+            return True, ""
+        
         # Check token limit (considering estimated tokens)
-        # Support two quota types: weekly quota (weekly_token_limit) and lifetime quota (lifetime_token_limit)
+        # Support three quota types: weekly, monthly, and lifetime
         weekly_token_limit = limits.get("weekly_token_limit")
+        monthly_token_limit = limits.get("monthly_token_limit")
         lifetime_token_limit = limits.get("lifetime_token_limit")
         is_lifetime = limits.get("is_lifetime", False)
         
         weekly_tokens_used = getattr(quota, 'weekly_tokens_used', 0)
+        monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
         
         # Check lifetime quota (start plan)
         if is_lifetime and lifetime_token_limit is not None:
@@ -621,15 +699,23 @@ async def check_rate_limit(user_id: str, estimated_tokens: int = 0) -> tuple[boo
                 else:
                     return False, f"Insufficient lifetime tokens quota: Used {weekly_tokens_used:,}/{lifetime_token_limit:,}, remaining {remaining:,}, but estimated need {estimated_tokens:,}. Please upgrade Plan."
         
-        # Check weekly quota (normal/high plan)
+        # Check weekly quota (normal plan)
         if weekly_token_limit is not None:
-            # Check if current used tokens plus estimated tokens will exceed limit
             if weekly_tokens_used + estimated_tokens > weekly_token_limit:
                 remaining = weekly_token_limit - weekly_tokens_used
                 if remaining <= 0:
                     return False, f"This week's tokens exhausted: {weekly_tokens_used:,}/{weekly_token_limit:,}. Please try again next week or upgrade Plan."
                 else:
                     return False, f"Insufficient weekly tokens quota: Used {weekly_tokens_used:,}/{weekly_token_limit:,}, remaining {remaining:,}, but estimated need {estimated_tokens:,}. Please try again next week or upgrade Plan."
+        
+        # Check monthly quota (high/ultra plan)
+        if monthly_token_limit is not None:
+            if monthly_tokens_used + estimated_tokens > monthly_token_limit:
+                remaining = monthly_token_limit - monthly_tokens_used
+                if remaining <= 0:
+                    return False, f"This month's tokens exhausted: {monthly_tokens_used:,}/{monthly_token_limit:,}. Please try again next month or upgrade Plan."
+                else:
+                    return False, f"Insufficient monthly tokens quota: Used {monthly_tokens_used:,}/{monthly_token_limit:,}, remaining {remaining:,}, but estimated need {estimated_tokens:,}. Please try again next month or upgrade Plan."
         
         return True, ""
     except Exception as e:
