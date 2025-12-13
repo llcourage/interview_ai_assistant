@@ -209,13 +209,11 @@ async def update_user_plan(
         # to prevent database from using default value 'starter' (which violates constraint)
         # This is especially important for new users (no existing record)
         if plan is None:
-            # If existing record has 'starter', fix it
-            if existing_plan_value == 'starter':
-                print(f"⚠️ Plan is None but existing record has 'starter', adding 'plan': 'start' to data to prevent constraint violation")
-                data["plan"] = "start"
-            # If no existing record (new user), set default to 'start' to avoid database default 'starter'
-            elif existing_plan_value is None:
-                print(f"⚠️ Plan is None and no existing record (new user), adding 'plan': 'start' to data to prevent database default 'starter'")
+            # ALWAYS set plan to 'start' when plan is None to prevent database default 'starter'
+            # This is safe because 'start' is the free plan and won't cause issues
+            # Only set if not already in data (defensive check)
+            if 'plan' not in data:
+                print(f"⚠️ Plan is None, adding 'plan': 'start' to data to prevent database default 'starter'")
                 data["plan"] = "start"
         
         # Use upsert, with user_id as unique key
