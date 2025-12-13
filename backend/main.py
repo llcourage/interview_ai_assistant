@@ -1390,7 +1390,11 @@ async def create_checkout(
         current_user = await verify_token(token)
         
         # Create payment session
-        plan = PlanType(request.plan)
+        # Normalize 'starter' to 'start' before converting to PlanType
+        plan_value = request.plan
+        if plan_value == 'starter':
+            plan_value = 'start'
+        plan = PlanType(plan_value)
         
         # Start plan is one-time purchase, doesn't need Stripe subscription
         # Temporarily directly update user plan (can add one-time payment logic later)

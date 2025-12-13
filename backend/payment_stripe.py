@@ -155,6 +155,9 @@ async def handle_checkout_completed(session: dict):
             print(f"Warning: Checkout session {session_id} missing user_id or plan in metadata")
             return
         
+        # Normalize 'starter' to 'start' before converting to PlanType
+        if plan_value == 'starter':
+            plan_value = 'start'
         plan = PlanType(plan_value)
         
         subscription_id = session.get("subscription")

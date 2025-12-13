@@ -12,11 +12,11 @@ from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIM
 
 
 def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Compatible with old data: convert 'starter' plan to 'normal', ensure both weekly and monthly fields exist"""
+    """Compatible with old data: convert 'starter' plan to 'start', ensure both weekly and monthly fields exist"""
     if isinstance(data, dict):
         data = data.copy()  # Create copy to avoid modifying original data
         if data.get('plan') == 'starter':
-            data['plan'] = 'normal'
+            data['plan'] = 'start'
         # Ensure both weekly and monthly fields exist for backward compatibility
         if 'weekly_tokens_used' not in data:
             data['weekly_tokens_used'] = 0
@@ -134,6 +134,9 @@ async def update_user_plan(
                 if old_plan_response.data:
                     old_plan_value = old_plan_response.data.get("plan")
                     if old_plan_value:
+                        # Normalize 'starter' to 'start' before converting to PlanType
+                        if old_plan_value == 'starter':
+                            old_plan_value = 'start'
                         old_plan = PlanType(old_plan_value)
                         # If upgrading from start plan to normal/high plan, need to reset quota
                         if old_plan == PlanType.START and plan != PlanType.START:
@@ -357,8 +360,8 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             if original_plan == 'starter':
                 try:
                     supabase = get_supabase()
-                    supabase.table("usage_quotas").update({"plan": "normal"}).eq("user_id", user_id).execute()
-                    print(f"✅ Updated user {user_id} quota plan from 'starter' to 'normal'")
+                    supabase.table("usage_quotas").update({"plan": "start"}).eq("user_id", user_id).execute()
+                    print(f"✅ Updated user {user_id} quota plan from 'starter' to 'start'")
                 except Exception as update_error:
                     print(f"⚠️ Failed to update quota plan: {update_error}")
             
