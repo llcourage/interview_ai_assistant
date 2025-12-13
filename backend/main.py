@@ -1304,11 +1304,17 @@ async def get_plan(http_request: Request):
     user_plan = await get_user_plan(current_user.id)
     quota = await get_user_quota(current_user.id)
     
+    print(f"🔍 DEBUG /api/plan: After get_user_plan, user_plan={user_plan}, user_plan.plan={user_plan.plan if user_plan else 'None'}, type={type(user_plan.plan) if user_plan else 'None'}")
+    
     # Ensure plan field exists
     if not user_plan or not user_plan.plan:
         # If plan doesn't exist, use default START plan
         print(f"⚠️ User {current_user.id} plan is empty, using default START plan")
         user_plan.plan = PlanType.START
+    else:
+        print(f"✅ User {current_user.id} plan exists: {user_plan.plan.value}")
+    
+    print(f"🔍 DEBUG /api/plan: Final plan value before returning: {user_plan.plan.value}")
     
     limits = PLAN_LIMITS[user_plan.plan]
     

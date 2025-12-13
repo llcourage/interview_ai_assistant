@@ -34,22 +34,41 @@ async def get_user_plan(user_id: str) -> UserPlan:
         # Use maybe_single() instead of single() to avoid exceptions when no record exists
         response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
         
+        print(f"🔍 DEBUG get_user_plan: user_id={user_id}")
+        print(f"🔍 DEBUG get_user_plan: response.data={response.data}")
+        print(f"🔍 DEBUG get_user_plan: response.data type={type(response.data)}")
+        
         if response.data:
+            print(f"🔍 DEBUG get_user_plan: Raw plan value from DB: {response.data.get('plan')}")
             plan_data = normalize_plan_data(response.data)
-            return UserPlan(**plan_data)
+            print(f"🔍 DEBUG get_user_plan: After normalize_plan_data: {plan_data}")
+            print(f"🔍 DEBUG get_user_plan: plan_data['plan']={plan_data.get('plan')}")
+            
+            user_plan = UserPlan(**plan_data)
+            print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}, plan type={type(user_plan.plan)}, plan value={user_plan.plan.value if hasattr(user_plan.plan, 'value') else 'N/A'}")
+            return user_plan
         else:
             # If no record, try direct query first (without maybe_single)
+            print(f"🔍 DEBUG get_user_plan: response.data is None/empty, trying direct query")
             direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
             
+            print(f"🔍 DEBUG get_user_plan: direct_response.data={direct_response.data}")
+            
             if direct_response.data and len(direct_response.data) > 0:
+                print(f"🔍 DEBUG get_user_plan: Direct query found data, plan={direct_response.data[0].get('plan')}")
                 plan_data = normalize_plan_data(direct_response.data[0])
-                return UserPlan(**plan_data)
+                print(f"🔍 DEBUG get_user_plan: After normalize_plan_data: {plan_data}")
+                user_plan = UserPlan(**plan_data)
+                print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}")
+                return user_plan
             
             # If no plan record found, create default START plan
-            print(f"User {user_id} has no plan record, creating default START plan")
+            print(f"⚠️ User {user_id} has no plan record, creating default START plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ Failed to get user Plan: {e}")
+        import traceback
+        print(f"🔍 DEBUG get_user_plan: Exception traceback:\n{traceback.format_exc()}")
         # If creation fails, try returning in-memory object (but this is not persistent)
         try:
             return await create_user_plan(user_id)
