@@ -184,22 +184,34 @@ async def update_user_plan(
         # Before upsert, ALWAYS check if existing record has 'starter' value and fix it
         # This is critical because if plan is None (partial update), data won't include plan field
         # and the 'starter' value would remain in database, causing constraint violations
+        existing_plan_value = None
         try:
             existing_response = supabase.table("user_plans").select("plan").eq("user_id", user_id).maybe_single().execute()
-            if existing_response.data and existing_response.data.get("plan") == 'starter':
-                # Fix existing 'starter' value to 'start' before upsert
-                # This must be done BEFORE upsert to avoid constraint violations
-                fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
-                if fix_response.data:
-                    print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
-                else:
-                    print(f"⚠️ Fix update returned no data for user {user_id}")
+            if existing_response.data:
+                existing_plan_value = existing_response.data.get("plan")
+                if existing_plan_value == 'starter':
+                    # Fix existing 'starter' value to 'start' before upsert
+                    # This must be done BEFORE upsert to avoid constraint violations
+                    fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
+                    if fix_response.data:
+                        print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
+                        existing_plan_value = 'start'  # Update local variable
+                    else:
+                        print(f"⚠️ Fix update returned no data for user {user_id}")
         except Exception as fix_error:
             # If fix fails, log error but continue with upsert
             # If this is a new user, the fix will fail (no record exists), which is OK
             print(f"⚠️ Could not fix existing plan (may be new user): {fix_error}")
             import traceback
             traceback.print_exc()
+        
+        # CRITICAL FIX: If plan is None (partial update) but existing record has 'starter', 
+        # we must include 'plan': 'start' in data to prevent constraint violation
+        # This ensures that upsert will update the 'starter' value to 'start'
+        # Even if the fix above failed, we still need to include plan in data
+        if plan is None and existing_plan_value == 'starter':
+            print(f"⚠️ Plan is None but existing record has 'starter', adding 'plan': 'start' to data to prevent constraint violation")
+            data["plan"] = "start"
         
         # Use upsert, with user_id as unique key
         # Insert if record doesn't exist, update if exists
