@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getAuthHeader, getToken } from './lib/auth';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getAuthHeader, getToken, isAuthenticated } from './lib/auth';
 import { API_BASE_URL } from './lib/api';
 import { Header } from './components/Header';
 import { PlanCard } from './components/PlanCard';
@@ -12,34 +12,75 @@ interface PlanInfo {
 
 export const Plans: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
 
+  // 每次路由变化时都重新查询数据库
   useEffect(() => {
     loadCurrentPlan();
+  }, [location.pathname]);
+
+  // 监听认证状态变化，登录后自动重新查询
+  useEffect(() => {
+    const handleAuthStateChange = async () => {
+      // 等待一小段时间确保token已保存
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const authenticated = await isAuthenticated();
+      if (authenticated) {
+        console.log('🔒 Plans: Auth state changed, reloading plan from database');
+        loadCurrentPlan();
+      }
+    };
+
+    window.addEventListener('auth-state-changed', handleAuthStateChange);
+    return () => {
+      window.removeEventListener('auth-state-changed', handleAuthStateChange);
+    };
   }, []);
 
   const loadCurrentPlan = async () => {
     try {
+      setLoadingPlan(true);
+      setCurrentPlan(null); // 先清空，避免显示旧数据
+      
+      // 确保用户已认证
+      const authenticated = await isAuthenticated();
+      if (!authenticated) {
+        setLoadingPlan(false);
+        return;
+      }
+
       const authHeader = getAuthHeader();
       if (!authHeader) {
         setLoadingPlan(false);
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/plan`, {
+      // 添加时间戳参数，确保每次请求都是新的，不读取缓存
+      const timestamp = Date.now();
+      const response = await fetch(`${API_BASE_URL}/api/plan?t=${timestamp}`, {
+        method: 'GET',
         headers: {
-          'Authorization': authHeader
-        }
+          'Authorization': authHeader,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
+        cache: 'no-store' // 确保不缓存
       });
 
       if (response.ok) {
         const data: PlanInfo = await response.json();
+        console.log('📦 Plans: Loaded plan from database:', data.plan);
         setCurrentPlan(data.plan);
+      } else {
+        console.error('❌ Plans: Failed to load plan, status:', response.status);
+        setCurrentPlan(null);
       }
     } catch (error) {
-      console.error('Failed to load current plan:', error);
+      console.error('❌ Plans: Failed to load current plan:', error);
+      setCurrentPlan(null);
     } finally {
       setLoadingPlan(false);
     }
