@@ -181,32 +181,62 @@ async def update_user_plan(
         if plan_expires_at is not None:
             data["plan_expires_at"] = plan_expires_at.isoformat()
         
-        # Before upsert, check if existing record has 'starter' value and fix it
+        # Before upsert, ALWAYS check if existing record has 'starter' value and fix it
+        # This is critical because if plan is None (partial update), data won't include plan field
+        # and the 'starter' value would remain in database, causing constraint violations
         try:
             existing_response = supabase.table("user_plans").select("plan").eq("user_id", user_id).maybe_single().execute()
             if existing_response.data and existing_response.data.get("plan") == 'starter':
                 # Fix existing 'starter' value to 'start' before upsert
-                supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
-                print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
+                # This must be done BEFORE upsert to avoid constraint violations
+                fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
+                if fix_response.data:
+                    print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
+                else:
+                    print(f"⚠️ Fix update returned no data for user {user_id}")
         except Exception as fix_error:
-            # If fix fails, continue with upsert (may be new user)
-            print(f"⚠️ Could not fix existing plan: {fix_error}")
+            # If fix fails, log error but continue with upsert
+            # If this is a new user, the fix will fail (no record exists), which is OK
+            print(f"⚠️ Could not fix existing plan (may be new user): {fix_error}")
+            import traceback
+            traceback.print_exc()
         
         # Use upsert, with user_id as unique key
         # Insert if record doesn't exist, update if exists
         try:
+            # Log data being upserted for debugging
+            print(f"🔄 Upserting user_plans for user {user_id}: {data}")
+            
             # Try standard upsert
             response = supabase.table("user_plans").upsert(data).execute()
             
         except Exception as upsert_error:
+            # Log detailed error information
+            error_msg = str(upsert_error)
+            print(f"❌ Standard upsert failed: {error_msg}")
+            print(f"   Data being upserted: {data}")
+            
+            # Check if error is related to 'starter' plan value
+            if "'starter'" in error_msg or '"starter"' in error_msg:
+                print(f"⚠️ Error contains 'starter' value - attempting to fix database before retry")
+                # Try to fix all 'starter' values in database for this user
+                try:
+                    fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).eq("plan", "starter").execute()
+                    print(f"✅ Fixed 'starter' values: {fix_response.data}")
+                except Exception as fix_err:
+                    print(f"⚠️ Could not fix 'starter' values: {fix_err}")
+            
             # If standard upsert fails, try specifying on_conflict
             try:
+                print(f"🔄 Retrying upsert with on_conflict='user_id'")
                 response = supabase.table("user_plans").upsert(
                     data,
                     on_conflict="user_id"
                 ).execute()
             except Exception as e2:
-                print(f"Upsert failed: {e2}")
+                print(f"❌ Retry upsert also failed: {e2}")
+                import traceback
+                traceback.print_exc()
                 raise
         
         # Defensive check: ensure response and response.data exist
