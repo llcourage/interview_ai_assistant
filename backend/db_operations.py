@@ -5,7 +5,7 @@ Provides CRUD operations for user Plan, API Keys, Usage
 import os
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
-from backend.db_supabase import get_supabase
+from backend.db_supabase import get_supabase, get_supabase_admin
 from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
 
 # Encryption related code removed - all users use server API Key
@@ -31,32 +31,25 @@ async def get_user_plan(user_id: str) -> UserPlan:
     """Get user Plan"""
     try:
         supabase = get_supabase()
-        # Use maybe_single() instead of single() to avoid exceptions when no record exists
-        response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
+        # Use direct query (not maybe_single) to avoid 406 errors when no record exists
+        # 406 happens when maybe_single() expects exactly 1 row but finds 0
+        response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
         
         print(f"🔍 DEBUG get_user_plan: user_id={user_id}")
         print(f"🔍 DEBUG get_user_plan: response={response}, response type={type(response)}")
         
-        # Check if response is None (happens on 406/403 errors)
+        # Check if response is None (shouldn't happen with direct query, but handle it)
         if response is None:
-            print(f"⚠️ get_user_plan: response is None, likely due to 406/403 error, trying direct query")
-            direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
-            if direct_response and direct_response.data and len(direct_response.data) > 0:
-                print(f"🔍 DEBUG get_user_plan: Direct query found data, plan={direct_response.data[0].get('plan')}")
-                plan_data = normalize_plan_data(direct_response.data[0])
-                user_plan = UserPlan(**plan_data)
-                print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}")
-                return user_plan
-            else:
-                # No data found, will create default plan below
-                print(f"⚠️ User {user_id} has no plan record (response was None), will create default START plan")
-                return await create_user_plan(user_id)
+            print(f"⚠️ get_user_plan: response is None, this shouldn't happen with direct query")
+            # Try to create default plan
+            return await create_user_plan(user_id)
         
         print(f"🔍 DEBUG get_user_plan: response.data={response.data}, response.data type={type(response.data)}")
         
-        if response.data:
-            print(f"🔍 DEBUG get_user_plan: Raw plan value from DB: {response.data.get('plan')}")
-            plan_data = normalize_plan_data(response.data)
+        # Check if we have data
+        if response.data and len(response.data) > 0:
+            print(f"🔍 DEBUG get_user_plan: Found plan record, plan={response.data[0].get('plan')}")
+            plan_data = normalize_plan_data(response.data[0])
             print(f"🔍 DEBUG get_user_plan: After normalize_plan_data: {plan_data}")
             print(f"🔍 DEBUG get_user_plan: plan_data['plan']={plan_data.get('plan')}")
             
@@ -64,45 +57,30 @@ async def get_user_plan(user_id: str) -> UserPlan:
             print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}, plan type={type(user_plan.plan)}, plan value={user_plan.plan.value if hasattr(user_plan.plan, 'value') else 'N/A'}")
             return user_plan
         else:
-            # If no record, try direct query first (without maybe_single)
-            print(f"🔍 DEBUG get_user_plan: response.data is None/empty, trying direct query")
-            direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
-            
-            print(f"🔍 DEBUG get_user_plan: direct_response={direct_response}, direct_response.data={direct_response.data if direct_response else 'None'}")
-            
-            if direct_response and direct_response.data and len(direct_response.data) > 0:
-                print(f"🔍 DEBUG get_user_plan: Direct query found data, plan={direct_response.data[0].get('plan')}")
-                plan_data = normalize_plan_data(direct_response.data[0])
-                print(f"🔍 DEBUG get_user_plan: After normalize_plan_data: {plan_data}")
-                user_plan = UserPlan(**plan_data)
-                print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}")
-                return user_plan
-            
-            # If no plan record found, create default START plan
+            # No plan record found, create default START plan using admin client
             print(f"⚠️ User {user_id} has no plan record, creating default START plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ Failed to get user Plan: {e}")
         import traceback
         print(f"🔍 DEBUG get_user_plan: Exception traceback:\n{traceback.format_exc()}")
-        # If creation fails, try returning in-memory object (but this is not persistent)
+        # Try to create default plan one more time
         try:
             return await create_user_plan(user_id)
         except Exception as create_error:
             print(f"❌ Failed to create user Plan: {create_error}")
-            # Finally return a temporary object (not recommended, but at least won't crash)
-            return UserPlan(
-                user_id=user_id,
-                plan=PlanType.START,
-                created_at=datetime.now(),
-                updated_at=datetime.now()
-            )
+            # Re-raise the exception instead of returning fake plan object
+            raise Exception(f"Failed to get or create user plan for user {user_id}: {str(create_error)}")
 
 
 async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> UserPlan:
-    """Create user Plan"""
+    """Create user Plan using admin client (SERVICE_ROLE_KEY) to bypass RLS
+    
+    Uses upsert to prevent duplicate inserts if plan already exists
+    """
     try:
-        supabase = get_supabase()
+        # Use admin client (SERVICE_ROLE_KEY) to bypass RLS
+        supabase_admin = get_supabase_admin()
         now = datetime.now()
         
         # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
@@ -117,15 +95,21 @@ async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> Use
             "updated_at": now.isoformat()
         }
         
-        response = supabase.table("user_plans").insert(plan_data).execute()
+        # Use upsert with on_conflict to handle race conditions
+        # If user_id already exists, update the plan; otherwise insert
+        print(f"🔍 DEBUG create_user_plan: Upserting plan for user {user_id}, plan={plan_value}")
+        response = supabase_admin.table("user_plans").upsert(
+            plan_data,
+            on_conflict="user_id"
+        ).execute()
         
         # Defensive check: ensure response and response.data exist
         if response is None:
-            print(f"❌ Supabase insert returned None")
+            print(f"❌ Supabase upsert returned None")
             raise Exception("Failed to create Plan: Database operation returned empty response")
         
         if not hasattr(response, 'data') or not response.data:
-            print(f"❌ Supabase insert returned empty response.data: {response}")
+            print(f"❌ Supabase upsert returned empty response.data: {response}")
             raise Exception("Failed to create Plan: Database operation did not return data")
         
         # Ensure data is list and not empty
@@ -441,10 +425,12 @@ async def get_user_quota(user_id: str) -> UsageQuota:
     """Get user quota"""
     try:
         supabase = get_supabase()
-        # Use maybe_single() instead of single() to avoid exceptions when no record exists
-        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
+        # Use direct query (not maybe_single) to avoid 406 errors when no record exists
+        # 406 happens when maybe_single() expects exactly 1 row but finds 0
+        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).execute()
         
-        if response and response.data:
+        # Check if we have data
+        if response and response.data and len(response.data) > 0:
             # Save original plan value to check if database needs updating
             original_plan = response.data.get('plan')
             
@@ -577,9 +563,13 @@ async def get_user_quota(user_id: str) -> UsageQuota:
 
 
 async def create_user_quota(user_id: str) -> UsageQuota:
-    """Create user quota"""
+    """Create user quota using admin client (SERVICE_ROLE_KEY) to bypass RLS
+    
+    Uses upsert to prevent duplicate inserts if quota already exists
+    """
     try:
-        supabase = get_supabase()
+        # Use admin client (SERVICE_ROLE_KEY) to bypass RLS
+        supabase_admin = get_supabase_admin()
         
         user_plan = await get_user_plan(user_id)
         
@@ -595,13 +585,24 @@ async def create_user_quota(user_id: str) -> UsageQuota:
             "updated_at": now.isoformat()
         }
         
-        response = supabase.table("usage_quotas").insert(quota_data).execute()
+        # Use upsert with on_conflict to handle race conditions
+        # If user_id already exists, update the quota; otherwise insert
+        print(f"🔍 DEBUG create_user_quota: Upserting quota for user {user_id}")
+        response = supabase_admin.table("usage_quotas").upsert(
+            quota_data,
+            on_conflict="user_id"
+        ).execute()
         
-        if response.data:
-            quota_data = normalize_plan_data(response.data[0])
-            return UsageQuota(**quota_data)
-        else:
-            raise Exception("Failed to create quota")
+        if response is None:
+            print(f"❌ Supabase upsert returned None")
+            raise Exception("Failed to create quota: Database operation returned empty response")
+        
+        if not hasattr(response, 'data') or not response.data:
+            print(f"❌ Supabase upsert returned empty response.data: {response}")
+            raise Exception("Failed to create quota: Database operation did not return data")
+        
+        quota_data = normalize_plan_data(response.data[0])
+        return UsageQuota(**quota_data)
     except Exception as e:
         print(f"❌ Failed to create user quota: {e}")
         raise
