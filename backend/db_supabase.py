@@ -65,3 +65,14 @@ def get_supabase() -> Client:
     return supabase_client
 
 
+def get_supabase_admin() -> Client:
+    """Get Supabase admin client instance (alias for get_supabase)
+    
+    This is an alias for get_supabase() for consistency with code that uses admin terminology.
+    Both functions return the same client that uses SERVICE_ROLE_KEY to bypass RLS.
+    
+    Note: This client uses SERVICE_ROLE_KEY, can bypass RLS restrictions
+    Only for backend server-side operations, must never expose to frontend
+    """
+    return get_supabase()
+

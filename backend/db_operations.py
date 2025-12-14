@@ -9,6 +9,13 @@ from backend.utils.time import utcnow, ensure_utc
 from backend.db_supabase import get_supabase, get_supabase_admin
 from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
 
+# Import postgrest exceptions at module level to avoid UnboundLocalError
+try:
+    from postgrest.exceptions import APIError
+except ImportError:
+    # Fallback if postgrest is not available (e.g., in test environment)
+    APIError = Exception
+
 # Encryption related code removed - all users use server API Key
 
 
@@ -175,11 +182,27 @@ async def update_user_plan(
 ) -> UserPlan:
     """Update user Plan (create if record doesn't exist) - use upsert to avoid 204 error
     
-    If upgrading from start plan to other plan, will automatically reset quota
+    Args:
+        user_id: User ID
+        plan: Current plan type (PlanType enum, converted to string internally)
+        stripe_customer_id: Stripe customer ID
+        stripe_subscription_id: Stripe subscription ID
+        subscription_status: Subscription status (active, canceled, etc.)
+        plan_expires_at: When plan will expire (datetime, converted to ISO format)
+        next_update_at: Next billing/renewal date (datetime, converted to ISO format)
+        next_plan: Next plan to switch to (PlanType enum, converted to string internally)
+        cancel_at_period_end: Whether subscription will cancel at period end (boolean)
+        stripe_event_ts: Stripe event.created Unix timestamp (int) for webhook deduplication
+    
+    Returns:
+        UserPlan: Updated user plan object
+    
+    Note:
+        - If upgrading from start plan to other plan, will automatically reset quota
+        - All plan-related parameters use PlanType enum and are converted to strings internally
+        - Only non-None values are updated (partial updates supported)
     """
     try:
-        from postgrest.exceptions import APIError
-        
         supabase = get_supabase()
         
         # If plan is to be updated, check if quota needs to be reset (upgrading from start to other plan)
@@ -216,37 +239,50 @@ async def update_user_plan(
             "updated_at": now.isoformat()
         }
         
+        # Helper function to convert PlanType to normalized string value
+        def plan_type_to_string(plan_type: PlanType) -> str:
+            """Convert PlanType enum to normalized string value for database storage"""
+            plan_value = plan_type.value
+            # Normalize 'starter' to 'start' for backward compatibility
+            if plan_value == 'starter':
+                plan_value = 'start'
+            return plan_value
+        
         # Only add non-None values to data (avoid overwriting existing values with NULL)
         # Note: If creating new record (via webhook), plan will always be passed
         # If partial update (plan is None), only update other fields
-        if plan is not None:
-            # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
-            plan_value = plan.value
-            if plan_value == 'starter':
-                plan_value = 'start'
-            data["plan"] = plan_value
         
-        # These fields are only updated when they have values
+        # Plan field: Convert PlanType to string for database storage
+        if plan is not None:
+            data["plan"] = plan_type_to_string(plan)
+        
+        # Stripe-related fields
         if stripe_customer_id is not None:
             data["stripe_customer_id"] = stripe_customer_id
         if stripe_subscription_id is not None:
             data["stripe_subscription_id"] = stripe_subscription_id
         if subscription_status is not None:
             data["subscription_status"] = subscription_status
+        
+        # Date/time fields: Convert datetime to ISO format string (ensure UTC aware)
         if plan_expires_at is not None:
+            plan_expires_at = ensure_utc(plan_expires_at)
             data["plan_expires_at"] = plan_expires_at.isoformat()
         if next_update_at is not None:
+            next_update_at = ensure_utc(next_update_at)
             data["next_update_at"] = next_update_at.isoformat()
+        
+        # New fields for plan changes and webhook tracking
+        # next_plan: Convert PlanType to string for database storage
         if next_plan is not None:
-            # Ensure next_plan value is normalized (convert 'starter' to 'start' if somehow present)
-            next_plan_value = next_plan.value
-            if next_plan_value == 'starter':
-                next_plan_value = 'start'
-            data["next_plan"] = next_plan_value
+            data["next_plan"] = plan_type_to_string(next_plan)
+        
+        # cancel_at_period_end: Boolean flag indicating if subscription will cancel at period end
         if cancel_at_period_end is not None:
             data["cancel_at_period_end"] = cancel_at_period_end
+        
+        # stripe_event_ts: Unix timestamp (int) from Stripe event.created for webhook deduplication
         if stripe_event_ts is not None:
-            # stripe_event_ts is already a Unix timestamp (int) from Stripe event.created
             data["stripe_event_ts"] = stripe_event_ts
         
         # Before upsert, ALWAYS check if existing record has 'starter' value and fix it
@@ -260,7 +296,8 @@ async def update_user_plan(
                 if existing_plan_value == 'starter':
                     # Fix existing 'starter' value to 'start' before upsert
                     # This must be done BEFORE upsert to avoid constraint violations
-                    fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
+                    # Add condition to only update if plan is still 'starter' (prevent race condition)
+                    fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).eq("plan", "starter").execute()
                     if fix_response.data:
                         print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
                         existing_plan_value = 'start'  # Update local variable
@@ -276,13 +313,15 @@ async def update_user_plan(
         # CRITICAL FIX: If plan is None (partial update), we must include 'plan' in data
         # to prevent database from using default value 'starter' (which violates constraint)
         # This is especially important for new users (no existing record)
-        if plan is None:
-            # ALWAYS set plan to 'start' when plan is None to prevent database default 'starter'
-            # This is safe because 'start' is the free plan and won't cause issues
-            # Only set if not already in data (defensive check)
-            if 'plan' not in data:
-                print(f"⚠️ Plan is None, adding 'plan': 'start' to data to prevent database default 'starter'")
+        # Only add plan for new users (when no existing record), not for partial updates
+        if plan is None and 'plan' not in data:
+            # Only set plan to 'start' if this is a new user (no existing record)
+            # For existing users, we don't want to overwrite their current plan
+            if existing_plan_value is None:
+                # New user: set plan to 'start' to prevent database default 'starter'
+                print(f"⚠️ Plan is None and no existing record, adding 'plan': 'start' to data to prevent database default 'starter'")
                 data["plan"] = "start"
+            # If existing_plan_value exists, don't add plan to data (partial update)
         
         # Use upsert, with user_id as unique key
         # Insert if record doesn't exist, update if exists
