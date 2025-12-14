@@ -1,0 +1,128 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+# Core database modules
+py_library(
+    name = "db_supabase",
+    srcs = ["db_supabase.py"],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+py_library(
+    name = "db_models",
+    srcs = ["db_models.py"],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+# Database operations (depends on db_supabase and db_models)
+py_library(
+    name = "db_operations",
+    srcs = ["db_operations.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":db_supabase",
+        ":db_models",
+    ],
+)
+
+# Authentication module
+py_library(
+    name = "auth_supabase",
+    srcs = ["auth_supabase.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":db_supabase",
+    ],
+)
+
+# Vision analysis module
+py_library(
+    name = "vision",
+    srcs = ["vision.py"],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+# Token estimator module
+py_library(
+    name = "token_estimator",
+    srcs = ["token_estimator.py"],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+# Payment Stripe module
+py_library(
+    name = "payment_stripe",
+    srcs = ["payment_stripe.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":db_operations",
+        ":db_models",
+    ],
+)
+
+# Main FastAPI application
+py_binary(
+    name = "main",
+    srcs = ["main.py"],
+    main = "main.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":vision",
+        ":token_estimator",
+        ":auth_supabase",
+        ":db_models",
+        ":db_operations",
+        ":payment_stripe",
+    ],
+)
+
+# Utility scripts
+py_binary(
+    name = "fix_plan_inconsistency",
+    srcs = ["fix_plan_inconsistency.py"],
+    main = "fix_plan_inconsistency.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":db_supabase",
+        ":db_operations",
+        ":db_models",
+    ],
+)
+
+py_binary(
+    name = "setup_key",
+    srcs = ["setup_key.py"],
+    main = "setup_key.py",
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+# Unit tests
+py_test(
+    name = "db_operations_test",
+    srcs = ["db_operations_test.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":db_operations",
+        ":db_models",
+    ],
+)
+
+# Package initialization
+py_library(
+    name = "backend",
+    srcs = ["__init__.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":db_models",
+        ":db_operations",
+        ":db_supabase",
+        ":auth_supabase",
+        ":vision",
+        ":token_estimator",
+        ":payment_stripe",
+    ],
+)
