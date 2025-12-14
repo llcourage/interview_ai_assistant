@@ -4,19 +4,20 @@ Provides CRUD operations for user Plan, API Keys, Usage
 """
 import os
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
-from backend.db_supabase import get_supabase
+from datetime import datetime, timedelta, timezone
+from backend.utils.time import utcnow, ensure_utc
+from backend.db_supabase import get_supabase, get_supabase_admin
 from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
 
 # Encryption related code removed - all users use server API Key
 
 
 def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Compatible with old data: convert 'starter' plan to 'normal', ensure both weekly and monthly fields exist"""
+    """Compatible with old data: convert 'starter' plan to 'start', ensure both weekly and monthly fields exist"""
     if isinstance(data, dict):
         data = data.copy()  # Create copy to avoid modifying original data
         if data.get('plan') == 'starter':
-            data['plan'] = 'normal'
+            data['plan'] = 'start'
         # Ensure both weekly and monthly fields exist for backward compatibility
         if 'weekly_tokens_used' not in data:
             data['weekly_tokens_used'] = 0
@@ -30,62 +31,117 @@ def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
 async def get_user_plan(user_id: str) -> UserPlan:
     """Get user Plan"""
     try:
-        supabase = get_supabase()
-        # Use maybe_single() instead of single() to avoid exceptions when no record exists
-        response = supabase.table("user_plans").select("*").eq("user_id", user_id).maybe_single().execute()
+        # Use admin client to ensure we can read all data (bypass RLS)
+        # This is important because regular client might be blocked by RLS policies
+        supabase = get_supabase_admin()
+        # Use direct query (not maybe_single) to avoid 406 errors when no record exists
+        # 406 happens when maybe_single() expects exactly 1 row but finds 0
+        response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
         
-        if response.data:
-            plan_data = normalize_plan_data(response.data)
-            return UserPlan(**plan_data)
+        print(f"🔍 DEBUG get_user_plan: user_id={user_id}")
+        print(f"🔍 DEBUG get_user_plan: response={response}, response type={type(response)}")
+        
+        # Check if response is None (shouldn't happen with direct query, but handle it)
+        if response is None:
+            print(f"⚠️ get_user_plan: response is None, this shouldn't happen with direct query")
+            # Try to create default plan
+            return await create_user_plan(user_id)
+        
+        print(f"🔍 DEBUG get_user_plan: response.data={response.data}, response.data type={type(response.data)}")
+        
+        # Check if we have data
+        if response.data and len(response.data) > 0:
+            print(f"🔍 DEBUG get_user_plan: Found plan record, plan={response.data[0].get('plan')}")
+            plan_data = normalize_plan_data(response.data[0])
+            print(f"🔍 DEBUG get_user_plan: After normalize_plan_data: {plan_data}")
+            print(f"🔍 DEBUG get_user_plan: plan_data['plan']={plan_data.get('plan')}")
+            
+            user_plan = UserPlan(**plan_data)
+            
+            # Check if plan has expired (user cancelled subscription, should downgrade at period end)
+            if user_plan.plan_expires_at and user_plan.plan != PlanType.START:
+                plan_expires_at = ensure_utc(user_plan.plan_expires_at)
+                if plan_expires_at and plan_expires_at <= utcnow():
+                    # Plan has expired, downgrade to start
+                    print(f"⏰ User {user_id} plan expired at {plan_expires_at}, downgrading from '{user_plan.plan.value}' to 'start'")
+                    # Update database to reflect the downgrade and use the returned UserPlan
+                    user_plan = await update_user_plan(
+                        user_id=user_id,
+                        plan=PlanType.START,
+                        plan_expires_at=None
+                    )
+                else:
+                    # Plan hasn't expired yet, keep current plan
+                    print(f"⏰ User {user_id} plan expires at {plan_expires_at}, keeping current plan '{user_plan.plan.value}' until then")
+            
+            print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}, plan type={type(user_plan.plan)}, plan value={user_plan.plan.value if hasattr(user_plan.plan, 'value') else 'N/A'}")
+            return user_plan
         else:
-            # If no record, try direct query first (without maybe_single)
-            direct_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
-            
-            if direct_response.data and len(direct_response.data) > 0:
-                plan_data = normalize_plan_data(direct_response.data[0])
-                return UserPlan(**plan_data)
-            
-            # If no plan record found, create default START plan
-            print(f"User {user_id} has no plan record, creating default START plan")
+            # No plan record found, create default START plan using admin client
+            print(f"⚠️ User {user_id} has no plan record, creating default START plan")
             return await create_user_plan(user_id)
     except Exception as e:
         print(f"⚠️ Failed to get user Plan: {e}")
-        # If creation fails, try returning in-memory object (but this is not persistent)
+        import traceback
+        print(f"🔍 DEBUG get_user_plan: Exception traceback:\n{traceback.format_exc()}")
+        # Try to create default plan one more time
         try:
             return await create_user_plan(user_id)
         except Exception as create_error:
             print(f"❌ Failed to create user Plan: {create_error}")
-            # Finally return a temporary object (not recommended, but at least won't crash)
-            return UserPlan(
-                user_id=user_id,
-                plan=PlanType.START,
-                created_at=datetime.now(),
-                updated_at=datetime.now()
-            )
+            # Re-raise the exception instead of returning fake plan object
+            raise Exception(f"Failed to get or create user plan for user {user_id}: {str(create_error)}")
 
 
 async def create_user_plan(user_id: str, plan: PlanType = PlanType.START) -> UserPlan:
-    """Create user Plan"""
+    """Create user Plan using admin client (SERVICE_ROLE_KEY) to bypass RLS
+    
+    Uses upsert to prevent duplicate inserts if plan already exists
+    If record exists, preserves existing fields (stripe_subscription_id, etc.)
+    """
     try:
-        supabase = get_supabase()
-        now = datetime.now()
+        # Use admin client (SERVICE_ROLE_KEY) to bypass RLS
+        supabase_admin = get_supabase_admin()
+        now = utcnow()
+        
+        # First, try to get existing plan
+        existing_response = supabase_admin.table("user_plans").select("*").eq("user_id", user_id).execute()
+        existing_data = None
+        if existing_response and existing_response.data and len(existing_response.data) > 0:
+            existing_data = existing_response.data[0]
+            print(f"🔍 DEBUG create_user_plan: Found existing plan record, returning existing plan: plan={existing_data.get('plan')}, stripe_customer_id={existing_data.get('stripe_customer_id')}, stripe_subscription_id={existing_data.get('stripe_subscription_id')}")
+            # If record already exists, return it instead of overwriting
+            plan_data = normalize_plan_data(existing_data)
+            return UserPlan(**plan_data)
+        
+        # No existing record, create new one
+        # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
+        plan_value = plan.value
+        if plan_value == 'starter':
+            plan_value = 'start'
         
         plan_data = {
             "user_id": user_id,
-            "plan": plan.value,
+            "plan": plan_value,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat()
         }
         
-        response = supabase.table("user_plans").insert(plan_data).execute()
+        # Use upsert with on_conflict to handle race conditions
+        # If user_id already exists, update the plan; otherwise insert
+        print(f"🔍 DEBUG create_user_plan: Creating new plan for user {user_id}, plan={plan_value}")
+        response = supabase_admin.table("user_plans").upsert(
+            plan_data,
+            on_conflict="user_id"
+        ).execute()
         
         # Defensive check: ensure response and response.data exist
         if response is None:
-            print(f"❌ Supabase insert returned None")
+            print(f"❌ Supabase upsert returned None")
             raise Exception("Failed to create Plan: Database operation returned empty response")
         
         if not hasattr(response, 'data') or not response.data:
-            print(f"❌ Supabase insert returned empty response.data: {response}")
+            print(f"❌ Supabase upsert returned empty response.data: {response}")
             raise Exception("Failed to create Plan: Database operation did not return data")
         
         # Ensure data is list and not empty
@@ -111,7 +167,11 @@ async def update_user_plan(
     stripe_customer_id: Optional[str] = None,
     stripe_subscription_id: Optional[str] = None,
     subscription_status: Optional[str] = None,
-    plan_expires_at: Optional[datetime] = None
+    plan_expires_at: Optional[datetime] = None,
+    next_update_at: Optional[datetime] = None,
+    next_plan: Optional[PlanType] = None,
+    cancel_at_period_end: Optional[bool] = None,
+    stripe_event_ts: Optional[int] = None  # Stripe event.created (Unix timestamp in seconds)
 ) -> UserPlan:
     """Update user Plan (create if record doesn't exist) - use upsert to avoid 204 error
     
@@ -134,6 +194,9 @@ async def update_user_plan(
                 if old_plan_response.data:
                     old_plan_value = old_plan_response.data.get("plan")
                     if old_plan_value:
+                        # Normalize 'starter' to 'start' before converting to PlanType
+                        if old_plan_value == 'starter':
+                            old_plan_value = 'start'
                         old_plan = PlanType(old_plan_value)
                         # If upgrading from start plan to normal/high plan, need to reset quota
                         if old_plan == PlanType.START and plan != PlanType.START:
@@ -147,7 +210,7 @@ async def update_user_plan(
                 print(f"⚠️ Failed to check old plan (may be new user): {e}")
         
         # Build data dictionary
-        now = datetime.now()
+        now = utcnow()
         data = {
             "user_id": user_id,
             "updated_at": now.isoformat()
@@ -157,7 +220,11 @@ async def update_user_plan(
         # Note: If creating new record (via webhook), plan will always be passed
         # If partial update (plan is None), only update other fields
         if plan is not None:
-            data["plan"] = plan.value
+            # Ensure plan value is normalized (convert 'starter' to 'start' if somehow present)
+            plan_value = plan.value
+            if plan_value == 'starter':
+                plan_value = 'start'
+            data["plan"] = plan_value
         
         # These fields are only updated when they have values
         if stripe_customer_id is not None:
@@ -168,22 +235,91 @@ async def update_user_plan(
             data["subscription_status"] = subscription_status
         if plan_expires_at is not None:
             data["plan_expires_at"] = plan_expires_at.isoformat()
+        if next_update_at is not None:
+            data["next_update_at"] = next_update_at.isoformat()
+        if next_plan is not None:
+            # Ensure next_plan value is normalized (convert 'starter' to 'start' if somehow present)
+            next_plan_value = next_plan.value
+            if next_plan_value == 'starter':
+                next_plan_value = 'start'
+            data["next_plan"] = next_plan_value
+        if cancel_at_period_end is not None:
+            data["cancel_at_period_end"] = cancel_at_period_end
+        if stripe_event_ts is not None:
+            # stripe_event_ts is already a Unix timestamp (int) from Stripe event.created
+            data["stripe_event_ts"] = stripe_event_ts
+        
+        # Before upsert, ALWAYS check if existing record has 'starter' value and fix it
+        # This is critical because if plan is None (partial update), data won't include plan field
+        # and the 'starter' value would remain in database, causing constraint violations
+        existing_plan_value = None
+        try:
+            existing_response = supabase.table("user_plans").select("plan").eq("user_id", user_id).maybe_single().execute()
+            if existing_response.data:
+                existing_plan_value = existing_response.data.get("plan")
+                if existing_plan_value == 'starter':
+                    # Fix existing 'starter' value to 'start' before upsert
+                    # This must be done BEFORE upsert to avoid constraint violations
+                    fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).execute()
+                    if fix_response.data:
+                        print(f"✅ Fixed existing 'starter' plan value for user {user_id}")
+                        existing_plan_value = 'start'  # Update local variable
+                    else:
+                        print(f"⚠️ Fix update returned no data for user {user_id}")
+        except Exception as fix_error:
+            # If fix fails, log error but continue with upsert
+            # If this is a new user, the fix will fail (no record exists), which is OK
+            print(f"⚠️ Could not fix existing plan (may be new user): {fix_error}")
+            import traceback
+            traceback.print_exc()
+        
+        # CRITICAL FIX: If plan is None (partial update), we must include 'plan' in data
+        # to prevent database from using default value 'starter' (which violates constraint)
+        # This is especially important for new users (no existing record)
+        if plan is None:
+            # ALWAYS set plan to 'start' when plan is None to prevent database default 'starter'
+            # This is safe because 'start' is the free plan and won't cause issues
+            # Only set if not already in data (defensive check)
+            if 'plan' not in data:
+                print(f"⚠️ Plan is None, adding 'plan': 'start' to data to prevent database default 'starter'")
+                data["plan"] = "start"
         
         # Use upsert, with user_id as unique key
         # Insert if record doesn't exist, update if exists
         try:
+            # Log data being upserted for debugging
+            print(f"🔄 Upserting user_plans for user {user_id}: {data}")
+            
             # Try standard upsert
             response = supabase.table("user_plans").upsert(data).execute()
             
         except Exception as upsert_error:
+            # Log detailed error information
+            error_msg = str(upsert_error)
+            print(f"❌ Standard upsert failed: {error_msg}")
+            print(f"   Data being upserted: {data}")
+            
+            # Check if error is related to 'starter' plan value
+            if "'starter'" in error_msg or '"starter"' in error_msg:
+                print(f"⚠️ Error contains 'starter' value - attempting to fix database before retry")
+                # Try to fix all 'starter' values in database for this user
+                try:
+                    fix_response = supabase.table("user_plans").update({"plan": "start"}).eq("user_id", user_id).eq("plan", "starter").execute()
+                    print(f"✅ Fixed 'starter' values: {fix_response.data}")
+                except Exception as fix_err:
+                    print(f"⚠️ Could not fix 'starter' values: {fix_err}")
+            
             # If standard upsert fails, try specifying on_conflict
             try:
+                print(f"🔄 Retrying upsert with on_conflict='user_id'")
                 response = supabase.table("user_plans").upsert(
                     data,
                     on_conflict="user_id"
                 ).execute()
             except Exception as e2:
-                print(f"Upsert failed: {e2}")
+                print(f"❌ Retry upsert also failed: {e2}")
+                import traceback
+                traceback.print_exc()
                 raise
         
         # Defensive check: ensure response and response.data exist
@@ -208,7 +344,7 @@ async def update_user_plan(
         # If need to reset quota (upgrading from start to other plan)
         if should_reset_quota and plan is not None:
             try:
-                now = datetime.now()
+                now = utcnow()
                 quota_update_data = {
                     "weekly_tokens_used": 0,
                     "quota_reset_date": now.isoformat(),
@@ -243,7 +379,7 @@ async def update_user_plan(
                 # Cap at lifetime limit (if user already used more than lifetime limit, set to limit)
                 adjusted_tokens = min(current_tokens_used, lifetime_token_limit)
                 
-                now = datetime.now()
+                now = utcnow()
                 quota_update_data = {
                     "weekly_tokens_used": adjusted_tokens,
                     "plan": plan.value,  # Update plan in quota
@@ -318,12 +454,12 @@ async def log_usage(
             "cost": cost,
             "success": success,
             "error_message": error_message,
-            "created_at": datetime.now().isoformat()
+            "created_at": utcnow().isoformat()
         }
         
         response = supabase.table("usage_logs").insert(log_data).execute()
         
-        if response.data:
+        if response.data and len(response.data) > 0:
             return UsageLog(**response.data[0])
         else:
             raise Exception("Failed to log Usage")
@@ -338,14 +474,16 @@ async def get_user_quota(user_id: str) -> UsageQuota:
     """Get user quota"""
     try:
         supabase = get_supabase()
-        # Use maybe_single() instead of single() to avoid exceptions when no record exists
-        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
+        # Use direct query (not maybe_single) to avoid 406 errors when no record exists
+        # 406 happens when maybe_single() expects exactly 1 row but finds 0
+        response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).execute()
         
-        if response and response.data:
+        # Check if we have data
+        if response and response.data and len(response.data) > 0:
             # Save original plan value to check if database needs updating
-            original_plan = response.data.get('plan')
+            original_plan = response.data[0].get('plan')
             
-            quota_data = normalize_plan_data(response.data)
+            quota_data = normalize_plan_data(response.data[0])
             # Ensure weekly_tokens_used and monthly_tokens_used fields exist (compatible with old data)
             if 'weekly_tokens_used' not in quota_data:
                 quota_data['weekly_tokens_used'] = 0
@@ -357,8 +495,8 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             if original_plan == 'starter':
                 try:
                     supabase = get_supabase()
-                    supabase.table("usage_quotas").update({"plan": "normal"}).eq("user_id", user_id).execute()
-                    print(f"✅ Updated user {user_id} quota plan from 'starter' to 'normal'")
+                    supabase.table("usage_quotas").update({"plan": "start"}).eq("user_id", user_id).execute()
+                    print(f"✅ Updated user {user_id} quota plan from 'starter' to 'start'")
                 except Exception as update_error:
                     print(f"⚠️ Failed to update quota plan: {update_error}")
             
@@ -369,7 +507,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             is_lifetime = limits.get("is_lifetime", False)
             is_unlimited = limits.get("is_unlimited", False)
             
-            now = datetime.now()
+            now = utcnow()
             should_reset_weekly = False
             should_reset_monthly = False
             
@@ -379,21 +517,17 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 monthly_token_limit = limits.get("monthly_token_limit")
                 
                 if quota.quota_reset_date:
-                    reset_date = quota.quota_reset_date
-                    if isinstance(reset_date, str):
-                        reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
-                    
-                    reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
-                    
-                    # Check weekly reset (for weekly plans)
-                    if weekly_token_limit is not None:
-                        now_year, now_week, _ = now.isocalendar()
-                        reset_year, reset_week, _ = reset_date_no_tz.isocalendar()
-                        should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
-                    
-                    # Check monthly reset (for monthly plans)
-                    if monthly_token_limit is not None:
-                        should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
+                    reset_date = ensure_utc(quota.quota_reset_date)
+                    if reset_date:
+                        # Check weekly reset (for weekly plans)
+                        if weekly_token_limit is not None:
+                            now_year, now_week, _ = now.isocalendar()
+                            reset_year, reset_week, _ = reset_date.isocalendar()
+                            should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
+                        
+                        # Check monthly reset (for monthly plans)
+                        if monthly_token_limit is not None:
+                            should_reset_monthly = (now.year != reset_date.year) or (now.month != reset_date.month)
                 else:
                     # If no reset date, treat as need to reset
                     if weekly_token_limit is not None:
@@ -416,7 +550,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
                 supabase = get_supabase()
                 response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
                 
-                if response.data:
+                if response.data and len(response.data) > 0:
                     quota_data = normalize_plan_data(response.data[0])
                     quota = UsageQuota(**quota_data)
                     if should_reset_weekly:
@@ -445,7 +579,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             user_plan = await get_user_plan(user_id)
             limits = PLAN_LIMITS[user_plan.plan]
             
-            now = datetime.now()
+            now = utcnow()
             # quota_reset_date is "last reset time", set to current time
             return UsageQuota(
                 user_id=user_id,
@@ -460,7 +594,7 @@ async def get_user_quota(user_id: str) -> UsageQuota:
             print(f"❌ Failed to create default quota: {fallback_error}")
             # Finally return a basic quota object
             # Fallback to NORMAL plan limits
-            now = datetime.now()
+            now = utcnow()
             # quota_reset_date is "last reset time", set to current time
             return UsageQuota(
                 user_id=user_id,
@@ -474,13 +608,17 @@ async def get_user_quota(user_id: str) -> UsageQuota:
 
 
 async def create_user_quota(user_id: str) -> UsageQuota:
-    """Create user quota"""
+    """Create user quota using admin client (SERVICE_ROLE_KEY) to bypass RLS
+    
+    Uses upsert to prevent duplicate inserts if quota already exists
+    """
     try:
-        supabase = get_supabase()
+        # Use admin client (SERVICE_ROLE_KEY) to bypass RLS
+        supabase_admin = get_supabase_admin()
         
         user_plan = await get_user_plan(user_id)
         
-        now = datetime.now()
+        now = utcnow()
         # quota_reset_date is "last reset time", set to current time
         quota_data = {
             "user_id": user_id,
@@ -492,13 +630,28 @@ async def create_user_quota(user_id: str) -> UsageQuota:
             "updated_at": now.isoformat()
         }
         
-        response = supabase.table("usage_quotas").insert(quota_data).execute()
+        # Use upsert with on_conflict to handle race conditions
+        # If user_id already exists, update the quota; otherwise insert
+        print(f"🔍 DEBUG create_user_quota: Upserting quota for user {user_id}")
+        response = supabase_admin.table("usage_quotas").upsert(
+            quota_data,
+            on_conflict="user_id"
+        ).execute()
         
-        if response.data:
-            quota_data = normalize_plan_data(response.data[0])
-            return UsageQuota(**quota_data)
-        else:
-            raise Exception("Failed to create quota")
+        if response is None:
+            print(f"❌ Supabase upsert returned None")
+            raise Exception("Failed to create quota: Database operation returned empty response")
+        
+        if not hasattr(response, 'data') or not response.data:
+            print(f"❌ Supabase upsert returned empty response.data: {response}")
+            raise Exception("Failed to create quota: Database operation did not return data")
+        
+        if not isinstance(response.data, list) or len(response.data) == 0:
+            print(f"❌ Supabase upsert returned empty response.data list: {response.data}")
+            raise Exception("Failed to create quota: Database operation returned empty data list")
+        
+        quota_data = normalize_plan_data(response.data[0])
+        return UsageQuota(**quota_data)
     except Exception as e:
         print(f"❌ Failed to create user quota: {e}")
         raise
@@ -517,7 +670,7 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
         supabase = get_supabase()
         
         update_data = {
-            "updated_at": datetime.now().isoformat()
+            "updated_at": utcnow().isoformat()
         }
         
         # Add token usage based on plan type
@@ -544,7 +697,7 @@ async def increment_user_quota(user_id: str, tokens_used: int = 0) -> UsageQuota
         
         response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
         
-        if response.data:
+        if response.data and len(response.data) > 0:
             quota_data = normalize_plan_data(response.data[0])
             return UsageQuota(**quota_data)
         else:
@@ -571,7 +724,7 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         # Query database directly to avoid calling get_user_quota causing recursion
         response = supabase.table("usage_quotas").select("*").eq("user_id", user_id).maybe_single().execute()
         
-        now = datetime.now()
+        now = utcnow()
         
         if not response or not response.data:
             # If no record, create one
@@ -586,13 +739,15 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
             }
             
             insert_response = supabase.table("usage_quotas").insert(quota_data).execute()
-            if insert_response.data:
+            if insert_response.data and len(insert_response.data) > 0:
                 quota_data = normalize_plan_data(insert_response.data[0])
                 return UsageQuota(**quota_data)
             else:
                 raise Exception("Failed to create quota")
         
         # Parse existing quota
+        if not response.data or len(response.data) == 0:
+            raise Exception("Failed to get quota: No data returned")
         quota_raw = normalize_plan_data(response.data[0])
         quota = UsageQuota(**quota_raw)
         
@@ -605,21 +760,17 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         should_reset_monthly = False
         
         if quota.quota_reset_date:
-            reset_date = quota.quota_reset_date
-            if isinstance(reset_date, str):
-                reset_date = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
-            
-            reset_date_no_tz = reset_date.replace(tzinfo=None) if reset_date.tzinfo else reset_date
-            
-            # Check weekly reset (for weekly plans)
-            if weekly_token_limit is not None and not is_lifetime:
-                now_year, now_week, _ = now.isocalendar()
-                reset_year, reset_week, _ = reset_date_no_tz.isocalendar()
-                should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
-            
-            # Check monthly reset (for monthly plans)
-            if monthly_token_limit is not None:
-                should_reset_monthly = (now.year != reset_date_no_tz.year) or (now.month != reset_date_no_tz.month)
+            reset_date = ensure_utc(quota.quota_reset_date)
+            if reset_date:
+                # Check weekly reset (for weekly plans)
+                if weekly_token_limit is not None and not is_lifetime:
+                    now_year, now_week, _ = now.isocalendar()
+                    reset_year, reset_week, _ = reset_date.isocalendar()
+                    should_reset_weekly = (now_year != reset_year) or (now_week != reset_week)
+                
+                # Check monthly reset (for monthly plans)
+                if monthly_token_limit is not None:
+                    should_reset_monthly = (now.year != reset_date.year) or (now.month != reset_date.month)
         else:
             # If no reset date, treat as need to reset
             if weekly_token_limit is not None and not is_lifetime:
@@ -646,7 +797,7 @@ async def reset_user_quota(user_id: str) -> UsageQuota:
         if should_reset_weekly or should_reset_monthly:
             update_response = supabase.table("usage_quotas").update(update_data).eq("user_id", user_id).execute()
             
-            if update_response.data:
+            if update_response.data and len(update_response.data) > 0:
                 quota_data = normalize_plan_data(update_response.data[0])
                 return UsageQuota(**quota_data)
             else:

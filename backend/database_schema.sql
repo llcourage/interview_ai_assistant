@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS user_plans (
     stripe_subscription_id VARCHAR(255),
     subscription_status VARCHAR(50),
     plan_expires_at TIMESTAMPTZ,
+    next_plan VARCHAR(20) CHECK (next_plan IN ('start', 'normal', 'high', 'ultra', 'premium', 'internal')),
+    cancel_at_period_end BOOLEAN DEFAULT FALSE,
+    stripe_event_ts BIGINT,  -- Stripe event.created (Unix timestamp in seconds) - for webhook deduplication
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id)
