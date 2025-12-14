@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from backend.utils.time import utcnow, ensure_utc
 from typing import Optional
 from dotenv import load_dotenv
-from backend.db_operations import get_user_plan, update_user_plan
+from backend.db_operations import get_user_plan, update_user_plan, _CLEAR_FIELD
 from backend.db_models import PlanType
 
 load_dotenv()
@@ -395,30 +395,37 @@ async def cancel_subscription(user_id: str) -> bool:
         if not user_plan.stripe_subscription_id:
             raise ValueError("User has no active subscription")
         
-        # Get subscription to get current_period_end
+        # 1) Read Stripe period end (UTC-aware)
         subscription = stripe.Subscription.retrieve(user_plan.stripe_subscription_id)
+        if not getattr(subscription, "current_period_end", None):
+            raise ValueError("Subscription has no current_period_end")
         
-        # Cancel subscription (at period end)
+        plan_expires_at = ensure_utc(
+            datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+        )
+        
+        # 2) Write DB state machine first (source of truth for your app logic)
+        # Cancel should override any existing scheduled downgrade
+        await update_user_plan(
+            user_id=user_id,
+            plan_expires_at=plan_expires_at,
+            next_plan=PlanType.START,        # Schedule downgrade to START
+            cancel_at_period_end=True,        # Mark cancel at period end
+            next_update_at=_CLEAR_FIELD,      # Explicitly clear scheduled plan change trigger (override any existing downgrade)
+        )
+        
+        # 3) Then tell Stripe to cancel at period end (no immediate cancel)
         stripe.Subscription.modify(
             user_plan.stripe_subscription_id,
             cancel_at_period_end=True
         )
         
-        # Set plan_expires_at to current_period_end (not immediately downgrade)
-        # User will keep current plan until period end
-        plan_expires_at = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-        
-        await update_user_plan(
-            user_id=user_id,
-            plan_expires_at=plan_expires_at,
-            next_update_at=None  # Clear next_update_at since subscription will be cancelled
-        )
-        
-        print(f"✅ User {user_id} subscription will be cancelled at period end ({plan_expires_at})")
-        print(f"   Plan will downgrade to 'start' after {plan_expires_at}")
+        print(f"✅ User {user_id} subscription will cancel at period end: {plan_expires_at}")
         return True
     except Exception as e:
         print(f"❌ Failed to cancel subscription: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -449,3 +456,147 @@ async def get_subscription_info(user_id: str) -> Optional[dict]:
         print(f"❌ Failed to get subscription information: {e}")
         return None
 
+
+# Plan hierarchy for comparison (lower index = lower tier)
+PLAN_HIERARCHY = {
+    PlanType.START: 0,
+    PlanType.NORMAL: 1,
+    PlanType.HIGH: 2,
+    PlanType.ULTRA: 3,
+    PlanType.PREMIUM: 4,
+    PlanType.INTERNAL: 5
+}
+
+
+def _is_downgrade(current_plan: PlanType, target_plan: PlanType) -> bool:
+    """Check if target_plan is a downgrade from current_plan
+    
+    Args:
+        current_plan: Current plan type
+        target_plan: Target plan type
+    
+    Returns:
+        bool: True if target_plan < current_plan (downgrade)
+    """
+    return PLAN_HIERARCHY.get(target_plan, 0) < PLAN_HIERARCHY.get(current_plan, 0)
+
+
+async def downgrade_subscription(user_id: str, target_plan: PlanType) -> bool:
+    """Downgrade user subscription to a lower tier plan
+    
+    This function schedules a downgrade at the end of the current billing period.
+    It does NOT immediately modify the Stripe subscription - the downgrade will
+    be applied when the current period ends.
+    
+    Args:
+        user_id: User ID
+        target_plan: Target plan to downgrade to (must be lower tier than current plan)
+    
+    Returns:
+        bool: Whether successful
+    
+    Raises:
+        ValueError: If target_plan is not a downgrade, or user has no active subscription
+    """
+    try:
+        # Get current user plan
+        user_plan = await get_user_plan(user_id)
+        current_plan = user_plan.plan
+        
+        # Validate that target_plan is a downgrade
+        if not _is_downgrade(current_plan, target_plan):
+            raise ValueError(
+                f"Cannot downgrade: target plan '{target_plan.value}' is not lower than current plan '{current_plan.value}'"
+            )
+        
+        # Validate subscription status - must be active or trialing
+        if not user_plan.stripe_subscription_id:
+            raise ValueError("User has no active subscription to downgrade")
+        
+        # Check subscription status (prefer DB value, but validate if needed)
+        valid_statuses = {"active", "trialing"}
+        if user_plan.subscription_status and user_plan.subscription_status not in valid_statuses:
+            raise ValueError(
+                f"Cannot downgrade: subscription status is '{user_plan.subscription_status}', "
+                f"must be one of {valid_statuses}"
+            )
+        
+        # Determine effective_at (when downgrade will take effect)
+        # Priority 1: Use existing plan_expires_at if it exists and is in the future
+        # This is the "source of truth" from our DB
+        plan_expires_at = None
+        if user_plan.plan_expires_at:
+            plan_expires_at_utc = ensure_utc(user_plan.plan_expires_at)
+            now = utcnow()
+            if plan_expires_at_utc > now:
+                # Use existing plan_expires_at if it's in the future
+                plan_expires_at = plan_expires_at_utc
+                print(f"🔍 Using existing plan_expires_at from DB: {plan_expires_at}")
+        
+        # Priority 2: If no valid plan_expires_at, get from Stripe (only when necessary)
+        if plan_expires_at is None:
+            try:
+                subscription = stripe.Subscription.retrieve(user_plan.stripe_subscription_id)
+                
+                if not subscription.current_period_end:
+                    raise ValueError("Subscription has no current_period_end date")
+                
+                plan_expires_at = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+                print(f"🔍 Retrieved current_period_end from Stripe: {plan_expires_at}")
+                
+                # Optional: Verify subscription status from Stripe matches our expectation
+                if subscription.status not in valid_statuses:
+                    raise ValueError(
+                        f"Cannot downgrade: Stripe subscription status is '{subscription.status}', "
+                        f"must be one of {valid_statuses}"
+                    )
+            except stripe.error.StripeError as e:
+                print(f"⚠️ Failed to retrieve subscription from Stripe: {e}")
+                raise ValueError(f"Failed to get subscription period end date: {e}")
+        
+        # Idempotency check: If already scheduled the same downgrade, return success
+        if user_plan.next_plan == target_plan and user_plan.plan_expires_at:
+            existing_expires_at = ensure_utc(user_plan.plan_expires_at)
+            # If existing plan_expires_at is same or later, consider it already scheduled
+            if existing_expires_at >= plan_expires_at:
+                print(
+                    f"✅ User {user_id} already has downgrade scheduled to {target_plan.value} "
+                    f"at {existing_expires_at} (same or later than requested {plan_expires_at})"
+                )
+                return True
+        
+        # If there's a different next_plan scheduled, decide behavior:
+        # Option: Allow overriding (user can change their downgrade target)
+        # Alternative: Reject and require canceling existing downgrade first
+        if user_plan.next_plan is not None and user_plan.next_plan != target_plan:
+            print(
+                f"⚠️ User {user_id} already has a different downgrade scheduled: "
+                f"from {current_plan.value} to {user_plan.next_plan.value}. "
+                f"Overriding to {target_plan.value}."
+            )
+            # Proceed with override (you can change this to raise ValueError if you prefer to reject)
+        
+        # Update database: set next_plan, plan_expires_at, cancel_at_period_end=False
+        # Note: We set cancel_at_period_end=False because this is a downgrade, not a cancellation
+        # The subscription will continue, but at a lower tier
+        await update_user_plan(
+            user_id=user_id,
+            next_plan=target_plan,
+            plan_expires_at=plan_expires_at,
+            cancel_at_period_end=False
+        )
+        
+        print(
+            f"✅ User {user_id} scheduled downgrade from {current_plan.value} to {target_plan.value} "
+            f"at {plan_expires_at}"
+        )
+        return True
+        
+    except ValueError as e:
+        print(f"❌ Validation error in downgrade_subscription: {e}")
+        raise
+    except Exception as e:
+        print(f"❌ Failed to downgrade subscription: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

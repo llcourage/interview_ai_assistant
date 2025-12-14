@@ -3,11 +3,16 @@ Database operations
 Provides CRUD operations for user Plan, API Keys, Usage
 """
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from datetime import datetime, timedelta, timezone
 from backend.utils.time import utcnow, ensure_utc
 from backend.db_supabase import get_supabase, get_supabase_admin
 from backend.db_models import UserPlan, UsageLog, UsageQuota, PlanType, PLAN_LIMITS
+
+# Sentinel value for explicitly clearing fields in update_user_plan
+# Use this instead of None when you want to clear a field (set to NULL in DB)
+# None means "don't update this field", _CLEAR_FIELD means "set this field to NULL"
+_CLEAR_FIELD = object()
 
 # Import postgrest exceptions at module level to avoid UnboundLocalError
 try:
@@ -318,10 +323,10 @@ async def update_user_plan(
     stripe_customer_id: Optional[str] = None,
     stripe_subscription_id: Optional[str] = None,
     subscription_status: Optional[str] = None,
-    plan_expires_at: Optional[datetime] = None,
-    next_update_at: Optional[datetime] = None,
-    next_plan: Optional[PlanType] = None,
-    cancel_at_period_end: Optional[bool] = None,
+    plan_expires_at: Optional[Union[datetime, type(_CLEAR_FIELD)]] = None,
+    next_update_at: Optional[Union[datetime, type(_CLEAR_FIELD)]] = None,
+    next_plan: Optional[Union[PlanType, type(_CLEAR_FIELD)]] = None,
+    cancel_at_period_end: Optional[Union[bool, type(_CLEAR_FIELD)]] = None,
     stripe_event_ts: Optional[int] = None  # Stripe event.created (Unix timestamp in seconds)
 ) -> UserPlan:
     """Update user Plan (create if record doesn't exist) - use upsert to avoid 204 error
@@ -333,9 +338,13 @@ async def update_user_plan(
         stripe_subscription_id: Stripe subscription ID
         subscription_status: Subscription status (active, canceled, etc.)
         plan_expires_at: When plan will expire (datetime, converted to ISO format)
+                        Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         next_update_at: Next billing/renewal date (datetime, converted to ISO format)
+                        Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         next_plan: Next plan to switch to (PlanType enum, converted to string internally)
+                   Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         cancel_at_period_end: Whether subscription will cancel at period end (boolean)
+                             Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         stripe_event_ts: Stripe event.created Unix timestamp (int) for webhook deduplication
     
     Returns:
@@ -344,6 +353,7 @@ async def update_user_plan(
     Note:
         - If upgrading from start plan to other plan, will automatically reset quota
         - All plan-related parameters use PlanType enum and are converted to strings internally
+        - None means "don't update this field", _CLEAR_FIELD means "set this field to NULL"
         - Only non-None values are updated (partial updates supported)
     """
     try:
@@ -409,20 +419,32 @@ async def update_user_plan(
             data["subscription_status"] = subscription_status
         
         # Date/time fields: Convert datetime to ISO format string (ensure UTC aware)
-        if plan_expires_at is not None:
+        # Support explicit clearing with _CLEAR_FIELD sentinel
+        if plan_expires_at is _CLEAR_FIELD:
+            data["plan_expires_at"] = None  # Explicitly clear field
+        elif plan_expires_at is not None:
             plan_expires_at = ensure_utc(plan_expires_at)
             data["plan_expires_at"] = plan_expires_at.isoformat()
-        if next_update_at is not None:
+        
+        if next_update_at is _CLEAR_FIELD:
+            data["next_update_at"] = None  # Explicitly clear field
+        elif next_update_at is not None:
             next_update_at = ensure_utc(next_update_at)
             data["next_update_at"] = next_update_at.isoformat()
         
         # New fields for plan changes and webhook tracking
         # next_plan: Convert PlanType to string for database storage
-        if next_plan is not None:
+        # Support explicit clearing with _CLEAR_FIELD sentinel
+        if next_plan is _CLEAR_FIELD:
+            data["next_plan"] = None  # Explicitly clear field
+        elif next_plan is not None:
             data["next_plan"] = plan_type_to_string(next_plan)
         
         # cancel_at_period_end: Boolean flag indicating if subscription will cancel at period end
-        if cancel_at_period_end is not None:
+        # Support explicit clearing with _CLEAR_FIELD sentinel
+        if cancel_at_period_end is _CLEAR_FIELD:
+            data["cancel_at_period_end"] = None  # Explicitly clear field
+        elif cancel_at_period_end is not None:
             data["cancel_at_period_end"] = cancel_at_period_end
         
         # stripe_event_ts: Unix timestamp (int) from Stripe event.created for webhook deduplication
