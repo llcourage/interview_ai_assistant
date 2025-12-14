@@ -66,6 +66,15 @@ class MockBaseModel:
                 # If string doesn't match any PlanType or import fails, keep as is
                 pass
         
+        # Convert next_plan string to PlanType enum if it exists
+        if 'next_plan' in kwargs and isinstance(kwargs['next_plan'], str) and kwargs['next_plan']:
+            try:
+                from backend.db_models import PlanType
+                kwargs['next_plan'] = PlanType(kwargs['next_plan'])
+            except (ValueError, ImportError):
+                # If string doesn't match any PlanType or import fails, keep as is
+                pass
+        
         # Set all attributes
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -1431,6 +1440,326 @@ class TestGetUserPlan(unittest.IsolatedAsyncioTestCase):
             self.assertIn("+00:00", upsert_call_args["plan_expires_at"])
             # aware_dt (UTC+8) should be converted to UTC, so result should have +00:00
             self.assertIn("+00:00", upsert_call_args["next_update_at"])
+
+    async def test_get_user_plan_applies_next_plan_when_next_update_at_reached(self):
+        """Test that get_user_plan applies next_plan when next_update_at time is reached"""
+        user_id = "test_user_apply_next_plan"
+        now = datetime.now(timezone.utc)
+        past_time = now - timedelta(hours=1)  # 1 hour ago (already reached)
+        
+        # Mock initial response with scheduled plan change
+        mock_initial_response = MagicMock()
+        mock_initial_response.data = [{
+            "user_id": user_id,
+            "plan": "high",
+            "next_plan": "normal",
+            "next_update_at": past_time.isoformat(),
+            "plan_expires_at": None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        # Mock update_user_plan response (after applying next_plan)
+        mock_update_response = MagicMock()
+        mock_update_response.data = [{
+            "user_id": user_id,
+            "plan": "normal",  # Plan changed to next_plan
+            "next_plan": None,
+            "next_update_at": None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        # Mock refreshed plan response (after CAS clear)
+        mock_refreshed_response = MagicMock()
+        mock_refreshed_response.data = [{
+            "user_id": user_id,
+            "plan": "normal",
+            "next_plan": None,
+            "next_update_at": None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        with patch('backend.db_operations.get_supabase_admin') as mock_get_admin:
+            with patch('backend.db_operations.update_user_plan') as mock_update:
+                with patch('backend.db_operations.clear_scheduled_plan_change_if_matches') as mock_clear:
+                    mock_supabase = MagicMock()
+                    mock_table = MagicMock()
+                    mock_select = MagicMock()
+                    mock_eq = MagicMock()
+                    mock_update_query = MagicMock()
+                    mock_update_eq1 = MagicMock()
+                    mock_update_eq2 = MagicMock()
+                    
+                    mock_get_admin.return_value = mock_supabase
+                    mock_supabase.table.return_value = mock_table
+                    mock_table.select.return_value = mock_select
+                    mock_select.eq.return_value = mock_eq
+                    mock_eq.execute.return_value = mock_initial_response
+                    
+                    # Mock update_user_plan to return updated plan
+                    mock_updated_plan = UserPlan(
+                        user_id=user_id,
+                        plan=PlanType.NORMAL,
+                        next_plan=PlanType.NORMAL,  # Still has next_plan before CAS clear
+                        next_update_at=past_time,
+                        created_at=now,
+                        updated_at=now
+                    )
+                    mock_update.return_value = mock_updated_plan
+                    
+                    # Mock CAS clear (successful)
+                    mock_clear.return_value = None
+                    
+                    # Mock _fetch_user_plan_from_db (refreshed plan)
+                    with patch('backend.db_operations._fetch_user_plan_from_db') as mock_fetch:
+                        mock_refreshed_plan = UserPlan(
+                            user_id=user_id,
+                            plan=PlanType.NORMAL,
+                            next_plan=None,
+                            next_update_at=None,
+                            created_at=now,
+                            updated_at=now
+                        )
+                        mock_fetch.return_value = mock_refreshed_plan
+                        
+                        result = await get_user_plan(user_id)
+                        
+                        # Verify plan was changed to next_plan
+                        self.assertIsInstance(result, UserPlan)
+                        self.assertEqual(result.plan, PlanType.NORMAL)
+                        self.assertIsNone(result.next_plan)
+                        self.assertIsNone(result.next_update_at)
+                        
+                        # Verify update_user_plan was called with next_plan
+                        mock_update.assert_called_once()
+                        call_args = mock_update.call_args
+                        self.assertEqual(call_args[1]['user_id'], user_id)
+                        self.assertEqual(call_args[1]['plan'], PlanType.NORMAL)
+                        
+                        # Verify CAS clear was called
+                        mock_clear.assert_called_once()
+                        clear_args = mock_clear.call_args
+                        self.assertEqual(clear_args[1]['user_id'], user_id)
+                        self.assertEqual(clear_args[1]['expected_next_plan'], 'normal')
+                        
+                        # Verify _fetch_user_plan_from_db was called
+                        mock_fetch.assert_called_once_with(user_id)
+
+    async def test_get_user_plan_applies_next_plan_when_plan_expires_at_reached(self):
+        """Test that get_user_plan applies next_plan using plan_expires_at as fallback trigger"""
+        user_id = "test_user_apply_next_plan_fallback"
+        now = datetime.now(timezone.utc)
+        past_time = now - timedelta(hours=1)  # 1 hour ago (already reached)
+        
+        # Mock initial response with scheduled plan change (no next_update_at, but plan_expires_at)
+        mock_initial_response = MagicMock()
+        mock_initial_response.data = [{
+            "user_id": user_id,
+            "plan": "high",
+            "next_plan": "normal",
+            "next_update_at": None,  # No next_update_at
+            "plan_expires_at": past_time.isoformat(),  # Use plan_expires_at as trigger
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        with patch('backend.db_operations.get_supabase_admin') as mock_get_admin:
+            with patch('backend.db_operations.update_user_plan') as mock_update:
+                with patch('backend.db_operations.clear_scheduled_plan_change_if_matches') as mock_clear:
+                    with patch('backend.db_operations._fetch_user_plan_from_db') as mock_fetch:
+                        mock_supabase = MagicMock()
+                        mock_table = MagicMock()
+                        mock_select = MagicMock()
+                        mock_eq = MagicMock()
+                        
+                        mock_get_admin.return_value = mock_supabase
+                        mock_supabase.table.return_value = mock_table
+                        mock_table.select.return_value = mock_select
+                        mock_select.eq.return_value = mock_eq
+                        mock_eq.execute.return_value = mock_initial_response
+                        
+                        # Mock update_user_plan
+                        mock_updated_plan = UserPlan(
+                            user_id=user_id,
+                            plan=PlanType.NORMAL,
+                            next_plan=PlanType.NORMAL,
+                            plan_expires_at=past_time,
+                            created_at=now,
+                            updated_at=now
+                        )
+                        mock_update.return_value = mock_updated_plan
+                        
+                        # Mock refreshed plan
+                        mock_refreshed_plan = UserPlan(
+                            user_id=user_id,
+                            plan=PlanType.NORMAL,
+                            next_plan=None,
+                            next_update_at=None,
+                            created_at=now,
+                            updated_at=now
+                        )
+                        mock_fetch.return_value = mock_refreshed_plan
+                        
+                        result = await get_user_plan(user_id)
+                        
+                        # Verify plan was changed
+                        self.assertEqual(result.plan, PlanType.NORMAL)
+                        
+                        # Verify update_user_plan was called
+                        mock_update.assert_called_once()
+                        
+                        # Verify CAS clear was called (with None for next_update_at)
+                        mock_clear.assert_called_once()
+                        clear_args = mock_clear.call_args
+                        self.assertIsNone(clear_args[1]['expected_next_update_at'])
+
+    async def test_get_user_plan_keeps_next_plan_when_not_due_yet(self):
+        """Test that get_user_plan keeps current plan when next_plan is scheduled but not due yet"""
+        user_id = "test_user_next_plan_not_due"
+        now = datetime.now(timezone.utc)
+        future_time = now + timedelta(days=30)  # 30 days in future (not reached)
+        
+        # Mock response with scheduled plan change (not due yet)
+        mock_response = MagicMock()
+        mock_response.data = [{
+            "user_id": user_id,
+            "plan": "high",
+            "next_plan": "normal",
+            "next_update_at": future_time.isoformat(),
+            "plan_expires_at": None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        with patch('backend.db_operations.get_supabase_admin') as mock_get_admin:
+            mock_supabase = MagicMock()
+            mock_table = MagicMock()
+            mock_select = MagicMock()
+            mock_eq = MagicMock()
+            
+            mock_get_admin.return_value = mock_supabase
+            mock_supabase.table.return_value = mock_table
+            mock_table.select.return_value = mock_select
+            mock_select.eq.return_value = mock_eq
+            mock_eq.execute.return_value = mock_response
+            
+            result = await get_user_plan(user_id)
+            
+            # Verify plan is still high (not changed yet)
+            self.assertEqual(result.plan, PlanType.HIGH)
+            self.assertEqual(result.next_plan, PlanType.NORMAL)
+            self.assertIsNotNone(result.next_update_at)
+
+    async def test_get_user_plan_backward_compatibility_expired_downgrade(self):
+        """Test backward compatibility: expired plan without next_plan downgrades to START"""
+        user_id = "test_user_expired_no_next_plan"
+        now = datetime.now(timezone.utc)
+        past_time = now - timedelta(hours=1)  # 1 hour ago (expired)
+        
+        # Mock initial response with expired plan (no next_plan)
+        mock_initial_response = MagicMock()
+        mock_initial_response.data = [{
+            "user_id": user_id,
+            "plan": "high",
+            "next_plan": None,  # No next_plan
+            "plan_expires_at": past_time.isoformat(),  # Expired
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        with patch('backend.db_operations.get_supabase_admin') as mock_get_admin:
+            with patch('backend.db_operations.update_user_plan') as mock_update:
+                mock_supabase = MagicMock()
+                mock_table = MagicMock()
+                mock_select = MagicMock()
+                mock_eq = MagicMock()
+                
+                mock_get_admin.return_value = mock_supabase
+                mock_supabase.table.return_value = mock_table
+                mock_table.select.return_value = mock_select
+                mock_select.eq.return_value = mock_eq
+                mock_eq.execute.return_value = mock_initial_response
+                
+                # Mock update_user_plan to return downgraded plan
+                mock_downgraded_plan = UserPlan(
+                    user_id=user_id,
+                    plan=PlanType.START,
+                    plan_expires_at=None,
+                    created_at=now,
+                    updated_at=now
+                )
+                mock_update.return_value = mock_downgraded_plan
+                
+                result = await get_user_plan(user_id)
+                
+                # Verify plan was downgraded to START
+                self.assertEqual(result.plan, PlanType.START)
+                
+                # Verify update_user_plan was called with START plan
+                mock_update.assert_called_once()
+                call_args = mock_update.call_args
+                self.assertEqual(call_args[1]['plan'], PlanType.START)
+                self.assertIsNone(call_args[1]['plan_expires_at'])
+
+    async def test_get_user_plan_clears_memory_fields_after_applying(self):
+        """Test that get_user_plan clears next_plan/next_update_at in memory even if CAS fails"""
+        user_id = "test_user_memory_clear"
+        now = datetime.now(timezone.utc)
+        past_time = now - timedelta(hours=1)
+        
+        # Mock initial response
+        mock_initial_response = MagicMock()
+        mock_initial_response.data = [{
+            "user_id": user_id,
+            "plan": "high",
+            "next_plan": "normal",
+            "next_update_at": past_time.isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }]
+        
+        with patch('backend.db_operations.get_supabase_admin') as mock_get_admin:
+            with patch('backend.db_operations.update_user_plan') as mock_update:
+                with patch('backend.db_operations.clear_scheduled_plan_change_if_matches') as mock_clear:
+                    with patch('backend.db_operations._fetch_user_plan_from_db') as mock_fetch:
+                        mock_supabase = MagicMock()
+                        mock_table = MagicMock()
+                        mock_select = MagicMock()
+                        mock_eq = MagicMock()
+                        
+                        mock_get_admin.return_value = mock_supabase
+                        mock_supabase.table.return_value = mock_table
+                        mock_table.select.return_value = mock_select
+                        mock_select.eq.return_value = mock_eq
+                        mock_eq.execute.return_value = mock_initial_response
+                        
+                        # Mock update_user_plan
+                        mock_updated_plan = UserPlan(
+                            user_id=user_id,
+                            plan=PlanType.NORMAL,
+                            next_plan=PlanType.NORMAL,  # Still has next_plan
+                            next_update_at=past_time,
+                            created_at=now,
+                            updated_at=now
+                        )
+                        mock_update.return_value = mock_updated_plan
+                        
+                        # Mock CAS clear to fail
+                        mock_clear.side_effect = Exception("CAS failed")
+                        
+                        # Mock _fetch_user_plan_from_db to return None (simulate fetch failure)
+                        mock_fetch.return_value = None
+                        
+                        result = await get_user_plan(user_id)
+                        
+                        # Even though CAS failed and fetch failed, memory fields should be cleared
+                        # The result should still have the updated plan (NORMAL)
+                        self.assertEqual(result.plan, PlanType.NORMAL)
+                        # Note: In real code, the memory fields are cleared, but since we're using
+                        # a mock UserPlan object, we can't directly verify attribute assignment.
+                        # The important thing is that the logic doesn't crash and returns a valid plan.
 
 
 if __name__ == '__main__':

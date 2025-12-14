@@ -20,20 +20,94 @@ except ImportError:
 
 
 def normalize_plan_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Compatible with old data: convert 'starter' plan to 'start', ensure both weekly and monthly fields exist"""
-    if isinstance(data, dict):
-        data = data.copy()  # Create copy to avoid modifying original data
-        if data.get('plan') == 'starter':
-            data['plan'] = 'start'
-        # Ensure both weekly and monthly fields exist for backward compatibility
-        if 'weekly_tokens_used' not in data:
-            data['weekly_tokens_used'] = 0
-        if 'monthly_tokens_used' not in data:
-            data['monthly_tokens_used'] = 0
+    """Compatible with old data: normalize plan/next_plan, ensure both weekly and monthly fields exist"""
+    if not isinstance(data, dict):
+        return data
+
+    data = data.copy()
+
+    # Normalize plan
+    if data.get("plan") == "starter":
+        data["plan"] = "start"
+
+    # Normalize next_plan
+    if data.get("next_plan") == "starter":
+        data["next_plan"] = "start"
+
+    if "next_plan" in data:
+        v = data.get("next_plan")
+        if v is None or v == "":
+            data["next_plan"] = None
+        else:
+            try:
+                valid_plans = {p.value for p in PlanType}
+                if v not in valid_plans:
+                    print(f"⚠️ Invalid next_plan value '{v}', setting to None")
+                    data["next_plan"] = None
+            except Exception:
+                # Be conservative in unusual test envs (avoid crashing normalize)
+                pass
+
+    # Backward compatibility fields
+    if "weekly_tokens_used" not in data:
+        data["weekly_tokens_used"] = 0
+    if "monthly_tokens_used" not in data:
+        data["monthly_tokens_used"] = 0
+
     return data
 
 
 # ========== User Plan Operations ==========
+
+async def _fetch_user_plan_from_db(user_id: str) -> Optional[UserPlan]:
+    """Internal helper to fetch user plan from DB without recursion.
+    Used after applying plan changes to get updated state."""
+    try:
+        supabase = get_supabase_admin()
+        response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
+
+        if response and response.data and len(response.data) > 0:
+            plan_data = normalize_plan_data(response.data[0])
+            return UserPlan(**plan_data)
+        return None
+    except Exception as e:
+        print(f"⚠️ Failed to fetch user plan from DB: {e}")
+        return None
+
+
+async def clear_scheduled_plan_change_if_matches(
+    user_id: str,
+    expected_next_plan: str,
+    expected_next_update_at: Optional[datetime],
+) -> None:
+    """Clear next_plan/next_update_at only if current DB values still match expected ones (CAS)."""
+    supabase = get_supabase_admin()  # Use admin client to avoid RLS issues
+
+    def _base_query():
+        return (
+            supabase
+            .table("user_plans")
+            .update({
+                "next_plan": None,
+                "next_update_at": None,
+                "updated_at": utcnow().isoformat(),
+            })
+            .eq("user_id", user_id)
+            .eq("next_plan", expected_next_plan)
+        )
+
+    # 1) Strong CAS (with next_update_at) if we have it
+    if expected_next_update_at is not None:
+        expected_next_update_at_utc = ensure_utc(expected_next_update_at)
+        r1 = _base_query().eq("next_update_at", expected_next_update_at_utc.isoformat()).execute()
+        # Check if update succeeded (has data returned)
+        if r1 and hasattr(r1, "data") and r1.data:
+            return  # Successfully cleared with strong CAS
+
+    # 2) Fallback CAS (without next_update_at) to tolerate string format differences
+    # This handles cases where DB format (Z) doesn't match isoformat() output (+00:00)
+    _base_query().execute()
+
 
 async def get_user_plan(user_id: str) -> UserPlan:
     """Get user Plan"""
@@ -65,21 +139,91 @@ async def get_user_plan(user_id: str) -> UserPlan:
             
             user_plan = UserPlan(**plan_data)
             
-            # Check if plan has expired (user cancelled subscription, should downgrade at period end)
-            if user_plan.plan_expires_at and user_plan.plan != PlanType.START:
+            # Check if plan change is scheduled (next_plan) or plan has expired
+            now = utcnow()
+
+            # Priority 1: Apply scheduled plan change (next_plan)
+            if user_plan.next_plan is not None:
+                effective_at = None
+
+                if user_plan.next_update_at:
+                    effective_at = ensure_utc(user_plan.next_update_at)
+                elif user_plan.plan_expires_at:
+                    # fallback for legacy data that used plan_expires_at as trigger
+                    effective_at = ensure_utc(user_plan.plan_expires_at)
+
+                if effective_at and effective_at <= now:
+                    old_next_plan = user_plan.next_plan  # PlanType
+                    old_next_update_at = ensure_utc(user_plan.next_update_at) if user_plan.next_update_at else None
+
+                    print(
+                        f"⏰ User {user_id} scheduled plan change reached at {effective_at}, "
+                        f"switching from '{user_plan.plan.value}' to '{old_next_plan.value}'"
+                    )
+
+                    # 1) Update plan (do NOT clear plan_expires_at here)
+                    user_plan = await update_user_plan(
+                        user_id=user_id,
+                        plan=old_next_plan,
+                    )
+
+                    # 2) Clear schedule idempotently (CAS)
+                    try:
+                        await clear_scheduled_plan_change_if_matches(
+                            user_id=user_id,
+                            expected_next_plan=old_next_plan.value,
+                            expected_next_update_at=old_next_update_at,
+                        )
+                    except Exception as e:
+                        # Not fatal: if CAS clear fails due to race, next call will handle it
+                        print(f"⚠️ Failed to clear scheduled plan change for user {user_id}: {e}")
+
+                    # Make returned object consistent even if CAS/refresh fails
+                    # Clear schedule fields in memory to avoid returning stale data
+                    try:
+                        user_plan.next_plan = None
+                        user_plan.next_update_at = None
+                    except Exception:
+                        pass
+
+                    # 3) Re-fetch from DB to ensure returned user_plan reflects cleared fields
+                    # Use internal helper to avoid recursion
+                    refreshed_plan = await _fetch_user_plan_from_db(user_id)
+                    if refreshed_plan:
+                        user_plan = refreshed_plan
+                    # If fetch fails, user_plan still has the updated plan (but schedule fields are cleared in memory)
+
+                else:
+                    # Not due yet
+                    if user_plan.next_update_at:
+                        print(
+                            f"⏰ User {user_id} has scheduled plan change to '{user_plan.next_plan.value}' "
+                            f"at {ensure_utc(user_plan.next_update_at)}, keeping '{user_plan.plan.value}'"
+                        )
+                    elif user_plan.plan_expires_at:
+                        print(
+                            f"⏰ User {user_id} has scheduled plan change to '{user_plan.next_plan.value}' "
+                            f"at {ensure_utc(user_plan.plan_expires_at)}, keeping '{user_plan.plan.value}'"
+                        )
+
+            # Priority 2: Backward compatibility - no next_plan but plan_expires_at elapsed -> downgrade to start
+            elif user_plan.plan_expires_at and user_plan.plan != PlanType.START:
                 plan_expires_at = ensure_utc(user_plan.plan_expires_at)
-                if plan_expires_at and plan_expires_at <= utcnow():
-                    # Plan has expired, downgrade to start
-                    print(f"⏰ User {user_id} plan expired at {plan_expires_at}, downgrading from '{user_plan.plan.value}' to 'start'")
-                    # Update database to reflect the downgrade and use the returned UserPlan
+                if plan_expires_at and plan_expires_at <= now:
+                    print(
+                        f"⏰ User {user_id} plan expired at {plan_expires_at}, "
+                        f"downgrading from '{user_plan.plan.value}' to 'start'"
+                    )
                     user_plan = await update_user_plan(
                         user_id=user_id,
                         plan=PlanType.START,
-                        plan_expires_at=None
+                        plan_expires_at=None,
                     )
                 else:
-                    # Plan hasn't expired yet, keep current plan
-                    print(f"⏰ User {user_id} plan expires at {plan_expires_at}, keeping current plan '{user_plan.plan.value}' until then")
+                    print(
+                        f"⏰ User {user_id} plan expires at {plan_expires_at}, "
+                        f"keeping '{user_plan.plan.value}'"
+                    )
             
             print(f"🔍 DEBUG get_user_plan: UserPlan object created, plan={user_plan.plan}, plan type={type(user_plan.plan)}, plan value={user_plan.plan.value if hasattr(user_plan.plan, 'value') else 'N/A'}")
             return user_plan
