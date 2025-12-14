@@ -1,0 +1,10 @@
+module(
+    name = "interview_assistant",
+    version = "1.0.0",
+)
+
+# Basic platform support
+bazel_dep(name = "platforms", version = "0.0.10")
+
+# Python rules
+bazel_dep(name = "rules_python", version = "0.40.0")
