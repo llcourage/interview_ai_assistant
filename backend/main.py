@@ -49,7 +49,7 @@ from backend.payment_stripe import (
     create_checkout_session, handle_checkout_completed,
     handle_subscription_updated, handle_subscription_deleted,
     handle_subscription_pending_update_applied,
-    cancel_subscription, get_subscription_info
+    cancel_subscription, downgrade_subscription, get_subscription_info
 )
 
 # ========== FastAPI App ==========
@@ -172,6 +172,8 @@ class PlanResponse(BaseModel):
     monthly_tokens_used: Optional[int] = None
     features: list[str] = []
     subscription_info: Optional[dict] = None
+    next_plan: Optional[str] = None  # Next plan to switch to (for scheduled plan changes)
+    plan_expires_at: Optional[datetime] = None  # When plan will expire/downgrade (if cancelled)
 
 
 class ApiKeyRequest(BaseModel):
@@ -1333,6 +1335,10 @@ async def get_plan(http_request: Request):
     weekly_tokens_used = getattr(quota, 'weekly_tokens_used', 0)
     monthly_tokens_used = getattr(quota, 'monthly_tokens_used', 0)
     
+    # Extract next_plan and plan_expires_at for frontend
+    next_plan_value = user_plan.next_plan.value if user_plan.next_plan else None
+    plan_expires_at_value = user_plan.plan_expires_at
+    
     return PlanResponse(
         plan=user_plan.plan.value,
         weekly_token_limit=weekly_token_limit,
@@ -1340,7 +1346,9 @@ async def get_plan(http_request: Request):
         monthly_token_limit=monthly_token_limit,
         monthly_tokens_used=monthly_tokens_used,
         features=limits["features"],
-        subscription_info=subscription_info
+        subscription_info=subscription_info,
+        next_plan=next_plan_value,
+        plan_expires_at=plan_expires_at_value
     )
 
 
@@ -1479,6 +1487,83 @@ async def cancel_plan(http_request: Request):
         return {"message": "Subscription will be cancelled at the end of current period"}
     else:
         raise HTTPException(status_code=400, detail="Failed to cancel subscription")
+
+
+@app.post("/api/plan/downgrade", tags=["Plan Management"])
+async def downgrade_plan(
+    request: dict,
+    http_request: Request
+):
+    """Downgrade current subscription to a lower tier plan
+    
+    Request body:
+    {
+        "target_plan": "normal"  # Target plan to downgrade to (must be lower tier)
+    }
+    """
+    # If desktop version, forward to Vercel
+    is_desktop = getattr(sys, 'frozen', False)
+    if is_desktop:
+        import httpx
+        vercel_api_url = os.getenv("VERCEL_API_URL", "https://www.desktopai.org")
+        auth_header = http_request.headers.get("Authorization", "")
+        
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="Missing authentication token")
+        
+        async with httpx.AsyncClient() as http_client:
+            try:
+                response = await http_client.post(
+                    f"{vercel_api_url}/api/plan/downgrade",
+                    headers={
+                        "Authorization": auth_header,
+                        "Content-Type": "application/json"
+                    },
+                    json=request,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"Unable to connect to cloud API: {str(e)}")
+    
+    # Non-desktop version: normal processing (need to verify token)
+    auth_header = http_request.headers.get("Authorization", "")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing authentication token")
+    
+    token = auth_header.replace("Bearer ", "")
+    current_user = await verify_token(token)
+    
+    # Extract target_plan from request
+    target_plan_str = request.get("target_plan")
+    if not target_plan_str:
+        raise HTTPException(status_code=400, detail="Missing target_plan in request body")
+    
+    # Convert string to PlanType
+    try:
+        target_plan = PlanType(target_plan_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid plan: {target_plan_str}")
+    
+    # Call downgrade_subscription
+    try:
+        success = await downgrade_subscription(current_user.id, target_plan)
+        if success:
+            return {
+                "message": f"Subscription will be downgraded to {target_plan.value} at the end of current period",
+                "target_plan": target_plan.value
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to downgrade subscription")
+    except ValueError as e:
+        # Validation error from downgrade_subscription
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"❌ Error downgrading subscription: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # ========== API Key management removed ==========
