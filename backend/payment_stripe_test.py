@@ -1430,11 +1430,15 @@ class TestHandleSubscriptionDeleted(unittest.IsolatedAsyncioTestCase):
         # Execute
         await handle_subscription_deleted(subscription)
         
-        # Assert: update_user_plan should be called
+        # Assert: update_user_plan should be called with all fields cleared
         mock_update_user_plan.assert_called_once()
         call_kwargs = mock_update_user_plan.call_args[1]
         self.assertEqual(call_kwargs['plan'], PlanType.START)
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['next_update_at'], _CLEAR_FIELD)
         self.assertEqual(call_kwargs['plan_expires_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['cancel_at_period_end'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['stripe_subscription_id'], _CLEAR_FIELD)
     
     @patch('backend.db_supabase.get_supabase_admin')
     @patch('backend.payment_stripe.update_user_plan')
@@ -1483,11 +1487,15 @@ class TestHandleSubscriptionDeleted(unittest.IsolatedAsyncioTestCase):
         # Execute
         await handle_subscription_deleted(subscription)
         
-        # Assert: update_user_plan should be called with _CLEAR_FIELD
+        # Assert: update_user_plan should be called with all fields cleared
         mock_update_user_plan.assert_called_once()
         call_kwargs = mock_update_user_plan.call_args[1]
         self.assertEqual(call_kwargs['plan'], PlanType.START)
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['next_update_at'], _CLEAR_FIELD)
         self.assertEqual(call_kwargs['plan_expires_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['cancel_at_period_end'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['stripe_subscription_id'], _CLEAR_FIELD)
     
     @patch('backend.db_supabase.get_supabase_admin')
     @patch('backend.payment_stripe.update_user_plan')
@@ -1520,6 +1528,115 @@ class TestHandleSubscriptionDeleted(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs['subscription_status'], "canceled")
         self.assertNotIn('plan', call_kwargs)
         self.assertNotIn('plan_expires_at', call_kwargs)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_deleted_clears_all_schedule_fields(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that all schedule and cancel fields are cleared when subscription is deleted"""
+        # Setup: Mock Supabase response with all schedule fields set
+        expired_time = self.now - timedelta(days=1)
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "high",
+            "next_plan": "ultra",  # Has next_plan (should be cleared, not applied)
+            "next_update_at": (self.now + timedelta(days=1)).isoformat(),
+            "plan_expires_at": expired_time.isoformat(),
+            "cancel_at_period_end": True,
+            "stripe_subscription_id": "sub_old_123"
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": "sub_test_123",
+            "customer": self.customer_id
+        }
+        
+        # Execute
+        await handle_subscription_deleted(subscription)
+        
+        # Assert: All fields should be cleared, and plan should be START (not next_plan)
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.START)  # Should be START, not next_plan (ultra)
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['next_update_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['plan_expires_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['cancel_at_period_end'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['stripe_subscription_id'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['subscription_status'], "canceled")
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_deleted_does_not_apply_next_plan(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that next_plan is cleared but not applied (even if it's an upgrade)"""
+        # Setup: Mock Supabase response with next_plan set to upgrade
+        expired_time = self.now - timedelta(days=1)
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "normal",
+            "next_plan": "high",  # Upgrade scheduled (should NOT be applied on deletion)
+            "plan_expires_at": expired_time.isoformat()
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": "sub_test_123",
+            "customer": self.customer_id
+        }
+        
+        # Execute
+        await handle_subscription_deleted(subscription)
+        
+        # Assert: Plan should be START (not high), and next_plan should be cleared
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.START)  # Should be START, not high
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)  # Should be cleared, not applied
+        self.assertEqual(call_kwargs['next_update_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['plan_expires_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['cancel_at_period_end'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['stripe_subscription_id'], _CLEAR_FIELD)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_deleted_clears_next_update_at(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that next_update_at is cleared to avoid stale timestamps"""
+        # Setup: Mock Supabase response with next_update_at set
+        expired_time = self.now - timedelta(days=1)
+        future_time = self.now + timedelta(days=30)
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "high",
+            "next_update_at": future_time.isoformat(),  # Future timestamp (should be cleared)
+            "plan_expires_at": expired_time.isoformat()
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": "sub_test_123",
+            "customer": self.customer_id
+        }
+        
+        # Execute
+        await handle_subscription_deleted(subscription)
+        
+        # Assert: next_update_at should be cleared
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['next_update_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['plan'], PlanType.START)
 
 
 class TestHandleSubscriptionPendingUpdateApplied(unittest.IsolatedAsyncioTestCase):

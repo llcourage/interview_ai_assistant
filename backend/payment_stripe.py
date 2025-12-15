@@ -766,15 +766,21 @@ async def handle_subscription_deleted(subscription: dict):
                 )
                 return
         
-        # Plan has expired or no plan_expires_at, downgrade to start
+        # Plan has expired or no plan_expires_at -> subscription is gone, revert to START and clear schedules
+        # Note: We do NOT apply next_plan here because subscription.deleted means the subscription is gone.
+        # Applying next_plan (which might be an upgrade) would be semantically incorrect.
         await update_user_plan(
             user_id=user_id,
             plan=PlanType.START,
             subscription_status="canceled",
-            plan_expires_at=_CLEAR_FIELD  # ✅ Use sentinel to explicitly clear field
+            next_plan=_CLEAR_FIELD,             # ✅ clear schedule (do not apply next_plan on deletion)
+            next_update_at=_CLEAR_FIELD,        # ✅ clear effective_at/period_end (avoid stale timestamp)
+            plan_expires_at=_CLEAR_FIELD,       # ✅ clear expiration marker
+            cancel_at_period_end=_CLEAR_FIELD,  # ✅ clear cancel flag
+            stripe_subscription_id=_CLEAR_FIELD  # ✅ clear subscription_id (subscription no longer exists)
         )
         
-        print(f"⚠️ User {user_id} subscription deleted, downgraded to start plan")
+        print(f"⚠️ User {user_id} subscription deleted, downgraded to start plan (all schedules cleared)")
     except Exception as e:
         print(f"❌ Failed to handle subscription deletion Webhook: {e}")
         import traceback
