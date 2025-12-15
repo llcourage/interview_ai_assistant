@@ -47,60 +47,32 @@ if SUPABASE_SERVICE_ROLE_KEY:
     except Exception:
         pass  # If decode fails, ignore (may be format issue)
 
-# Create Supabase client (for read operations, can use ANON_KEY if needed)
+# Create Supabase client
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
-
-# Create admin client (for write operations, MUST use SERVICE_ROLE_KEY to bypass RLS)
-supabase_admin_client: Client = None
-if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-    supabase_admin_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-    # Note: print removed to avoid Windows console encoding issues, will log at function call time
-elif SUPABASE_URL and SUPABASE_KEY:
-    # Fallback: use regular client if service_role not available (will cause RLS errors)
-    supabase_admin_client = supabase_client
-    print(f"⚠️ WARNING: Using regular Supabase client for admin operations (RLS bypass NOT enabled)")
-    print(f"   This will cause RLS policy violations. Please set SUPABASE_SERVICE_ROLE_KEY in environment variables.")
 
 # Note: Module-level print removed to avoid Windows console encoding issues
 # Configuration check will be handled by logging system at application startup
 
 
 def get_supabase() -> Client:
-    """Get Supabase client instance (for read operations)
+    """Get Supabase client instance
     
-    Note: This client may use ANON_KEY or SERVICE_ROLE_KEY depending on configuration
+    Note: This client uses SERVICE_ROLE_KEY, can bypass RLS restrictions
+    Only for backend server-side operations, must never expose to frontend
     """
     if not supabase_client:
         raise Exception("Supabase client not initialized, please check environment variable configuration")
-    
-    # Debug: Log which key is being used (only first time to avoid spam)
-    if not hasattr(get_supabase, '_logged'):
-        using_service_role = bool(SUPABASE_SERVICE_ROLE_KEY) and SUPABASE_KEY == SUPABASE_SERVICE_ROLE_KEY
-        print(f"🔍 DEBUG get_supabase: Using {'SERVICE_ROLE_KEY' if using_service_role else 'ANON_KEY'} (RLS bypass: {using_service_role})")
-        get_supabase._logged = True
-    
     return supabase_client
 
 
 def get_supabase_admin() -> Client:
-    """Get Supabase admin client instance (for write operations)
+    """Get Supabase admin client instance (alias for get_supabase)
     
-    Note: This client MUST use SERVICE_ROLE_KEY to bypass RLS restrictions
+    This is an alias for get_supabase() for consistency with code that uses admin terminology.
+    Both functions return the same client that uses SERVICE_ROLE_KEY to bypass RLS.
+    
+    Note: This client uses SERVICE_ROLE_KEY, can bypass RLS restrictions
     Only for backend server-side operations, must never expose to frontend
     """
-    if not supabase_admin_client:
-        raise Exception("Supabase admin client not initialized. SUPABASE_SERVICE_ROLE_KEY must be set in environment variables.")
-    
-    # Debug: Log which key is being used (only first time to avoid spam)
-    if not hasattr(get_supabase_admin, '_logged'):
-        using_service_role = bool(SUPABASE_SERVICE_ROLE_KEY)
-        if using_service_role:
-            print(f"✅ Supabase admin client using SERVICE_ROLE_KEY (RLS bypass enabled)")
-        else:
-            print(f"⚠️ WARNING: Supabase admin client NOT using SERVICE_ROLE_KEY (RLS bypass NOT enabled)")
-            print(f"   This will cause RLS policy violations. Please set SUPABASE_SERVICE_ROLE_KEY in environment variables.")
-        get_supabase_admin._logged = True
-    
-    return supabase_admin_client
-
+    return get_supabase()
 

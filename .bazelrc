@@ -1,0 +1,9 @@
+# Common Bazel configuration
+
+# Output settings
+common --enable_platform_specific_config
+
+# Build settings
+build --announce_rc
+build --color=yes
+build --curses=yes

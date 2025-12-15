@@ -25,7 +25,11 @@ class UserPlan(BaseModel):
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
     subscription_status: Optional[str] = None  # active, canceled, past_due
-    plan_expires_at: Optional[datetime] = None
+    plan_expires_at: Optional[datetime] = None  # When plan will downgrade to start (if cancelled)
+    next_update_at: Optional[datetime] = None  # Next billing/renewal date (for subscription plans)
+    next_plan: Optional[PlanType] = None  # Next plan to switch to (for plan changes)
+    cancel_at_period_end: Optional[bool] = False  # Whether subscription will cancel at period end
+    stripe_event_ts: Optional[int] = None  # Stripe event.created (Unix timestamp in seconds) - for webhook deduplication
     created_at: datetime
     updated_at: datetime
 
