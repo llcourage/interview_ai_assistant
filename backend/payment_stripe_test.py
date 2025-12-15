@@ -88,7 +88,7 @@ stripe_mod.checkout = Mock()
 sys.modules["stripe"] = stripe_mod
 sys.modules["stripe.error"] = stripe_error_mod
 
-from backend.payment_stripe import downgrade_subscription, cancel_subscription, _is_downgrade, PLAN_HIERARCHY, handle_checkout_completed, _extract_price_id_from_pending_update, handle_subscription_updated, handle_subscription_deleted
+from backend.payment_stripe import downgrade_subscription, cancel_subscription, _is_downgrade, PLAN_HIERARCHY, handle_checkout_completed, _extract_price_id_from_pending_update, handle_subscription_updated, handle_subscription_deleted, handle_subscription_pending_update_applied
 from backend.db_models import PlanType, UserPlan
 from backend.db_operations import get_user_plan, update_user_plan, _CLEAR_FIELD
 
@@ -1520,6 +1520,337 @@ class TestHandleSubscriptionDeleted(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs['subscription_status'], "canceled")
         self.assertNotIn('plan', call_kwargs)
         self.assertNotIn('plan_expires_at', call_kwargs)
+
+
+class TestHandleSubscriptionPendingUpdateApplied(unittest.IsolatedAsyncioTestCase):
+    """Test cases for handle_subscription_pending_update_applied function"""
+    
+    def setUp(self):
+        self.user_id = "test_user_123"
+        self.customer_id = "cus_test_123"
+        self.subscription_id = "sub_test_123"
+        self.now = datetime.now(timezone.utc)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_success(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test successful application of pending_update (upgrade)"""
+        # Setup: Mock Supabase response with next_plan scheduled
+        future_time = self.now + timedelta(days=1)
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "normal",
+            "next_plan": "high",
+            "stripe_event_ts": None
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription with pending_update applied
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": int(future_time.timestamp())
+        }
+        
+        # Execute
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should be called with plan upgrade and cleared schedule
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['user_id'], self.user_id)
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['plan_expires_at'], _CLEAR_FIELD)
+        self.assertEqual(call_kwargs['subscription_status'], "active")
+        self.assertEqual(call_kwargs['stripe_subscription_id'], self.subscription_id)
+        self.assertEqual(call_kwargs['stripe_event_ts'], 1234567890)
+        self.assertIn('next_update_at', call_kwargs)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_no_next_plan(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that if no next_plan exists, only status is synced"""
+        # Setup: Mock Supabase response without next_plan
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "high",
+            "next_plan": None,
+            "stripe_event_ts": None
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False
+        }
+        
+        # Execute
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should be called but only with status fields
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['subscription_status'], "active")
+        self.assertNotIn('plan', call_kwargs)
+        self.assertNotIn('next_plan', call_kwargs)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_not_upgrade(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that downgrades are not applied (only status synced)"""
+        # Setup: Mock Supabase response with next_plan that is a downgrade
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "high",
+            "next_plan": "normal",  # Downgrade, not upgrade
+            "stripe_event_ts": None
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False
+        }
+        
+        # Execute
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should be called but only with status fields (not plan change)
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['subscription_status'], "active")
+        self.assertNotIn('plan', call_kwargs)
+        self.assertNotIn('next_plan', call_kwargs)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_customer_as_dict(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that customer can be a dict or string"""
+        # Setup: Mock Supabase response
+        future_time = self.now + timedelta(days=1)
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "normal",
+            "next_plan": "high",
+            "stripe_event_ts": None
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription with customer as dict
+        subscription = {
+            "id": self.subscription_id,
+            "customer": {"id": self.customer_id},
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": int(future_time.timestamp())
+        }
+        
+        # Execute
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should be called
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_missing_customer_id(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that missing customer_id is handled gracefully"""
+        # Setup: Mock Supabase response
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = []
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription without customer
+        subscription = {
+            "id": self.subscription_id
+        }
+        
+        # Execute - should return early without error
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should not be called
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_deduplication(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that old events are ignored based on stripe_event_ts"""
+        # Setup: Mock Supabase response with newer event_ts
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "normal",
+            "next_plan": "high",
+            "stripe_event_ts": 1234567900  # Newer than event_created
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False
+        }
+        
+        # Execute with older event_created
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should not be called (event ignored)
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_user_not_found(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that missing user is handled gracefully"""
+        # Setup: Mock Supabase response with no user
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = []
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False
+        }
+        
+        # Execute - should return early without error
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should not be called
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_invalid_next_plan(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that invalid next_plan is handled gracefully"""
+        # Setup: Mock Supabase response with invalid next_plan
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "normal",
+            "next_plan": "invalid_plan",  # Invalid plan value
+            "stripe_event_ts": None
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False
+        }
+        
+        # Execute - should return early without error
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=1234567890,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should not be called
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.db_supabase.get_supabase_admin')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_subscription_pending_update_applied_event_created_none(self, mock_update_user_plan, mock_get_supabase_admin):
+        """Test that event_created=None still works (no dedup but still processes)"""
+        # Setup: Mock Supabase response
+        future_time = self.now + timedelta(days=1)
+        mock_supabase = Mock()
+        mock_response = Mock()
+        mock_response.data = [{
+            "user_id": self.user_id,
+            "plan": "normal",
+            "next_plan": "high",
+            "stripe_event_ts": None
+        }]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Subscription
+        subscription = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": int(future_time.timestamp())
+        }
+        
+        # Execute with event_created=None
+        await handle_subscription_pending_update_applied(
+            subscription,
+            event_created=None,
+            event_id="evt_test_123"
+        )
+        
+        # Assert: update_user_plan should be called but without stripe_event_ts
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
+        self.assertNotIn('stripe_event_ts', call_kwargs)
 
 
 if __name__ == '__main__':

@@ -583,6 +583,147 @@ async def handle_subscription_updated(
         raise
 
 
+async def handle_subscription_pending_update_applied(
+    subscription: dict,
+    event_created: Optional[int] = None,
+    event_id: Optional[str] = None,
+) -> None:
+    """Handle customer.subscription.pending_update_applied webhook.
+
+    When Stripe applies a pending_update, immediately apply the scheduled plan change
+    in our DB (next_plan -> plan) for timeliness and accuracy.
+
+    Idempotent:
+    - If next_plan is already cleared / plan already updated, no-op.
+    - Uses stripe_event_ts to prevent out-of-order events overwriting newer state.
+
+    Args:
+        subscription: Stripe Subscription object
+        event_created: Stripe event.created Unix timestamp (for deduplication)
+        event_id: Stripe event.id (for logging/debugging)
+    """
+    try:
+        # customer can be str or dict
+        customer = subscription.get("customer")
+        customer_id = customer.get("id") if isinstance(customer, dict) else customer
+        subscription_id = subscription.get("id")
+
+        if not customer_id:
+            print(f"⚠️ Missing customer_id in pending_update_applied: subscription_id={subscription_id}, event_id={event_id}")
+            return
+
+        status = subscription.get("status") or "active"
+        cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
+
+        print(
+            f"🔍 Processing pending_update_applied: subscription_id={subscription_id}, "
+            f"customer_id={customer_id}, status={status}, event_id={event_id}, event_created={event_created}"
+        )
+
+        # Find user row by stripe_customer_id (admin client)
+        from backend.db_supabase import get_supabase_admin
+        supabase = get_supabase_admin()
+
+        response = supabase.table("user_plans").select("*").eq("stripe_customer_id", customer_id).execute()
+        if not response.data:
+            print(f"⚠️ User not found with stripe_customer_id={customer_id} (pending_update_applied)")
+            return
+
+        user_row = response.data[0]
+        user_id = user_row["user_id"]
+
+        # Dedup / ordering protection
+        if event_created is not None:
+            db_ts = user_row.get("stripe_event_ts")
+            if db_ts is not None and int(db_ts) >= int(event_created):
+                print(
+                    f"⚠️ Ignore old pending_update_applied event: db_ts={int(db_ts)} >= event_ts={int(event_created)} "
+                    f"(user_id={user_id}, event_id={event_id})"
+                )
+                return
+
+        current_plan_raw = user_row.get("plan")
+        next_plan_raw = user_row.get("next_plan")
+
+        if not next_plan_raw:
+            # Nothing scheduled on our side; just sync status fields (safe/no side effects)
+            kwargs = {
+                "user_id": user_id,
+                "subscription_status": status,
+                "cancel_at_period_end": cancel_at_period_end,
+                "stripe_subscription_id": subscription_id,
+            }
+            if event_created is not None:
+                kwargs["stripe_event_ts"] = event_created
+
+            await update_user_plan(**kwargs)
+            print(f"ℹ️ pending_update_applied but no next_plan in DB; status synced only (user_id={user_id})")
+            return
+
+        # Parse PlanType safely
+        try:
+            next_plan = PlanType(next_plan_raw) if not isinstance(next_plan_raw, PlanType) else next_plan_raw
+        except Exception:
+            print(f"⚠️ Invalid next_plan in DB: next_plan={next_plan_raw} (user_id={user_id}); not applying")
+            return
+
+        try:
+            current_plan = PlanType(current_plan_raw) if current_plan_raw and not isinstance(current_plan_raw, PlanType) else current_plan_raw
+        except Exception:
+            current_plan = None
+
+        # Safety gate: only apply upgrades here
+        # (downgrades should be handled by downgrade_subscription; checkout is gated already)
+        if current_plan and not _is_upgrade(current_plan, next_plan):
+            print(
+                f"⚠️ pending_update_applied but next_plan is not an upgrade: {current_plan_raw}->{next_plan.value} "
+                f"(user_id={user_id}); syncing status only"
+            )
+            kwargs = {
+                "user_id": user_id,
+                "subscription_status": status,
+                "cancel_at_period_end": cancel_at_period_end,
+                "stripe_subscription_id": subscription_id,
+            }
+            if event_created is not None:
+                kwargs["stripe_event_ts"] = event_created
+            await update_user_plan(**kwargs)
+            return
+
+        # Next billing date (after applied) – now next_plan will be cleared, so this becomes meaningful again
+        next_update_at = None
+        if subscription.get("current_period_end"):
+            next_update_at = ensure_utc(datetime.fromtimestamp(subscription["current_period_end"], tz=timezone.utc))
+
+        # Apply the plan change immediately, clear schedule fields
+        kwargs = {
+            "user_id": user_id,
+            "plan": next_plan,
+            "next_plan": _CLEAR_FIELD,
+            "plan_expires_at": _CLEAR_FIELD,          # upgrade overrides cancellation/expiration
+            "cancel_at_period_end": cancel_at_period_end,
+            "subscription_status": status,
+            "stripe_subscription_id": subscription_id,
+        }
+        # Only sync next_update_at if we have it
+        if next_update_at is not None:
+            kwargs["next_update_at"] = next_update_at
+        if event_created is not None:
+            kwargs["stripe_event_ts"] = event_created
+
+        await update_user_plan(**kwargs)
+        print(
+            f"✅ Applied pending_update: user_id={user_id}, plan={next_plan.value}, "
+            f"next_billing={next_update_at}, cancel_at_period_end={cancel_at_period_end}, event_id={event_id}"
+        )
+
+    except Exception as e:
+        print(f"❌ Failed to handle pending_update_applied webhook: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
 async def handle_subscription_deleted(subscription: dict):
     """Handle subscription deletion Webhook
     

@@ -48,6 +48,7 @@ from backend.db_operations import (
 from backend.payment_stripe import (
     create_checkout_session, handle_checkout_completed,
     handle_subscription_updated, handle_subscription_deleted,
+    handle_subscription_pending_update_applied,
     cancel_subscription, get_subscription_info
 )
 
@@ -1805,6 +1806,15 @@ async def stripe_webhook(request: Request):
             subscription = event["data"]["object"]
             await handle_subscription_deleted(subscription)
             print(f"Successfully processed {event_type} [id: {event_id}]")
+            
+        elif event_type == "customer.subscription.pending_update_applied":
+            subscription = event["data"]["object"]
+            await handle_subscription_pending_update_applied(
+                subscription,
+                event_created=event.get("created"),
+                event_id=event.get("id"),
+            )
+            print(f"Successfully processed {event_type} [id: {event.get('id')}]")
             
         else:
             # Log unhandled events but return success (Stripe expects 200 for all received events)
