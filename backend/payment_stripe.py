@@ -840,6 +840,9 @@ async def cancel_subscription(user_id: str) -> bool:
 async def get_subscription_info(user_id: str) -> Optional[dict]:
     """Get user subscription information
     
+    Uses DB as source of truth for cancel_at_period_end.
+    Stripe is only used for fields not cached in DB (status, current_period_end).
+    
     Args:
         user_id: User ID
     
@@ -852,13 +855,30 @@ async def get_subscription_info(user_id: str) -> Optional[dict]:
         if not user_plan.stripe_subscription_id:
             return None
         
+        # ✅ Use DB as source of truth for cancel_at_period_end
+        # DB field has default=False, so it should never be None in practice
+        # Using bool() directly to expose any unexpected None values
+        cancel_at_period_end = bool(user_plan.cancel_at_period_end)
+        
+        # ✅ Stripe only for fields not cached in DB
         subscription = stripe.Subscription.retrieve(user_plan.stripe_subscription_id)
+        
+        # ✅ Defensive: Handle missing current_period_end (edge cases)
+        current_period_end = None
+        if subscription.current_period_end:
+            current_period_end = ensure_utc(
+                datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+            )
+        else:
+            print(f"⚠️ Subscription {subscription.id} has no current_period_end")
+            # Return None if critical field is missing
+            return None
         
         return {
             "subscription_id": subscription.id,
-            "status": subscription.status,
-            "current_period_end": datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
-            "cancel_at_period_end": subscription.cancel_at_period_end
+            "status": subscription.status,  # Not cached in DB
+            "current_period_end": current_period_end,  # ✅ Using ensure_utc for consistency
+            "cancel_at_period_end": cancel_at_period_end  # ✅ From DB (source of truth)
         }
     except Exception as e:
         print(f"❌ Failed to get subscription information: {e}")

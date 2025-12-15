@@ -88,7 +88,7 @@ stripe_mod.checkout = Mock()
 sys.modules["stripe"] = stripe_mod
 sys.modules["stripe.error"] = stripe_error_mod
 
-from backend.payment_stripe import downgrade_subscription, cancel_subscription, _is_downgrade, PLAN_HIERARCHY, handle_checkout_completed, _extract_price_id_from_pending_update, handle_subscription_updated, handle_subscription_deleted, handle_subscription_pending_update_applied
+from backend.payment_stripe import downgrade_subscription, cancel_subscription, _is_downgrade, PLAN_HIERARCHY, handle_checkout_completed, _extract_price_id_from_pending_update, handle_subscription_updated, handle_subscription_deleted, handle_subscription_pending_update_applied, get_subscription_info
 from backend.db_models import PlanType, UserPlan
 from backend.db_operations import get_user_plan, update_user_plan, _CLEAR_FIELD
 
@@ -1968,6 +1968,223 @@ class TestHandleSubscriptionPendingUpdateApplied(unittest.IsolatedAsyncioTestCas
         call_kwargs = mock_update_user_plan.call_args[1]
         self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
         self.assertNotIn('stripe_event_ts', call_kwargs)
+
+
+class TestGetSubscriptionInfo(unittest.IsolatedAsyncioTestCase):
+    """Test cases for get_subscription_info function"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.user_id = "test_user_123"
+        self.subscription_id = "sub_123"
+        self.now = datetime.now(timezone.utc)
+        self.future_time = self.now + timedelta(days=30)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_success_with_cancel_false(self, mock_get_user_plan, mock_stripe_retrieve):
+        """Test successful retrieval with cancel_at_period_end=False from DB"""
+        # Setup: User has subscription with cancel_at_period_end=False
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,  # From DB
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription
+        mock_subscription = Mock()
+        mock_subscription.id = self.subscription_id
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert
+        self.assertIsNotNone(result)
+        self.assertEqual(result["subscription_id"], self.subscription_id)
+        self.assertEqual(result["status"], "active")
+        self.assertEqual(result["cancel_at_period_end"], False)  # From DB, not Stripe
+        self.assertIsNotNone(result["current_period_end"])
+        self.assertAlmostEqual(result["current_period_end"].timestamp(), self.future_time.timestamp(), delta=1.0)
+        
+        # Verify Stripe was called
+        mock_stripe_retrieve.assert_called_once_with(self.subscription_id)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_success_with_cancel_true(self, mock_get_user_plan, mock_stripe_retrieve):
+        """Test successful retrieval with cancel_at_period_end=True from DB"""
+        # Setup: User has subscription with cancel_at_period_end=True
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=True,  # From DB
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription (cancel_at_period_end might be different, but we use DB)
+        mock_subscription = Mock()
+        mock_subscription.id = self.subscription_id
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_subscription.cancel_at_period_end = False  # Different from DB, but we ignore it
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert: Should use DB value (True), not Stripe value (False)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["cancel_at_period_end"], True)  # From DB
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_no_subscription_id(self, mock_get_user_plan):
+        """Test that returns None when user has no subscription_id"""
+        # Setup: User has no subscription
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.START,
+            stripe_subscription_id=None,  # No subscription
+            subscription_status=None,
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert
+        self.assertIsNone(result)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_missing_current_period_end(self, mock_get_user_plan, mock_stripe_retrieve):
+        """Test that returns None when subscription has no current_period_end"""
+        # Setup: User has subscription
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription without current_period_end
+        mock_subscription = Mock()
+        mock_subscription.id = self.subscription_id
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = None  # Missing field
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert: Should return None when critical field is missing
+        self.assertIsNone(result)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_stripe_api_error(self, mock_get_user_plan, mock_stripe_retrieve):
+        """Test that handles Stripe API errors gracefully"""
+        # Setup: User has subscription
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe error
+        from backend.payment_stripe import stripe
+        mock_stripe_retrieve.side_effect = stripe.error.StripeError("API Error")
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert: Should return None on error
+        self.assertIsNone(result)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_cancel_at_period_end_none_becomes_false(self, mock_get_user_plan, mock_stripe_retrieve):
+        """Test that cancel_at_period_end=None is converted to False using bool()"""
+        # Setup: User has subscription with cancel_at_period_end=None (edge case)
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=None,  # Edge case: None value
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription
+        mock_subscription = Mock()
+        mock_subscription.id = self.subscription_id
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert: bool(None) = False
+        self.assertIsNotNone(result)
+        self.assertEqual(result["cancel_at_period_end"], False)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    async def test_get_subscription_info_uses_ensure_utc(self, mock_get_user_plan, mock_stripe_retrieve):
+        """Test that current_period_end uses ensure_utc for consistency"""
+        # Setup: User has subscription
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription
+        mock_subscription = Mock()
+        mock_subscription.id = self.subscription_id
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute
+        result = await get_subscription_info(self.user_id)
+        
+        # Assert: current_period_end should be UTC aware datetime
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result["current_period_end"])
+        self.assertIsNotNone(result["current_period_end"].tzinfo)  # Should have timezone
+        self.assertEqual(result["current_period_end"].tzinfo, timezone.utc)
 
 
 if __name__ == '__main__':
