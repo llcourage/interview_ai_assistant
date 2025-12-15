@@ -1794,7 +1794,11 @@ async def stripe_webhook(request: Request):
             
         elif event_type == "customer.subscription.updated":
             subscription = event["data"]["object"]
-            await handle_subscription_updated(subscription)
+            await handle_subscription_updated(
+                subscription,
+                event_created=event.get("created"),
+                event_id=event.get("id"),
+            )
             print(f"Successfully processed {event_type} [id: {event_id}]")
             
         elif event_type == "customer.subscription.deleted":

@@ -334,18 +334,84 @@ async def handle_checkout_completed(session: dict):
         raise
 
 
-async def handle_subscription_updated(subscription: dict):
+async def _fetch_user_plan_row_admin(user_id: str) -> Optional[dict]:
+    """Fetch user plan row from DB as raw dict (read-only, no side effects).
+    
+    Used for webhook deduplication to avoid triggering state machine logic.
+    
+    Note: Currently not used in handle_subscription_updated (we use response.data[0] directly
+    to reduce DB calls). Kept for future use when we need to fetch only specific fields.
+    
+    Args:
+        user_id: User ID
+    
+    Returns:
+        Optional[dict]: Raw user plan row from database, or None if not found
+    """
+    try:
+        from backend.db_supabase import get_supabase_admin
+        supabase = get_supabase_admin()
+        response = supabase.table("user_plans").select(
+            "user_id, plan, next_plan, next_update_at, plan_expires_at, stripe_event_ts, cancel_at_period_end"
+        ).eq("user_id", user_id).execute()
+        
+        if response and response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"⚠️ _fetch_user_plan_row_admin failed for user {user_id}: {e}")
+        return None
+
+
+def _parse_dt_maybe(v):
+    """Parse datetime from various formats (string, datetime, None).
+    
+    Args:
+        v: datetime string, datetime object, or None
+    
+    Returns:
+        UTC-aware datetime or None
+    """
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return ensure_utc(v)
+    if isinstance(v, str):
+        # Handle ISO format strings: '2025-12-13T01:49:11.678945+00:00' or '...Z'
+        return ensure_utc(datetime.fromisoformat(v.replace("Z", "+00:00")))
+    # Last resort: try ensure_utc
+    return ensure_utc(v)
+
+
+async def handle_subscription_updated(
+    subscription: dict,
+    event_created: Optional[int] = None,
+    event_id: Optional[str] = None,
+) -> None:
     """Handle subscription update Webhook
     
     Args:
         subscription: Stripe Subscription object
+        event_created: Stripe event.created Unix timestamp (for deduplication)
+        event_id: Stripe event.id (for logging/debugging)
     """
     try:
-        customer_id = subscription["customer"]
-        status = subscription["status"]
-        subscription_id = subscription.get("id")
+        # ✅ Fix 1: Handle customer_id as dict or string
+        customer = subscription.get("customer")
+        customer_id = customer.get("id") if isinstance(customer, dict) else customer
+        if not customer_id:
+            print(f"⚠️ Missing customer_id in subscription: {subscription.get('id')}")
+            return
         
-        print(f"🔍 Processing subscription update: subscription_id={subscription_id}, customer_id={customer_id}, status={status}")
+        # ✅ Fix A1: Use get + guard for status
+        status = subscription.get("status")
+        subscription_id = subscription.get("id")
+        if not status:
+            print(f"⚠️ Missing status in subscription: subscription_id={subscription_id}, customer_id={customer_id}, event_id={event_id}")
+            return
+        
+        # ✅ Fix 2: Log event_created for debugging
+        print(f"🔍 Processing subscription update: subscription_id={subscription_id}, customer_id={customer_id}, status={status}, event_id={event_id}, event_created={event_created}")
         
         # Find user from database using admin client (bypass RLS)
         from backend.db_supabase import get_supabase_admin
@@ -358,107 +424,157 @@ async def handle_subscription_updated(subscription: dict):
             print(f"⚠️ User not found with stripe_customer_id={customer_id}")
             return
         
-        user_id = response.data[0]["user_id"]
-        current_plan = response.data[0].get("plan")
+        # ✅ Use response.data[0] directly (single DB call, no additional fetches)
+        user_row = response.data[0]
+        user_id = user_row["user_id"]
+        current_plan = user_row.get("plan")
+        
+        # ✅ Event deduplication: Check stripe_event_ts using already-fetched data
+        # ✅ Fix A2: Use is not None instead of truthy check
+        if event_created is not None:
+            db_ts = user_row.get("stripe_event_ts")
+            if db_ts is not None:
+                db_ts = int(db_ts)
+                event_ts = int(event_created)
+                if db_ts >= event_ts:
+                    print(f"⚠️ Ignore old subscription.updated event: db_ts={db_ts} >= event_ts={event_ts} (event_id={event_id})")
+                    return
+        
         print(f"🔍 Found user: user_id={user_id}, current_plan={current_plan}")
+        
+        # ✅ Sync cancel_at_period_end from Stripe
+        cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
+        
+        # Get next billing date from subscription
+        next_update_at = None
+        if subscription.get("current_period_end"):
+            next_update_at = ensure_utc(
+                datetime.fromtimestamp(subscription["current_period_end"], tz=timezone.utc)
+            )
+            print(f"🔍 Subscription {subscription_id}: next billing date = {next_update_at}")
+        
+        # ✅ Check if there's a scheduled change using already-fetched data
+        has_scheduled_change = user_row.get("next_plan") is not None
         
         # Update subscription status
         if status == "active":
-            # Subscription activated - need to get plan from subscription price_id
-            plan = None
-            price_id = None
+            # Stage 1: Only sync status fields, don't update plan (to avoid conflicts with handle_checkout_completed)
+            # Plan updates should be handled by handle_checkout_completed or downgrade_subscription
             
-            # Get price_id from subscription items
-            items = subscription.get("items", {}).get("data", [])
-            if items and len(items) > 0:
-                price_id = items[0].get("price", {}).get("id")
-                
-                if price_id:
-                    # Map price_id to plan
-                    # Reverse lookup: find plan by price_id
-                    for plan_type, plan_price_id in STRIPE_PRICE_IDS.items():
-                        if plan_price_id == price_id:
-                            plan = plan_type
-                            break
-                    
-                    if plan:
-                        print(f"🔍 Subscription {subscription_id}: price_id={price_id}, mapped to plan={plan.value}")
-                    else:
-                        print(f"⚠️ Unknown price_id: {price_id} for subscription {subscription_id}")
-                        print(f"   Available price_ids: {list(STRIPE_PRICE_IDS.values())}")
-                else:
-                    print(f"⚠️ No price_id found in subscription {subscription_id} items")
+            # ✅ Build kwargs conditionally (only pass fields that need updating)
+            kwargs = {
+                "user_id": user_id,
+                "subscription_status": "active",
+                "cancel_at_period_end": cancel_at_period_end,
+            }
+            
+            # ✅ Protection: Only sync critical fields if we have event_created (dedup protection)
+            # Without event_created, we can't dedup, so avoid overwriting with potentially stale data
+            if event_created is not None:
+                kwargs["stripe_event_ts"] = event_created
+                kwargs["stripe_subscription_id"] = subscription_id
+                if not has_scheduled_change and next_update_at is not None:
+                    kwargs["next_update_at"] = next_update_at
             else:
-                print(f"⚠️ No items found in subscription {subscription_id}")
+                print(f"⚠️ active status update without event_created - skipping critical fields (stripe_subscription_id, next_update_at) to avoid stale data overwrite")
             
-            # Get next billing date from subscription
-            next_update_at = None
-            if subscription.get("current_period_end"):
-                next_update_at = datetime.fromtimestamp(subscription["current_period_end"], tz=timezone.utc)
-                print(f"🔍 Subscription {subscription_id}: next billing date = {next_update_at}")
-            
-            # Update user plan with correct plan type
-            if plan:
-                await update_user_plan(
-                    user_id=user_id,
-                    plan=plan,
-                    subscription_status="active",
-                    stripe_subscription_id=subscription_id,
-                    next_update_at=next_update_at
-                )
-                print(f"✅ User {user_id} subscription activated, plan updated from '{current_plan}' to '{plan.value}', next billing: {next_update_at}")
-            else:
-                # If can't determine plan, log warning but still update status
-                print(f"⚠️ Cannot determine plan from price_id, keeping current plan '{current_plan}'")
-                await update_user_plan(
-                    user_id=user_id,
-                    subscription_status="active",
-                    stripe_subscription_id=subscription_id,
-                    next_update_at=next_update_at
-                )
-                print(f"✅ User {user_id} subscription activated (plan not updated, price_id={price_id} not found in mapping), next billing: {next_update_at}")
+            await update_user_plan(**kwargs)
+            print(f"✅ User {user_id} subscription status synced: status=active, cancel_at_period_end={cancel_at_period_end}, event_ts={event_created}")
                 
         elif status in ["canceled", "past_due", "unpaid"]:
             # Subscription canceled or overdue
-            # Check if plan_expires_at is set (user cancelled, should downgrade at period end)
-            # If plan_expires_at is in the future, don't downgrade yet
-            # If plan_expires_at is in the past or None, downgrade immediately
-            current_plan_data = response.data[0]
-            plan_expires_at = current_plan_data.get("plan_expires_at")
+            # Note: For "canceled" status, we only sync status/cancel flag/event_ts
+            # Don't actively change plan here (let get_user_plan state machine handle it)
             
-            if plan_expires_at:
-                plan_expires_at = ensure_utc(plan_expires_at)
-                if plan_expires_at and plan_expires_at > utcnow():
-                    # Plan hasn't expired yet, keep current plan but update status
-                    print(f"ℹ️ User {user_id} subscription canceled but plan expires at {plan_expires_at}, keeping current plan until then")
-                    await update_user_plan(
-                        user_id=user_id,
-                        subscription_status=status
-                    )
+            plan_expires_at_raw = user_row.get("plan_expires_at")
+            
+            if status == "canceled":
+                # ✅ For canceled: Only sync status, don't change plan
+                # The plan change should be handled by get_user_plan state machine based on plan_expires_at
+                kwargs = {
+                    "user_id": user_id,
+                    "subscription_status": status,
+                    "cancel_at_period_end": cancel_at_period_end,
+                }
+                if event_created is not None:
+                    kwargs["stripe_event_ts"] = event_created
+                
+                await update_user_plan(**kwargs)
+                print(f"ℹ️ User {user_id} subscription canceled, status synced (plan change handled by state machine)")
+                
+            elif status in ["past_due", "unpaid"]:
+                # ✅ Fix 4: Protection - Don't downgrade if user has scheduled change
+                if has_scheduled_change:
+                    print(f"⚠️ {status} but user has scheduled change next_plan={user_row.get('next_plan')}; only syncing status.")
+                    # Only sync status, don't change plan
+                    kwargs = {
+                        "user_id": user_id,
+                        "subscription_status": status,
+                        "cancel_at_period_end": cancel_at_period_end,
+                    }
+                    if event_created is not None:
+                        kwargs["stripe_event_ts"] = event_created
+                    
+                    await update_user_plan(**kwargs)
+                    print(f"ℹ️ User {user_id} subscription {status}, status synced (scheduled change preserved)")
+                    return
+                
+                # For past_due/unpaid: Check if plan_expires_at exists and is in the future
+                if plan_expires_at_raw:
+                    # ✅ Fix 3: Use _parse_dt_maybe for robust datetime parsing
+                    plan_expires_at = _parse_dt_maybe(plan_expires_at_raw)
+                    if plan_expires_at and plan_expires_at > utcnow():
+                        # Plan hasn't expired yet, keep current plan but update status
+                        print(f"ℹ️ User {user_id} subscription {status} but plan expires at {plan_expires_at}, keeping current plan until then")
+                        kwargs = {
+                            "user_id": user_id,
+                            "subscription_status": status,
+                            "cancel_at_period_end": cancel_at_period_end,
+                        }
+                        if event_created is not None:
+                            kwargs["stripe_event_ts"] = event_created
+                        
+                        await update_user_plan(**kwargs)
+                    else:
+                        # Plan has expired, downgrade to start
+                        # ✅ Fix A3: Use _CLEAR_FIELD to explicitly clear plan_expires_at
+                        kwargs = {
+                            "user_id": user_id,
+                            "plan": PlanType.START,
+                            "subscription_status": status,
+                            "plan_expires_at": _CLEAR_FIELD,  # ✅ Use sentinel to explicitly clear field
+                            "cancel_at_period_end": cancel_at_period_end,
+                        }
+                        if event_created is not None:
+                            kwargs["stripe_event_ts"] = event_created
+                        
+                        await update_user_plan(**kwargs)
+                        print(f"⚠️ User {user_id} subscription {status} and plan expired, downgraded to start plan")
                 else:
-                    # Plan has expired, downgrade to start
-                    await update_user_plan(
-                        user_id=user_id,
-                        plan=PlanType.START,
-                        subscription_status=status,
-                        plan_expires_at=None
-                    )
-                    print(f"⚠️ User {user_id} subscription canceled/overdue and plan expired, downgraded to start plan")
-            else:
-                # No plan_expires_at set, downgrade immediately (unpaid/past_due)
-                await update_user_plan(
-                    user_id=user_id,
-                    plan=PlanType.START,
-                    subscription_status=status
-                )
-                print(f"⚠️ User {user_id} subscription {status}, downgraded to start plan immediately")
+                    # No plan_expires_at set, downgrade immediately (unpaid/past_due)
+                    kwargs = {
+                        "user_id": user_id,
+                        "plan": PlanType.START,
+                        "subscription_status": status,
+                        "cancel_at_period_end": cancel_at_period_end,
+                    }
+                    if event_created is not None:
+                        kwargs["stripe_event_ts"] = event_created
+                    
+                    await update_user_plan(**kwargs)
+                    print(f"⚠️ User {user_id} subscription {status}, downgraded to start plan immediately")
         else:
             # Other statuses - just update status, don't change plan
-            await update_user_plan(
-                user_id=user_id,
-                subscription_status=status
-            )
-            print(f"ℹ️ User {user_id} subscription status updated to {status}")
+            kwargs = {
+                "user_id": user_id,
+                "subscription_status": status,
+                "cancel_at_period_end": cancel_at_period_end,
+            }
+            if event_created is not None:
+                kwargs["stripe_event_ts"] = event_created
+            
+            await update_user_plan(**kwargs)
+            print(f"ℹ️ User {user_id} subscription status updated to {status}, cancel_at_period_end={cancel_at_period_end}")
             
     except Exception as e:
         print(f"❌ Failed to handle subscription update Webhook: {e}")
@@ -474,7 +590,12 @@ async def handle_subscription_deleted(subscription: dict):
         subscription: Stripe Subscription object
     """
     try:
-        customer_id = subscription["customer"]
+        # ✅ Fix C1: Handle customer_id as dict or string (same as handle_subscription_updated)
+        customer = subscription.get("customer")
+        customer_id = customer.get("id") if isinstance(customer, dict) else customer
+        if not customer_id:
+            print(f"⚠️ Missing customer_id in subscription.deleted: {subscription.get('id')}")
+            return
         
         # Find user from database using admin client
         from backend.db_supabase import get_supabase_admin
@@ -493,7 +614,8 @@ async def handle_subscription_deleted(subscription: dict):
         
         # Check if plan_expires_at is set and in the future
         if plan_expires_at:
-            plan_expires_at = ensure_utc(plan_expires_at)
+            # ✅ Fix C2: Use _parse_dt_maybe for robust datetime parsing (consistent with handle_subscription_updated)
+            plan_expires_at = _parse_dt_maybe(plan_expires_at)
             if plan_expires_at and plan_expires_at > utcnow():
                 # Plan hasn't expired yet, keep current plan
                 print(f"ℹ️ User {user_id} subscription deleted but plan expires at {plan_expires_at}, keeping current plan until then")
@@ -508,7 +630,7 @@ async def handle_subscription_deleted(subscription: dict):
             user_id=user_id,
             plan=PlanType.START,
             subscription_status="canceled",
-            plan_expires_at=None
+            plan_expires_at=_CLEAR_FIELD  # ✅ Use sentinel to explicitly clear field
         )
         
         print(f"⚠️ User {user_id} subscription deleted, downgraded to start plan")

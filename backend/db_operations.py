@@ -222,7 +222,7 @@ async def get_user_plan(user_id: str) -> UserPlan:
                     user_plan = await update_user_plan(
                         user_id=user_id,
                         plan=PlanType.START,
-                        plan_expires_at=None,
+                        plan_expires_at=_CLEAR_FIELD,  # ✅ Use sentinel to explicitly clear field
                     )
                 else:
                     print(
