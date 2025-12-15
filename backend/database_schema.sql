@@ -1,7 +1,7 @@
 -- ========================================
 -- Desktop AI Database Table Structure (Simplified)
 -- For Supabase Database
--- Supports Start Plan (Free), Normal Plan, High Plan
+-- Supports Start Plan (Free), Normal Plan, High Plan, Ultra Plan, Premium Plan, Internal Plan
 -- ========================================
 
 -- 1. User Subscription Plan Table
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS user_plans (
     subscription_status VARCHAR(50),
     plan_expires_at TIMESTAMPTZ,
     next_plan VARCHAR(20) CHECK (next_plan IN ('start', 'normal', 'high', 'ultra', 'premium', 'internal')),
+    next_update_at TIMESTAMPTZ,  -- Next billing/renewal date (for subscription plans)
     cancel_at_period_end BOOLEAN DEFAULT FALSE,
     stripe_event_ts BIGINT,  -- Stripe event.created (Unix timestamp in seconds) - for webhook deduplication
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -56,6 +57,12 @@ CREATE TABLE IF NOT EXISTS usage_quotas (
     monthly_requests INTEGER DEFAULT 0,
     daily_limit INTEGER DEFAULT 200,
     monthly_limit INTEGER DEFAULT 5000,
+    weekly_tokens_used BIGINT NOT NULL DEFAULT 0,  -- Weekly tokens used (resets weekly)
+    monthly_tokens_used BIGINT NOT NULL DEFAULT 0,  -- Monthly tokens used (resets monthly)
+    weekly_token_limit BIGINT,  -- Weekly token limit (for weekly plans)
+    monthly_token_limit BIGINT,  -- Monthly token limit (for monthly plans)
+    lifetime_token_limit BIGINT,  -- Lifetime token limit (for start plan, no reset)
+    quota_type VARCHAR(20) DEFAULT 'weekly' CHECK (quota_type IN ('weekly', 'monthly', 'lifetime')),
     last_request_at TIMESTAMPTZ,
     quota_reset_date TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -66,6 +73,9 @@ CREATE TABLE IF NOT EXISTS usage_quotas (
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_usage_quotas_user_id ON usage_quotas(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_quotas_reset_date ON usage_quotas(quota_reset_date);
+CREATE INDEX IF NOT EXISTS idx_usage_quotas_weekly_tokens ON usage_quotas(user_id, weekly_tokens_used);
+CREATE INDEX IF NOT EXISTS idx_usage_quotas_monthly_tokens ON usage_quotas(user_id, monthly_tokens_used);
+CREATE INDEX IF NOT EXISTS idx_usage_quotas_quota_type ON usage_quotas(quota_type);
 
 -- ========================================
 -- RLS (Row Level Security) Policies
