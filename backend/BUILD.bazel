@@ -111,6 +111,17 @@ py_test(
     ],
 )
 
+py_test(
+    name = "payment_stripe_test",
+    srcs = ["payment_stripe_test.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":payment_stripe",
+        ":db_operations",
+        ":db_models",
+    ],
+)
+
 # Package initialization
 py_library(
     name = "backend",

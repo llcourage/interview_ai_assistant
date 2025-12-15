@@ -88,7 +88,7 @@ stripe_mod.checkout = Mock()
 sys.modules["stripe"] = stripe_mod
 sys.modules["stripe.error"] = stripe_error_mod
 
-from backend.payment_stripe import downgrade_subscription, cancel_subscription, _is_downgrade, PLAN_HIERARCHY
+from backend.payment_stripe import downgrade_subscription, cancel_subscription, _is_downgrade, PLAN_HIERARCHY, handle_checkout_completed, _extract_price_id_from_pending_update
 from backend.db_models import PlanType, UserPlan
 from backend.db_operations import get_user_plan, update_user_plan, _CLEAR_FIELD
 
@@ -804,6 +804,405 @@ class TestCancelSubscription(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs['next_plan'], PlanType.START)  # Should override NORMAL
         self.assertEqual(call_kwargs['cancel_at_period_end'], True)
         self.assertEqual(call_kwargs['next_update_at'], _CLEAR_FIELD)  # Should clear existing next_update_at
+
+
+class TestHandleCheckoutCompleted(unittest.IsolatedAsyncioTestCase):
+    """Test cases for handle_checkout_completed function"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.user_id = "test_user_123"
+        self.now = datetime.now(timezone.utc)
+        self.future_time = self.now + timedelta(days=30)
+        self.past_time = self.now - timedelta(days=1)
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_checkout_completed_rejects_downgrade(self, mock_update_user_plan, mock_get_user_plan):
+        """Test that checkout downgrade is rejected"""
+        # Setup: User has HIGH plan, trying to checkout NORMAL (downgrade)
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock checkout session with downgrade
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "normal"  # Downgrade from HIGH
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Execute
+        await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should NOT be called (rejected)
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_checkout_completed_rejects_start_plan(self, mock_update_user_plan, mock_get_user_plan):
+        """Test that checkout START plan is rejected"""
+        # Setup: User has HIGH plan, trying to checkout START
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock checkout session with START plan
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "start"
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Execute
+        await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should NOT be called (rejected)
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_checkout_completed_rejects_invalid_plan(self, mock_update_user_plan, mock_get_user_plan):
+        """Test that invalid plan value in metadata is rejected"""
+        # Setup: User has HIGH plan
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock checkout session with invalid plan
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "invalid_plan"  # Invalid plan value
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Execute
+        await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should NOT be called (rejected)
+        mock_update_user_plan.assert_not_called()
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    async def test_handle_checkout_completed_upgrade_no_pending_update(self, mock_stripe_retrieve, mock_update_user_plan, mock_get_user_plan):
+        """Test successful upgrade when no pending_update exists"""
+        # Setup: User has NORMAL plan, upgrading to HIGH
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.NORMAL,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription (no pending_update)
+        mock_subscription = Mock()
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_subscription.pending_update = None  # No pending_update
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Mock checkout session
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "high"  # Upgrade from NORMAL
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Execute
+        await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should be called with immediate upgrade
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)  # Should clear scheduled changes
+        self.assertEqual(call_kwargs['plan_expires_at'], _CLEAR_FIELD)
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    async def test_handle_checkout_completed_upgrade_with_relevant_pending_update(self, mock_stripe_retrieve, mock_update_user_plan, mock_get_user_plan):
+        """Test upgrade when pending_update exists and is relevant (same price_id)"""
+        # Setup: User has NORMAL plan, upgrading to HIGH
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.NORMAL,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock pending_update with same price_id (relevant)
+        mock_pending_update = Mock()
+        mock_pending_update.effective_at = int((self.now + timedelta(days=7)).timestamp())
+        mock_pending_item = Mock()
+        mock_pending_item.price = Mock()
+        mock_pending_item.price.id = "price_yyy"  # HIGH plan price_id (assuming from STRIPE_PRICE_IDS)
+        mock_pending_update.items = [mock_pending_item]
+        
+        # Mock Stripe subscription with relevant pending_update
+        mock_subscription = Mock()
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_subscription.pending_update = mock_pending_update
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Mock checkout session
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "high"  # Upgrade from NORMAL
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Mock STRIPE_PRICE_IDS to return HIGH price_id
+        with patch('backend.payment_stripe.STRIPE_PRICE_IDS', {PlanType.HIGH: "price_yyy"}):
+            # Execute
+            await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should be called with scheduled upgrade (next_plan)
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertIsNone(call_kwargs.get('plan'))  # plan should not be updated immediately
+        self.assertEqual(call_kwargs['next_plan'], PlanType.HIGH)  # Should schedule upgrade
+        self.assertIsNotNone(call_kwargs.get('next_update_at'))  # Should have effective_at
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    async def test_handle_checkout_completed_upgrade_with_irrelevant_pending_update(self, mock_stripe_retrieve, mock_update_user_plan, mock_get_user_plan):
+        """Test upgrade when pending_update exists but is irrelevant (different price_id)"""
+        # Setup: User has NORMAL plan, upgrading to HIGH
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.NORMAL,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock pending_update with different price_id (irrelevant)
+        mock_pending_update = Mock()
+        mock_pending_update.effective_at = int((self.now + timedelta(days=7)).timestamp())
+        mock_pending_item = Mock()
+        mock_pending_item.price = Mock()
+        mock_pending_item.price.id = "price_xxx"  # Different price_id (not HIGH)
+        mock_pending_update.items = [mock_pending_item]
+        
+        # Mock Stripe subscription with irrelevant pending_update
+        mock_subscription = Mock()
+        mock_subscription.status = "active"
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_subscription.pending_update = mock_pending_update
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Mock checkout session
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "high"  # Upgrade from NORMAL
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Mock STRIPE_PRICE_IDS to return HIGH price_id
+        with patch('backend.payment_stripe.STRIPE_PRICE_IDS', {PlanType.HIGH: "price_yyy"}):
+            # Execute
+            await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should be called with immediate upgrade (pending_update ignored)
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)  # Should upgrade immediately
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)  # Should clear scheduled changes
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_handle_checkout_completed_new_subscription(self, mock_update_user_plan, mock_get_user_plan):
+        """Test new subscription (user has START plan, subscribing to HIGH)"""
+        # Setup: User has START plan (new user)
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.START,
+            stripe_subscription_id=None,  # No existing subscription
+            subscription_status=None,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock checkout session (new subscription, no subscription_id yet)
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "high"
+            },
+            "subscription": None,  # New subscription
+            "customer": "cus_123"
+        }
+        
+        # Execute
+        await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should be called with immediate upgrade
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
+        self.assertEqual(call_kwargs['next_plan'], _CLEAR_FIELD)
+    
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    async def test_handle_checkout_completed_retrieve_failed(self, mock_stripe_retrieve, mock_update_user_plan, mock_get_user_plan):
+        """Test behavior when Stripe subscription retrieve fails"""
+        # Setup: User has NORMAL plan, upgrading to HIGH
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.NORMAL,
+            stripe_subscription_id="sub_123",
+            subscription_status="active",
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe retrieve to fail
+        mock_stripe_retrieve.side_effect = Exception("Stripe API error")
+        
+        # Mock checkout session
+        session = {
+            "id": "cs_test_123",
+            "metadata": {
+                "user_id": self.user_id,
+                "plan": "high"
+            },
+            "subscription": "sub_123",
+            "customer": "cus_123"
+        }
+        
+        # Execute
+        await handle_checkout_completed(session)
+        
+        # Assert: update_user_plan should be called with immediate upgrade (checkout completed)
+        mock_update_user_plan.assert_called_once()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
+        # Should not update next_update_at (keep existing value)
+        self.assertNotIn('next_update_at', call_kwargs or 'next_update_at' not in call_kwargs)
+
+
+class TestExtractPriceIdFromPendingUpdate(unittest.TestCase):
+    """Test cases for _extract_price_id_from_pending_update helper function"""
+    
+    def test_extract_price_id_from_dict_structure(self):
+        """Test extracting price_id from dict structure"""
+        # Mock pending_update with dict items structure
+        mock_pending_update = Mock()
+        mock_pending_update.items = {
+            "data": [
+                {
+                    "price": {
+                        "id": "price_test_123"
+                    }
+                }
+            ]
+        }
+        
+        result = _extract_price_id_from_pending_update(mock_pending_update)
+        self.assertEqual(result, "price_test_123")
+    
+    def test_extract_price_id_from_list_structure(self):
+        """Test extracting price_id from list structure"""
+        # Mock pending_update with list items structure
+        mock_pending_update = Mock()
+        mock_item = Mock()
+        mock_item.price = Mock()
+        mock_item.price.id = "price_test_456"
+        mock_pending_update.items = [mock_item]
+        
+        result = _extract_price_id_from_pending_update(mock_pending_update)
+        self.assertEqual(result, "price_test_456")
+    
+    def test_extract_price_id_from_items_data_attribute(self):
+        """Test extracting price_id from items.data attribute"""
+        # Mock pending_update with items.data structure
+        mock_pending_update = Mock()
+        mock_item = Mock()
+        mock_item.price = Mock()
+        mock_item.price.id = "price_test_789"
+        mock_items = Mock()
+        mock_items.data = [mock_item]
+        mock_pending_update.items = mock_items
+        
+        result = _extract_price_id_from_pending_update(mock_pending_update)
+        self.assertEqual(result, "price_test_789")
+    
+    def test_extract_price_id_returns_none_when_not_found(self):
+        """Test that None is returned when price_id cannot be extracted"""
+        # Mock pending_update without items
+        mock_pending_update = Mock()
+        mock_pending_update.items = None
+        
+        result = _extract_price_id_from_pending_update(mock_pending_update)
+        self.assertIsNone(result)
+    
+    def test_extract_price_id_handles_exception(self):
+        """Test that exceptions are handled gracefully"""
+        # Mock pending_update that raises exception
+        mock_pending_update = Mock()
+        mock_pending_update.items = Mock()
+        mock_pending_update.items.__getattribute__ = Mock(side_effect=Exception("Test error"))
+        
+        result = _extract_price_id_from_pending_update(mock_pending_update)
+        self.assertIsNone(result)
 
 
 if __name__ == '__main__':

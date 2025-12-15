@@ -144,7 +144,7 @@ async def handle_checkout_completed(session: dict):
         session_id = session.get('id')
         
         # Check if metadata exists
-        metadata = session.get("metadata", {})
+        metadata = session.get("metadata") or {}
         if not metadata:
             print(f"Warning: Checkout session {session_id} has no metadata, skipping")
             return
@@ -156,37 +156,176 @@ async def handle_checkout_completed(session: dict):
             print(f"Warning: Checkout session {session_id} missing user_id or plan in metadata")
             return
         
+        # Idempotency check: prevent duplicate processing
+        # Note: We rely on Stripe's webhook deduplication and the fact that
+        # checkout sessions are typically only completed once per session_id.
+        # For stronger idempotency, consider adding last_checkout_session_id field to user_plans table.
+        
         # Normalize 'starter' to 'start' before converting to PlanType
         if plan_value == 'starter':
             plan_value = 'start'
-        plan = PlanType(plan_value)
+        
+        # ✅ Defensive: Validate plan_value before converting to PlanType
+        try:
+            new_plan = PlanType(plan_value)
+        except Exception:
+            print(f"⚠️ Invalid plan in checkout metadata: plan={plan_value}, session_id={session_id}, user_id={user_id}. Skipping.")
+            return
         
         subscription_id = session.get("subscription")
         customer_id = session.get("customer")
         
-        # Get next billing date from subscription (if subscription exists)
+        # Get current user plan to detect upgrade
+        current_user_plan = await get_user_plan(user_id)
+        current_plan = current_user_plan.plan
+        
+        # Check if this is an upgrade
+        is_upgrade = _is_upgrade(current_plan, new_plan)
+        
+        # ✅ Gate: Reject START plan via checkout (START should be free default/cancellation fallback, not purchased)
+        if new_plan == PlanType.START:
+            print(f"⚠️ Checkout attempted to set plan=start; ignoring. START plan should not be purchased via checkout.")
+            return
+        
+        # ✅ Gate: Reject downgrades via checkout (must use downgrade_subscription API)
+        is_downgrade = _is_downgrade(current_plan, new_plan)
+        if is_downgrade:
+            print(f"⚠️ Checkout attempted downgrade {current_plan.value}->{new_plan.value}; ignoring. Use downgrade_subscription API instead.")
+            return
+        
+        # Get subscription details and check for pending_update
+        subscription = None
+        pending_update = None
         next_update_at = None
+        retrieve_failed = False  # Track if we failed to retrieve subscription
+        pending_update_is_relevant = False  # Track if pending_update is related to current checkout
+        
         if subscription_id:
             try:
                 subscription = stripe.Subscription.retrieve(subscription_id)
-                if subscription.current_period_end:
-                    next_update_at = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-                    print(f"🔍 Subscription {subscription_id}: next billing date = {next_update_at}")
+                
+                # Check for pending_update (scheduled changes that haven't taken effect yet)
+                pending_update = getattr(subscription, "pending_update", None)
+                
+                if pending_update:
+                    # Check if pending_update is related to current checkout by comparing price_id
+                    # This is more reliable than time-based heuristics
+                    
+                    # Get the target price_id for the new plan
+                    # Try both PlanType enum and string value (defensive)
+                    target_price_id = STRIPE_PRICE_IDS.get(new_plan) or STRIPE_PRICE_IDS.get(new_plan.value)
+                    
+                    # Try to extract price_id from pending_update using helper function
+                    pending_price_id = _extract_price_id_from_pending_update(pending_update)
+                    
+                    # Compare price_ids to determine relevance
+                    if target_price_id and pending_price_id:
+                        if pending_price_id == target_price_id:
+                            # pending_update is relevant - it will update to the same plan user just purchased
+                            pending_update_is_relevant = True
+                            
+                            # Get effective_at for scheduling
+                            # Important: next_update_at must be the effective_at (not period_end) when next_plan is set
+                            if hasattr(pending_update, "effective_at") and pending_update.effective_at:
+                                next_update_at = ensure_utc(
+                                    datetime.fromtimestamp(pending_update.effective_at, tz=timezone.utc)
+                                )
+                                print(f"⚠️ Subscription {subscription_id} has pending_update for same plan ({new_plan.value}), scheduled for {next_update_at}, upgrade will be delayed")
+                            else:
+                                # No effective_at - we don't know when it will take effect
+                                # For checkout.session.completed, default to immediate upgrade (user has paid)
+                                # Don't fallback to current_period_end as that's billing date, not effective_at
+                                pending_update = None
+                                pending_update_is_relevant = False
+                                print(f"⚠️ Subscription {subscription_id} has pending_update for same plan ({new_plan.value}) but no effective_at, defaulting to immediate upgrade (checkout completed)")
+                        else:
+                            # pending_update is for a different plan, not relevant to this checkout
+                            pending_update = None
+                            pending_update_is_relevant = False
+                            print(f"⚠️ Subscription {subscription_id} has pending_update for different plan (pending_price_id={pending_price_id}, target_price_id={target_price_id}), ignoring it for immediate upgrade")
+                    else:
+                        # Can't extract price_id or target_price_id not found
+                        # For checkout.session.completed, default to immediate upgrade (user has paid)
+                        pending_update = None
+                        pending_update_is_relevant = False
+                        if not target_price_id:
+                            print(f"⚠️ Subscription {subscription_id} has pending_update but target_price_id not found for {new_plan.value}, defaulting to immediate upgrade")
+                        else:
+                            print(f"⚠️ Subscription {subscription_id} has pending_update but couldn't extract pending_price_id, defaulting to immediate upgrade (user has paid)")
+                    
+                    # If we still have pending_update, ensure next_update_at is set
+                    # Note: next_update_at must be effective_at (not period_end) when next_plan is set
+                    if pending_update and pending_update_is_relevant and next_update_at is None:
+                        # This shouldn't happen if logic above is correct, but handle defensively
+                        # If we don't have effective_at, we already set pending_update_is_relevant=False above
+                        # So this branch should rarely execute
+                        print(f"⚠️ Subscription {subscription_id} has pending_update but next_update_at is None, defaulting to immediate upgrade")
+                        pending_update = None
+                        pending_update_is_relevant = False
+                else:
+                    # No pending_update, use current_period_end for next billing date
+                    if subscription.current_period_end:
+                        next_update_at = ensure_utc(
+                            datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+                        )
+                        print(f"🔍 Subscription {subscription_id}: next billing date = {next_update_at}")
             except Exception as e:
+                retrieve_failed = True
                 print(f"⚠️ Failed to get subscription details for {subscription_id}: {e}")
+                print(f"⚠️ Cannot determine if pending_update exists, will immediately upgrade (checkout completed)")
         
-        # Update user Plan
-        await update_user_plan(
-            user_id=user_id,
-            plan=plan,
-            stripe_customer_id=customer_id,
-            stripe_subscription_id=subscription_id,
-            subscription_status="active",
-            plan_expires_at=None,  # In subscription mode, expiration time is managed by Stripe
-            next_update_at=next_update_at  # Next billing/renewal date
-        )
-        
-        print(f"Success: User {user_id} upgraded to {plan.value} plan, next billing: {next_update_at}")
+        # Update user Plan based on whether there's a pending_update
+        # For checkout.session.completed, default to immediate upgrade (user has paid)
+        if retrieve_failed:
+            # Case 3: Failed to retrieve subscription
+            # For checkout.session.completed, immediately upgrade (user has paid)
+            await update_user_plan(
+                user_id=user_id,
+                # For checkout.session.completed, immediately upgrade (user has paid)
+                plan=new_plan,
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id,
+                subscription_status="active",  # Use default since we can't retrieve subscription
+                plan_expires_at=_CLEAR_FIELD,
+                # Don't update next_update_at - keep existing value to avoid overwriting correct data
+                next_plan=_CLEAR_FIELD,  # Clear any scheduled changes
+                cancel_at_period_end=False,
+            )
+            print(f"✅ User {user_id} upgraded to {new_plan.value} (Stripe retrieve failed, but checkout completed)")
+        elif pending_update and pending_update_is_relevant:
+            # Case 2: Stripe has pending_update that is relevant to current checkout
+            # Don't change plan immediately, schedule it via next_plan
+            await update_user_plan(
+                user_id=user_id,
+                # plan is not updated (keep current plan until pending_update takes effect)
+                next_plan=new_plan,  # Schedule upgrade for when pending_update takes effect
+                next_update_at=next_update_at,  # Use pending_update.effective_at
+                plan_expires_at=_CLEAR_FIELD,  # Clear expiration (upgrade overrides cancellation/expiration)
+                cancel_at_period_end=False,  # Clear cancel flag (upgrade overrides cancellation)
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id,
+                subscription_status=subscription.status if subscription else "active",
+            )
+            print(f"✅ User {user_id} upgrade to {new_plan.value} scheduled for {next_update_at} (pending_update in Stripe)")
+        else:
+            # Case 1: No pending_update or pending_update is not relevant
+            # For checkout.session.completed, immediately upgrade (user has paid)
+            await update_user_plan(
+                user_id=user_id,
+                plan=new_plan,  # Immediately upgrade
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id,
+                subscription_status=subscription.status if subscription else "active",
+                plan_expires_at=_CLEAR_FIELD,  # Clear expiration (upgrade overrides cancellation/expiration)
+                next_update_at=next_update_at,  # Keep as billing date (only meaningful when next_plan=None)
+                # Clear all scheduled changes (upgrade overrides any existing downgrade/cancellation)
+                next_plan=_CLEAR_FIELD,
+                cancel_at_period_end=False,  # Clear cancel flag
+            )
+            if is_upgrade:
+                print(f"✅ User {user_id} upgraded from {current_plan.value} to {new_plan.value}, next billing: {next_update_at}")
+            else:
+                print(f"✅ User {user_id} subscribed to {new_plan.value} plan, next billing: {next_update_at}")
     except Exception as e:
         error_msg = f"Failed to process checkout completed webhook: {e}"
         print(f"Error: {error_msg}")
@@ -479,6 +618,96 @@ def _is_downgrade(current_plan: PlanType, target_plan: PlanType) -> bool:
         bool: True if target_plan < current_plan (downgrade)
     """
     return PLAN_HIERARCHY.get(target_plan, 0) < PLAN_HIERARCHY.get(current_plan, 0)
+
+
+def _is_upgrade(current_plan: PlanType, target_plan: PlanType) -> bool:
+    """Check if target_plan is an upgrade from current_plan
+    
+    Args:
+        current_plan: Current plan type
+        target_plan: Target plan type
+    
+    Returns:
+        bool: True if target_plan > current_plan (upgrade)
+    """
+    return PLAN_HIERARCHY.get(target_plan, 0) > PLAN_HIERARCHY.get(current_plan, 0)
+
+
+def _extract_price_id_from_pending_update(pending_update) -> Optional[str]:
+    """Extract price_id from pending_update object
+    
+    Handles various Stripe SDK structures:
+    - pending_update.items.data[0].price.id (list object with .data)
+    - pending_update.items[0].price.id (direct list)
+    - pending_update.items["data"][0]["price"]["id"] (dict structure)
+    - pending_update.subscription_items (alternative field)
+    
+    Args:
+        pending_update: Stripe pending_update object
+    
+    Returns:
+        Optional[str]: price_id if found, None otherwise
+    """
+    try:
+        # Try items field first
+        if hasattr(pending_update, "items"):
+            items = pending_update.items
+            
+            # Handle dict structure (common in some SDK versions)
+            if isinstance(items, dict):
+                data = items.get("data")
+                if isinstance(data, list) and data:
+                    price = data[0].get("price")
+                    if isinstance(price, dict):
+                        return price.get("id")
+                    elif hasattr(price, "id"):
+                        return price.id
+            
+            # Handle list object with .data attribute
+            elif hasattr(items, "data") and items.data:
+                if len(items.data) > 0 and hasattr(items.data[0], "price"):
+                    price = items.data[0].price
+                    return price.id if hasattr(price, "id") else None
+            
+            # Handle direct list
+            elif isinstance(items, list) and len(items) > 0:
+                if hasattr(items[0], "price"):
+                    price = items[0].price
+                    return price.id if hasattr(price, "id") else None
+            
+            # Handle iterable (generator, etc.)
+            elif hasattr(items, "__iter__") and not isinstance(items, (str, bytes)):
+                first_item = next(iter(items), None)
+                if first_item:
+                    if isinstance(first_item, dict):
+                        price = first_item.get("price")
+                        if isinstance(price, dict):
+                            return price.get("id")
+                        elif hasattr(price, "id"):
+                            return price.id
+                    elif hasattr(first_item, "price"):
+                        price = first_item.price
+                        return price.id if hasattr(price, "id") else None
+        
+        # Try subscription_items as alternative field
+        if hasattr(pending_update, "subscription_items"):
+            sub_items = pending_update.subscription_items
+            if isinstance(sub_items, list) and sub_items:
+                item = sub_items[0]
+                if isinstance(item, dict):
+                    price = item.get("price")
+                    if isinstance(price, dict):
+                        return price.get("id")
+                    elif hasattr(price, "id"):
+                        return price.id
+                elif hasattr(item, "price"):
+                    price = item.price
+                    return price.id if hasattr(price, "id") else None
+        
+    except Exception as e:
+        print(f"⚠️ Error extracting price_id from pending_update: {e}")
+    
+    return None
 
 
 async def downgrade_subscription(user_id: str, target_plan: PlanType) -> bool:
