@@ -5,3 +5,6 @@ package(default_visibility = ["//visibility:public"])
 # This is a minimal BUILD file to ensure the workspace can be built
 # More specific BUILD files can be added to subdirectories as needed
 
+# Export docker-compose.test.yml for integration tests
+exports_files(["docker-compose.test.yml"])
+

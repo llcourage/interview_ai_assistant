@@ -1,0 +1,29 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "integration_tests",
+    srcs = glob(["*__test.py", "conftest.py"]) + ["run_tests.py"],
+    main = "run_tests.py",
+    data = [
+        # Include docker-compose.test.yml from project root
+        "//:docker-compose.test.yml",
+        # Include test schema and nginx config
+        "test_schema.sql",
+        "nginx.test.conf",
+    ],
+    deps = [
+        # Database modules
+        "//backend:db_supabase",
+        "//backend:db_operations",
+        "//backend:db_models",
+        # Payment/Stripe modules for webhook tests
+        "//backend:payment_stripe",
+        
+        # Note: If you have pip_parse configured, uncomment these:
+        # "@pypi//pytest",
+        # "@pypi//pytest-asyncio",
+        # Otherwise, ensure pytest is installed in your Python environment
+    ],
+    tags = ["local", "manual"],
+)
+

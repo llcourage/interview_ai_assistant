@@ -23,6 +23,7 @@ py_library(
     deps = [
         ":db_supabase",
         ":db_models",
+        "//backend/utils:utils",
     ],
 )
 
@@ -60,6 +61,7 @@ py_library(
     deps = [
         ":db_operations",
         ":db_models",
+        "//backend/utils:utils",
     ],
 )
 
