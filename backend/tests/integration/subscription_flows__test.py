@@ -414,3 +414,72 @@ async def test_downgrade_immediate_application_bug():
         except Exception:
             pass
 
+
+@pytest.mark.asyncio
+async def test_downgrade_rejects_past_period_end():
+    """
+    Test: Verify that downgrade_subscription rejects past current_period_end from Stripe
+    
+    After fix:
+    - When Stripe subscription current_period_end is in the past (expired subscription)
+    - downgrade_subscription should raise ValueError instead of scheduling with past time
+    - This prevents immediate downgrade application when next_update_at is NULL
+    
+    This test verifies the fix for the production bug.
+    """
+    supabase = get_supabase_admin()
+    user_id = str(uuid.uuid4())
+    customer_id = f"cus_test_{uuid.uuid4().hex[:8]}"
+    subscription_id = f"sub_test_{uuid.uuid4().hex[:8]}"
+    
+    try:
+        # Setup: Create user with normal plan and active subscription
+        supabase.table("user_plans").upsert({
+            "user_id": user_id,
+            "plan": "normal",
+            "stripe_customer_id": customer_id,
+            "stripe_subscription_id": subscription_id,
+            "subscription_status": "active",
+        }).execute()
+        
+        # Simulate production scenario: Stripe subscription has expired (current_period_end is in the past)
+        # This happens when subscription expires or is canceled but still exists in Stripe
+        past_period_end = datetime.now(timezone.utc) - timedelta(days=1)  # 1 day ago
+        
+        # Mock Stripe subscription retrieval - return expired subscription
+        mock_subscription = unittest.mock.MagicMock()
+        mock_subscription.current_period_end = int(past_period_end.timestamp())
+        mock_subscription.status = "active"  # Still active in Stripe, but period has ended
+        
+        # Trigger: downgrade_subscription from normal to start
+        # After fix: This should raise ValueError instead of scheduling with past time
+        with unittest.mock.patch('backend.payment_stripe.stripe.Subscription.retrieve', return_value=mock_subscription):
+            with unittest.mock.patch('backend.payment_stripe.STRIPE_PRICE_IDS', {PlanType.NORMAL: "price_normal_test"}):
+                with pytest.raises(ValueError) as exc_info:
+                    await downgrade_subscription(user_id, PlanType.START)
+        
+        # Verify the error message indicates the problem
+        error_message = str(exc_info.value)
+        assert "current_period_end" in error_message.lower() or "past" in error_message.lower(), \
+            f"Expected error message about past current_period_end, got: {error_message}"
+        
+        print(f"\n✅ FIX VERIFIED: downgrade_subscription correctly rejects past current_period_end")
+        print(f"   Error message: {error_message}")
+        
+        # Verify database state was NOT changed (downgrade was not scheduled)
+        raw_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
+        raw_data = raw_response.data[0]
+        
+        assert raw_data.get("plan") == "normal", "plan should remain normal (downgrade was rejected)"
+        assert raw_data.get("next_plan") is None, "next_plan should be None (downgrade was rejected)"
+        assert raw_data.get("plan_expires_at") is None, "plan_expires_at should be None (downgrade was rejected)"
+        
+        print(f"   Database state unchanged: plan={raw_data.get('plan')}, next_plan={raw_data.get('next_plan')}")
+        
+    finally:
+        # Cleanup
+        try:
+            supabase.table("user_plans").delete().eq("user_id", user_id).execute()
+        except Exception:
+            pass
+
