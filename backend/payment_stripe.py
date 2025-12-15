@@ -1094,13 +1094,16 @@ async def downgrade_subscription(user_id: str, target_plan: PlanType) -> bool:
             )
             # Proceed with override (you can change this to raise ValueError if you prefer to reject)
         
-        # Update database: set next_plan, plan_expires_at, cancel_at_period_end=False
+        # Update database: set next_plan, plan_expires_at, next_update_at, cancel_at_period_end=False
         # Note: We set cancel_at_period_end=False because this is a downgrade, not a cancellation
         # The subscription will continue, but at a lower tier
+        # Important: next_update_at must be set to ensure get_user_plan uses it (not plan_expires_at) 
+        # to determine effective_at, preventing immediate application when plan_expires_at is NULL or past
         await update_user_plan(
             user_id=user_id,
             next_plan=target_plan,
             plan_expires_at=plan_expires_at,
+            next_update_at=plan_expires_at,  # Set next_update_at to ensure proper scheduling
             cancel_at_period_end=False
         )
         

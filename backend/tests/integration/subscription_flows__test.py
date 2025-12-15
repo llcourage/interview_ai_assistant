@@ -286,3 +286,131 @@ async def test_subscription_deleted_clears_downgrade_schedule():
         except Exception:
             pass
 
+
+@pytest.mark.asyncio
+async def test_downgrade_immediate_application_bug():
+    """
+    Test: Reproduce the bug where downgrade from normal to start is applied immediately
+    
+    Bug scenario:
+    - User downgrades from normal to start
+    - downgrade_subscription sets next_plan=start and plan_expires_at=future_time
+    - BUT it does NOT set next_update_at
+    - When get_user_plan is called, if next_update_at is NULL, it falls back to plan_expires_at
+    - If plan_expires_at is NULL or has some issue, the downgrade might be applied immediately
+    
+    Expected behavior:
+    - plan should remain normal
+    - next_plan should be start
+    - plan_expires_at should be set to future time
+    - next_update_at should be set (but currently it's not, which is the bug)
+    - The downgrade should NOT be applied immediately
+    """
+    supabase = get_supabase_admin()
+    user_id = str(uuid.uuid4())
+    customer_id = f"cus_test_{uuid.uuid4().hex[:8]}"
+    subscription_id = f"sub_test_{uuid.uuid4().hex[:8]}"
+    
+    try:
+        # Setup: Create user with normal plan and active subscription
+        period_end = datetime.now(timezone.utc) + timedelta(days=30)
+        supabase.table("user_plans").upsert({
+            "user_id": user_id,
+            "plan": "normal",
+            "stripe_customer_id": customer_id,
+            "stripe_subscription_id": subscription_id,
+            "subscription_status": "active",
+        }).execute()
+        
+        # Mock Stripe subscription retrieval
+        mock_subscription = unittest.mock.MagicMock()
+        mock_subscription.current_period_end = int(period_end.timestamp())
+        mock_subscription.status = "active"
+        
+        # Trigger: downgrade_subscription from normal to start
+        with unittest.mock.patch('backend.payment_stripe.stripe.Subscription.retrieve', return_value=mock_subscription):
+            result = await downgrade_subscription(user_id, PlanType.START)
+        
+        assert result is True, "downgrade_subscription should return True"
+        
+        # Check raw DB state after downgrade_subscription
+        # This is BEFORE calling get_user_plan (which might trigger immediate application)
+        raw_response = supabase.table("user_plans").select("*").eq("user_id", user_id).execute()
+        raw_data = raw_response.data[0]
+        
+        print(f"\n🔍 Raw DB state after downgrade_subscription:")
+        print(f"  plan: {raw_data.get('plan')}")
+        print(f"  next_plan: {raw_data.get('next_plan')}")
+        print(f"  plan_expires_at: {raw_data.get('plan_expires_at')}")
+        print(f"  next_update_at: {raw_data.get('next_update_at')}")
+        
+        # Assert: Raw DB should have next_plan set, but plan should still be normal
+        assert raw_data.get("plan") == "normal", f"Expected plan=normal in DB, got {raw_data.get('plan')}"
+        assert raw_data.get("next_plan") == "start", f"Expected next_plan=start in DB, got {raw_data.get('next_plan')}"
+        assert raw_data.get("plan_expires_at") is not None, "Expected plan_expires_at to be set in DB"
+        
+        # BUG: next_update_at is NOT set by downgrade_subscription
+        # This is the root cause - get_user_plan will fall back to plan_expires_at
+        next_update_at_raw = raw_data.get("next_update_at")
+        print(f"  ⚠️ next_update_at in DB: {next_update_at_raw} (should be set but currently NULL)")
+        
+        # Now call get_user_plan - this is where the bug might manifest
+        # If next_update_at is NULL and plan_expires_at has issues, it might apply immediately
+        user_plan = await get_user_plan(user_id)
+        
+        print(f"\n🔍 State after get_user_plan:")
+        print(f"  plan: {user_plan.plan.value}")
+        print(f"  next_plan: {user_plan.next_plan.value if user_plan.next_plan else None}")
+        print(f"  plan_expires_at: {user_plan.plan_expires_at}")
+        print(f"  next_update_at: {user_plan.next_update_at}")
+        
+        # Verify the fix: next_update_at is now set (bug is fixed)
+        assert next_update_at_raw is not None, "FIX VERIFIED: next_update_at should now be set by downgrade_subscription"
+        assert next_update_at_raw == raw_data.get("plan_expires_at"), \
+            "next_update_at should equal plan_expires_at"
+        
+        # Verify that the downgrade is scheduled correctly (not immediately applied)
+        assert user_plan.plan == PlanType.NORMAL, \
+            f"Expected plan=normal (scheduled), got {user_plan.plan.value}"
+        assert user_plan.next_plan == PlanType.START, \
+            f"Expected next_plan=start, got {user_plan.next_plan.value if user_plan.next_plan else None}"
+        assert user_plan.next_update_at is not None, "Expected next_update_at to be set"
+        assert user_plan.next_update_at > datetime.now(timezone.utc), \
+            "next_update_at should be in the future"
+        
+        # Test that even if plan_expires_at is set to past time, 
+        # get_user_plan will use next_update_at (which is future) and NOT apply immediately
+        past_time = datetime.now(timezone.utc) - timedelta(days=1)
+        supabase.table("user_plans").update({
+            "plan_expires_at": past_time.isoformat(),
+            "next_plan": "start",  # Make sure next_plan is still set
+            "next_update_at": next_update_at_raw  # Keep next_update_at as future time
+        }).eq("user_id", user_id).execute()
+        
+        # Now call get_user_plan - this should NOT trigger immediate application
+        # because next_update_at (future) takes priority over plan_expires_at (past)
+        user_plan_after_past = await get_user_plan(user_id)
+        
+        print(f"\n🔍 State after setting plan_expires_at to past time (but next_update_at is future):")
+        print(f"  plan: {user_plan_after_past.plan.value}")
+        print(f"  next_plan: {user_plan_after_past.next_plan.value if user_plan_after_past.next_plan else None}")
+        print(f"  plan_expires_at: {user_plan_after_past.plan_expires_at}")
+        print(f"  next_update_at: {user_plan_after_past.next_update_at}")
+        
+        # FIX VERIFIED: Even with plan_expires_at in the past, 
+        # get_user_plan uses next_update_at (future) as effective_at,
+        # so the downgrade is NOT applied immediately
+        assert user_plan_after_past.plan == PlanType.NORMAL, \
+            f"✅ FIX VERIFIED: Expected plan=normal (scheduled), got {user_plan_after_past.plan.value}. " \
+            f"Even with plan_expires_at in the past, next_update_at (future) prevents immediate application."
+        
+        assert user_plan_after_past.next_plan == PlanType.START, \
+            f"Expected next_plan=start, got {user_plan_after_past.next_plan.value if user_plan_after_past.next_plan else None}"
+        
+    finally:
+        # Cleanup
+        try:
+            supabase.table("user_plans").delete().eq("user_id", user_id).execute()
+        except Exception:
+            pass
+
