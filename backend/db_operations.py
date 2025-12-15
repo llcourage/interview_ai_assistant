@@ -321,8 +321,8 @@ async def update_user_plan(
     user_id: str,
     plan: Optional[PlanType] = None,
     stripe_customer_id: Optional[str] = None,
-    stripe_subscription_id: Optional[str] = None,
-    subscription_status: Optional[str] = None,
+    stripe_subscription_id: Optional[Union[str, type(_CLEAR_FIELD)]] = None,
+    subscription_status: Optional[Union[str, type(_CLEAR_FIELD)]] = None,
     plan_expires_at: Optional[Union[datetime, type(_CLEAR_FIELD)]] = None,
     next_update_at: Optional[Union[datetime, type(_CLEAR_FIELD)]] = None,
     next_plan: Optional[Union[PlanType, type(_CLEAR_FIELD)]] = None,
@@ -336,7 +336,9 @@ async def update_user_plan(
         plan: Current plan type (PlanType enum, converted to string internally)
         stripe_customer_id: Stripe customer ID
         stripe_subscription_id: Stripe subscription ID
+                             Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         subscription_status: Subscription status (active, canceled, etc.)
+                             Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         plan_expires_at: When plan will expire (datetime, converted to ISO format)
                         Use _CLEAR_FIELD to explicitly clear this field (set to NULL)
         next_update_at: Next billing/renewal date (datetime, converted to ISO format)
@@ -413,10 +415,20 @@ async def update_user_plan(
         # Stripe-related fields
         if stripe_customer_id is not None:
             data["stripe_customer_id"] = stripe_customer_id
-        if stripe_subscription_id is not None:
-            data["stripe_subscription_id"] = stripe_subscription_id
-        if subscription_status is not None:
-            data["subscription_status"] = subscription_status
+        
+        # stripe_subscription_id: Support explicit clearing with _CLEAR_FIELD sentinel
+        if stripe_subscription_id is _CLEAR_FIELD:
+            data["stripe_subscription_id"] = None  # Explicitly clear field -> DB NULL
+        elif stripe_subscription_id is not None:
+            data["stripe_subscription_id"] = stripe_subscription_id  # Normal update
+        # else: None means "don't update this field"
+        
+        # subscription_status: Support explicit clearing with _CLEAR_FIELD sentinel
+        if subscription_status is _CLEAR_FIELD:
+            data["subscription_status"] = None  # Explicitly clear field -> DB NULL
+        elif subscription_status is not None:
+            data["subscription_status"] = subscription_status  # Normal update
+        # else: None means "don't update this field"
         
         # Date/time fields: Convert datetime to ISO format string (ensure UTC aware)
         # Support explicit clearing with _CLEAR_FIELD sentinel
