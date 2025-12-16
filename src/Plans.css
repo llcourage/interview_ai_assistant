@@ -122,6 +122,53 @@
   background-clip: text;
 }
 
+.cancel-plan-button {
+  margin-left: 1rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.cancel-plan-button:hover:not(:disabled) {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.cancel-plan-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.plans-message {
+  max-width: 600px;
+  margin: 0 auto 1.5rem auto;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+  position: relative;
+  z-index: 1;
+}
+
+.plans-message-success {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22c55e;
+}
+
+.plans-message-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
 .plans-grid {
   display: grid;
   grid-template-columns: repeat(4, 240px) !important; /* Increase column width: from 200px to 240px, keep 4 columns horizontal */

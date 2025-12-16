@@ -16,6 +16,8 @@ export const Plans: React.FC = () => {
   const [loading, setLoading] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [canceling, setCanceling] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 每次路由变化时都重新查询数据库
   useEffect(() => {
@@ -120,6 +122,47 @@ export const Plans: React.FC = () => {
     return names[plan] || plan;
   };
 
+  const handleCancelSubscription = async () => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      'Are you sure you want to cancel your subscription?\n\n' +
+      'Your subscription will be canceled at the end of the current billing period. ' +
+      'You will continue to have access until then, and can still use the free Start Plan afterwards.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    setCanceling(true);
+    setMessage(null);
+
+    try {
+      const token = getToken();
+      if (!token) throw new Error('Not logged in');
+
+      const response = await fetch(`${API_BASE_URL}/api/plan/cancel`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to cancel subscription');
+
+      const data = await response.json();
+      setMessage({ type: 'success', text: data.message || 'Subscription will be canceled at the end of current period' });
+      
+      // Reload plan info to reflect the change
+      await loadCurrentPlan();
+    } catch (error) {
+      console.error('Error canceling subscription:', error);
+      setMessage({ type: 'error', text: 'Failed to cancel subscription. Please try again.' });
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   const handlePlanSelect = async (plan: 'start' | 'normal' | 'high' | 'ultra' | 'premium') => {
     setLoading(plan);
     
@@ -191,10 +234,26 @@ export const Plans: React.FC = () => {
         <h1 className="plans-title">Choose Your Plan</h1>
         <p className="plans-subtitle">Select the perfect plan for your needs</p>
         
+        {message && (
+          <div className={`plans-message plans-message-${message.type}`}>
+            {message.text}
+          </div>
+        )}
+        
         {!loadingPlan && currentPlan && (
           <div className="current-plan-badge">
             <span className="current-plan-label">Current Plan:</span>
             <span className="current-plan-name">{getPlanDisplayName(currentPlan)}</span>
+            {currentPlan !== 'start' && (
+              <button
+                className="cancel-plan-button"
+                onClick={handleCancelSubscription}
+                disabled={canceling}
+                title="Cancel your subscription"
+              >
+                {canceling ? 'Canceling...' : 'Cancel your plan'}
+              </button>
+            )}
           </div>
         )}
         
