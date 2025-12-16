@@ -1412,14 +1412,60 @@ async def create_checkout(
         plan = PlanType(plan_value)
         
         # Start plan is one-time purchase, doesn't need Stripe subscription
-        # Temporarily directly update user plan (can add one-time payment logic later)
+        # If user is already on Start plan, directly update
+        # If user is on a paid plan, schedule downgrade (don't immediately downgrade)
         if plan == PlanType.START:
-            from backend.db_operations import update_user_plan
-            await update_user_plan(current_user.id, plan=plan)
-            return {
-                "checkout_url": request.success_url,
-                "message": "Start plan activated"
-            }
+            from backend.db_operations import get_user_plan
+            from backend.payment_stripe import downgrade_subscription, _is_downgrade
+            
+            current_user_plan = await get_user_plan(current_user.id)
+            current_plan = current_user_plan.plan
+            
+            # If already on Start plan, directly update (no-op)
+            if current_plan == PlanType.START:
+                from backend.db_operations import update_user_plan
+                await update_user_plan(current_user.id, plan=plan)
+                return {
+                    "checkout_url": request.success_url,
+                    "message": "Start plan activated"
+                }
+            
+            # If user is on a paid plan, schedule downgrade instead of immediately downgrading
+            if _is_downgrade(current_plan, PlanType.START):
+                # User has active subscription, schedule downgrade
+                if current_user_plan.stripe_subscription_id:
+                    try:
+                        await downgrade_subscription(current_user.id, PlanType.START)
+                        return {
+                            "checkout_url": request.success_url,
+                            "message": "Subscription will be downgraded to Start plan at the end of current period"
+                        }
+                    except ValueError as e:
+                        # If downgrade fails (e.g., no subscription, invalid status), 
+                        # fall back to immediate update (edge case)
+                        print(f"⚠️ Failed to schedule downgrade: {e}, falling back to immediate update")
+                        from backend.db_operations import update_user_plan
+                        await update_user_plan(current_user.id, plan=plan)
+                        return {
+                            "checkout_url": request.success_url,
+                            "message": "Start plan activated"
+                        }
+                else:
+                    # No subscription, can directly update
+                    from backend.db_operations import update_user_plan
+                    await update_user_plan(current_user.id, plan=plan)
+                    return {
+                        "checkout_url": request.success_url,
+                        "message": "Start plan activated"
+                    }
+            else:
+                # Not a downgrade (shouldn't happen for Start plan, but handle gracefully)
+                from backend.db_operations import update_user_plan
+                await update_user_plan(current_user.id, plan=plan)
+                return {
+                    "checkout_url": request.success_url,
+                    "message": "Start plan activated"
+                }
         
         # Normal and High plan need Stripe subscription
         checkout_data = await create_checkout_session(
