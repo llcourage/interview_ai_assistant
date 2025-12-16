@@ -483,3 +483,149 @@ async def test_downgrade_rejects_past_period_end():
         except Exception:
             pass
 
+
+@pytest.mark.asyncio
+async def test_upgrade_from_start_to_normal_then_downgrade():
+    """
+    Test: Complete flow from start -> normal (upgrade) -> start (downgrade)
+    
+    Scenario:
+    - Precondition: user_plan=start (free plan)
+    - Step 1: checkout.session.completed with plan=normal (upgrade)
+    - Step 2: downgrade_subscription from normal to start
+    - Assert: 
+      - After upgrade: plan=normal, next_plan=None, subscription is active
+      - After downgrade: plan=normal, next_plan=start, plan_expires_at and next_update_at set to future
+      - get_user_plan should show scheduled downgrade (not immediately applied)
+    
+    This test verifies the complete upgrade-downgrade flow matches integration test behavior.
+    """
+    supabase = get_supabase_admin()
+    user_id = str(uuid.uuid4())
+    customer_id = f"cus_test_{uuid.uuid4().hex[:8]}"
+    subscription_id = f"sub_test_{uuid.uuid4().hex[:8]}"
+    
+    try:
+        # Setup: Create user with start plan (free plan)
+        supabase.table("user_plans").upsert({
+            "user_id": user_id,
+            "plan": "start",
+            "stripe_customer_id": customer_id,
+        }).execute()
+        
+        # Verify initial state
+        initial_plan = await get_user_plan(user_id)
+        assert initial_plan.plan == PlanType.START, f"Expected initial plan=start, got {initial_plan.plan.value}"
+        print(f"\n✅ Initial state: plan={initial_plan.plan.value}")
+        
+        # Step 1: Upgrade from start to normal via checkout
+        future_period_end = datetime.now(timezone.utc) + timedelta(days=7)  # 7 days from now
+        session = {
+            "id": f"cs_test_{uuid.uuid4().hex[:8]}",
+            "customer": customer_id,
+            "subscription": subscription_id,
+            "metadata": {
+                "user_id": user_id,
+                "plan": "normal",
+            },
+        }
+        
+        # Mock Stripe subscription retrieval (no pending_update - immediate upgrade)
+        mock_subscription = unittest.mock.MagicMock()
+        mock_subscription.current_period_end = int(future_period_end.timestamp())
+        mock_subscription.pending_update = None
+        mock_subscription.status = "active"
+        
+        with unittest.mock.patch('backend.payment_stripe.stripe.Subscription.retrieve', return_value=mock_subscription):
+            with unittest.mock.patch('backend.payment_stripe.STRIPE_PRICE_IDS', {PlanType.NORMAL: "price_normal_test"}):
+                await handle_checkout_completed(session)
+        
+        # Assert: After upgrade, plan should be normal
+        user_plan_after_upgrade = await get_user_plan(user_id)
+        print(f"\n🔍 State after upgrade (start -> normal):")
+        print(f"  plan: {user_plan_after_upgrade.plan.value}")
+        print(f"  next_plan: {user_plan_after_upgrade.next_plan.value if user_plan_after_upgrade.next_plan else None}")
+        print(f"  stripe_subscription_id: {user_plan_after_upgrade.stripe_subscription_id}")
+        print(f"  subscription_status: {user_plan_after_upgrade.subscription_status}")
+        print(f"  plan_expires_at: {user_plan_after_upgrade.plan_expires_at}")
+        print(f"  next_update_at: {user_plan_after_upgrade.next_update_at}")
+        
+        assert user_plan_after_upgrade.plan == PlanType.NORMAL, \
+            f"Expected plan=normal after upgrade, got {user_plan_after_upgrade.plan.value}"
+        assert user_plan_after_upgrade.next_plan is None, \
+            f"Expected next_plan=None after upgrade, got {user_plan_after_upgrade.next_plan}"
+        assert user_plan_after_upgrade.stripe_subscription_id == subscription_id, \
+            f"Expected subscription_id={subscription_id}, got {user_plan_after_upgrade.stripe_subscription_id}"
+        assert user_plan_after_upgrade.subscription_status == "active", \
+            f"Expected status=active, got {user_plan_after_upgrade.subscription_status}"
+        # ✅ Verify plan_expires_at is cleared (upgrade overrides expiration)
+        assert user_plan_after_upgrade.plan_expires_at is None, \
+            f"Expected plan_expires_at=None after upgrade (upgrade clears expiration), got {user_plan_after_upgrade.plan_expires_at}"
+        # ✅ Verify next_update_at is set to next billing date
+        assert user_plan_after_upgrade.next_update_at is not None, \
+            "Expected next_update_at to be set (next billing date)"
+        # Verify next_update_at is in the future
+        from backend.utils.time import ensure_utc
+        now = datetime.now(timezone.utc)
+        next_update_at_dt = ensure_utc(user_plan_after_upgrade.next_update_at)
+        assert next_update_at_dt > now, \
+            f"next_update_at should be in the future, got {next_update_at_dt}, now {now}"
+        
+        # Step 2: Downgrade from normal to start
+        # Mock Stripe subscription retrieval for downgrade (future period_end)
+        mock_subscription_for_downgrade = unittest.mock.MagicMock()
+        mock_subscription_for_downgrade.current_period_end = int(future_period_end.timestamp())
+        mock_subscription_for_downgrade.status = "active"
+        
+        with unittest.mock.patch('backend.payment_stripe.stripe.Subscription.retrieve', return_value=mock_subscription_for_downgrade):
+            with unittest.mock.patch('backend.payment_stripe.STRIPE_PRICE_IDS', {PlanType.NORMAL: "price_normal_test"}):
+                result = await downgrade_subscription(user_id, PlanType.START)
+        
+        assert result is True, "downgrade_subscription should return True"
+        
+        # Assert: After downgrade, plan should still be normal, but next_plan should be start
+        user_plan_after_downgrade = await get_user_plan(user_id)
+        print(f"\n🔍 State after downgrade (normal -> start scheduled):")
+        print(f"  plan: {user_plan_after_downgrade.plan.value}")
+        print(f"  next_plan: {user_plan_after_downgrade.next_plan.value if user_plan_after_downgrade.next_plan else None}")
+        print(f"  plan_expires_at: {user_plan_after_downgrade.plan_expires_at}")
+        print(f"  next_update_at: {user_plan_after_downgrade.next_update_at}")
+        print(f"  cancel_at_period_end: {user_plan_after_downgrade.cancel_at_period_end}")
+        
+        # Verify downgrade is scheduled (not immediately applied)
+        assert user_plan_after_downgrade.plan == PlanType.NORMAL, \
+            f"Expected plan=normal (scheduled downgrade), got {user_plan_after_downgrade.plan.value}"
+        assert user_plan_after_downgrade.next_plan == PlanType.START, \
+            f"Expected next_plan=start, got {user_plan_after_downgrade.next_plan.value if user_plan_after_downgrade.next_plan else None}"
+        assert user_plan_after_downgrade.plan_expires_at is not None, \
+            "Expected plan_expires_at to be set"
+        assert user_plan_after_downgrade.next_update_at is not None, \
+            "Expected next_update_at to be set"
+        
+        # Verify both dates are in the future
+        now = datetime.now(timezone.utc)
+        from backend.utils.time import ensure_utc
+        plan_expires_at_dt = ensure_utc(user_plan_after_downgrade.plan_expires_at)
+        next_update_at_dt = ensure_utc(user_plan_after_downgrade.next_update_at)
+        
+        assert plan_expires_at_dt > now, \
+            f"plan_expires_at should be in the future, got {plan_expires_at_dt}, now {now}"
+        assert next_update_at_dt > now, \
+            f"next_update_at should be in the future, got {next_update_at_dt}, now {now}"
+        
+        # Verify next_update_at equals plan_expires_at (both should be period_end)
+        assert plan_expires_at_dt == next_update_at_dt, \
+            f"next_update_at should equal plan_expires_at, got next_update_at={next_update_at_dt}, plan_expires_at={plan_expires_at_dt}"
+        
+        print(f"\n✅ Complete flow verified:")
+        print(f"   - Upgrade: start -> normal (immediate)")
+        print(f"   - Downgrade: normal -> start (scheduled at {next_update_at_dt})")
+        print(f"   - Downgrade is NOT immediately applied (plan still normal, next_plan=start)")
+        
+    finally:
+        # Cleanup
+        try:
+            supabase.table("user_plans").delete().eq("user_id", user_id).execute()
+        except Exception:
+            pass
+

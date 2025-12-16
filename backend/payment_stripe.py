@@ -269,10 +269,19 @@ async def handle_checkout_completed(session: dict):
                             datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
                         )
                         print(f"🔍 Subscription {subscription_id}: next billing date = {next_update_at}")
+                    else:
+                        # current_period_end is missing - use default (30 days from now)
+                        from backend.utils.time import utcnow
+                        next_update_at = utcnow() + timedelta(days=30)
+                        print(f"⚠️ Subscription {subscription_id} has no current_period_end, using default next billing date: {next_update_at}")
             except Exception as e:
                 retrieve_failed = True
                 print(f"⚠️ Failed to get subscription details for {subscription_id}: {e}")
                 print(f"⚠️ Cannot determine if pending_update exists, will immediately upgrade (checkout completed)")
+                # Set default next_update_at when retrieve fails
+                from backend.utils.time import utcnow
+                next_update_at = utcnow() + timedelta(days=30)
+                print(f"⚠️ Using default next billing date: {next_update_at}")
         
         # Update user Plan based on whether there's a pending_update
         # For checkout.session.completed, default to immediate upgrade (user has paid)
@@ -287,11 +296,11 @@ async def handle_checkout_completed(session: dict):
                 stripe_subscription_id=subscription_id,
                 subscription_status="active",  # Use default since we can't retrieve subscription
                 plan_expires_at=_CLEAR_FIELD,
-                # Don't update next_update_at - keep existing value to avoid overwriting correct data
+                next_update_at=next_update_at,  # Use default value set above (30 days from now)
                 next_plan=_CLEAR_FIELD,  # Clear any scheduled changes
                 cancel_at_period_end=False,
             )
-            print(f"✅ User {user_id} upgraded to {new_plan.value} (Stripe retrieve failed, but checkout completed)")
+            print(f"✅ User {user_id} upgraded to {new_plan.value} (Stripe retrieve failed, but checkout completed), next billing: {next_update_at}")
         elif pending_update and pending_update_is_relevant:
             # Case 2: Stripe has pending_update that is relevant to current checkout
             # Don't change plan immediately, schedule it via next_plan
@@ -310,6 +319,12 @@ async def handle_checkout_completed(session: dict):
         else:
             # Case 1: No pending_update or pending_update is not relevant
             # For checkout.session.completed, immediately upgrade (user has paid)
+            # Ensure next_update_at is set (fallback to default if still None)
+            if next_update_at is None:
+                from backend.utils.time import utcnow
+                next_update_at = utcnow() + timedelta(days=30)
+                print(f"⚠️ next_update_at is None in immediate upgrade, using default: {next_update_at}")
+            
             await update_user_plan(
                 user_id=user_id,
                 plan=new_plan,  # Immediately upgrade
@@ -317,7 +332,7 @@ async def handle_checkout_completed(session: dict):
                 stripe_subscription_id=subscription_id,
                 subscription_status=subscription.status if subscription else "active",
                 plan_expires_at=_CLEAR_FIELD,  # Clear expiration (upgrade overrides cancellation/expiration)
-                next_update_at=next_update_at,  # Keep as billing date (only meaningful when next_plan=None)
+                next_update_at=next_update_at,  # Set billing date (always set, never None)
                 # Clear all scheduled changes (upgrade overrides any existing downgrade/cancellation)
                 next_plan=_CLEAR_FIELD,
                 cancel_at_period_end=False,  # Clear cancel flag
@@ -1061,6 +1076,18 @@ async def downgrade_subscription(user_id: str, target_plan: PlanType) -> bool:
                 
                 plan_expires_at = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
                 print(f"🔍 Retrieved current_period_end from Stripe: {plan_expires_at}")
+                
+                # ✅ Validate: Ensure plan_expires_at is in the future
+                # Even if next_update_at field doesn't exist, get_user_plan will fall back to plan_expires_at
+                # If plan_expires_at is in the past, downgrade will be applied immediately
+                from backend.utils.time import utcnow
+                now = utcnow()
+                if plan_expires_at <= now:
+                    raise ValueError(
+                        f"Cannot schedule downgrade: subscription current_period_end ({plan_expires_at}) "
+                        f"is in the past (now: {now}). Subscription may have expired or been canceled. "
+                        f"Please check the subscription status in Stripe."
+                    )
                 
                 # Optional: Verify subscription status from Stripe matches our expectation
                 if subscription.status not in valid_statuses:

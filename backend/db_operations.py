@@ -438,6 +438,9 @@ async def update_user_plan(
             plan_expires_at = ensure_utc(plan_expires_at)
             data["plan_expires_at"] = plan_expires_at.isoformat()
         
+        # Debug: Log next_update_at value before processing
+        print(f"DEBUG update_user_plan: next_update_at={next_update_at}, type={type(next_update_at)}, is _CLEAR_FIELD={next_update_at is _CLEAR_FIELD}")
+        
         if next_update_at is _CLEAR_FIELD:
             data["next_update_at"] = None  # Explicitly clear field
         elif next_update_at is not None:
