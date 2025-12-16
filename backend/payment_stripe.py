@@ -288,6 +288,9 @@ async def handle_checkout_completed(session: dict):
         if retrieve_failed:
             # Case 3: Failed to retrieve subscription
             # For checkout.session.completed, immediately upgrade (user has paid)
+            # Debug: Log next_update_at before calling update_user_plan
+            print(f"🔍 DEBUG handle_checkout_completed (Case 3): About to call update_user_plan with next_update_at={next_update_at}, type={type(next_update_at)}")
+            
             await update_user_plan(
                 user_id=user_id,
                 # For checkout.session.completed, immediately upgrade (user has paid)
@@ -304,6 +307,9 @@ async def handle_checkout_completed(session: dict):
         elif pending_update and pending_update_is_relevant:
             # Case 2: Stripe has pending_update that is relevant to current checkout
             # Don't change plan immediately, schedule it via next_plan
+            # Debug: Log next_update_at before calling update_user_plan
+            print(f"🔍 DEBUG handle_checkout_completed (Case 2): About to call update_user_plan with next_update_at={next_update_at}, type={type(next_update_at)}")
+            
             await update_user_plan(
                 user_id=user_id,
                 # plan is not updated (keep current plan until pending_update takes effect)
@@ -324,6 +330,9 @@ async def handle_checkout_completed(session: dict):
                 from backend.utils.time import utcnow
                 next_update_at = utcnow() + timedelta(days=30)
                 print(f"⚠️ next_update_at is None in immediate upgrade, using default: {next_update_at}")
+            
+            # Debug: Log next_update_at before calling update_user_plan
+            print(f"🔍 DEBUG handle_checkout_completed (Case 1): About to call update_user_plan with next_update_at={next_update_at}, type={type(next_update_at)}")
             
             await update_user_plan(
                 user_id=user_id,
