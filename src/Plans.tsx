@@ -8,6 +8,14 @@ import './Plans.css';
 
 interface PlanInfo {
   plan: string;
+  subscription_info?: {
+    subscription_id: string;
+    status: string;
+    current_period_end: string;
+    cancel_at_period_end: boolean;
+  };
+  next_plan?: string | null;
+  plan_expires_at?: string | null;
 }
 
 export const Plans: React.FC = () => {
@@ -15,6 +23,7 @@ export const Plans: React.FC = () => {
   const location = useLocation();
   const [loading, setLoading] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [canceling, setCanceling] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -67,6 +76,7 @@ export const Plans: React.FC = () => {
     try {
       setLoadingPlan(true);
       setCurrentPlan(null); // 先清空，避免显示旧数据
+      setPlanInfo(null); // 先清空，避免显示旧数据
       
       // 确保用户已认证
       const authenticated = await isAuthenticated();
@@ -96,14 +106,17 @@ export const Plans: React.FC = () => {
       if (response.ok) {
         const data: PlanInfo = await response.json();
         console.log('📦 Plans: Loaded plan from database:', data.plan);
+        setPlanInfo(data); // 保存完整的 planInfo
         setCurrentPlan(data.plan);
       } else {
         console.error('❌ Plans: Failed to load plan, status:', response.status);
         setCurrentPlan(null);
+        setPlanInfo(null);
       }
     } catch (error) {
       console.error('❌ Plans: Failed to load current plan:', error);
       setCurrentPlan(null);
+      setPlanInfo(null);
     } finally {
       setLoadingPlan(false);
     }
@@ -244,7 +257,9 @@ export const Plans: React.FC = () => {
           <div className="current-plan-badge">
             <span className="current-plan-label">Current Plan:</span>
             <span className="current-plan-name">{getPlanDisplayName(currentPlan)}</span>
-            {currentPlan !== 'start' && (
+            {currentPlan !== 'start' && 
+             !planInfo?.subscription_info?.cancel_at_period_end && 
+             planInfo?.next_plan !== 'start' && (
               <button
                 className="cancel-plan-button"
                 onClick={handleCancelSubscription}
