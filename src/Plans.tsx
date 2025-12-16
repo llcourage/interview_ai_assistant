@@ -177,6 +177,60 @@ export const Plans: React.FC = () => {
   };
 
   const handlePlanSelect = async (plan: 'start' | 'normal' | 'high' | 'ultra' | 'premium') => {
+    // Check if user is trying to switch to the scheduled next_plan
+    if (planInfo?.next_plan && plan === planInfo.next_plan) {
+      const nextPlanDisplay = getPlanDisplayName(planInfo.next_plan);
+      const effectiveDate = planInfo.plan_expires_at 
+        ? new Date(planInfo.plan_expires_at).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        : 'the end of current period';
+      
+      setMessage({
+        type: 'error',
+        text: `You already have a scheduled plan change to ${nextPlanDisplay} on ${effectiveDate}. Please wait for the change to take effect or cancel the existing change first.`
+      });
+      return;
+    }
+
+    // If user has a scheduled plan change and is switching to a different plan, show double confirmation
+    if (planInfo?.next_plan && plan !== planInfo.next_plan) {
+      const nextPlanDisplay = getPlanDisplayName(planInfo.next_plan);
+      const targetPlanDisplay = getPlanDisplayName(plan);
+      const effectiveDate = planInfo.plan_expires_at 
+        ? new Date(planInfo.plan_expires_at).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        : 'the end of current period';
+      
+      const confirmed = window.confirm(
+        `You have a scheduled plan change to ${nextPlanDisplay} on ${effectiveDate}.\n\n` +
+        `Are you sure you want to switch to ${targetPlanDisplay} instead?\n\n` +
+        `This will override your existing scheduled change.`
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+    } else if (currentPlan && plan !== currentPlan) {
+      // If switching to a different plan (upgrade/downgrade) and no scheduled change, show confirmation
+      const currentPlanDisplay = getPlanDisplayName(currentPlan);
+      const targetPlanDisplay = getPlanDisplayName(plan);
+      
+      const confirmed = window.confirm(
+        `You are currently on ${currentPlanDisplay}.\n\n` +
+        `Are you sure you want to switch to ${targetPlanDisplay}?`
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setLoading(plan);
     
     try {
