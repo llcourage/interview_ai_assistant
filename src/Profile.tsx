@@ -21,6 +21,8 @@ interface PlanInfo {
     current_period_end: string;
     cancel_at_period_end: boolean;
   };
+  next_plan?: string | null;
+  plan_expires_at?: string | null;
 }
 
 export const Profile: React.FC = () => {
@@ -124,6 +126,8 @@ export const Profile: React.FC = () => {
             email={userEmail}
             plan={planInfo?.plan || null}
             nextBillingDate={planInfo?.subscription_info?.current_period_end || null}
+            nextPlan={planInfo?.next_plan || null}
+            planExpiresAt={planInfo?.plan_expires_at || null}
             onManagePlan={handleManagePlan}
           />
             <QuotaUsageCard

@@ -5,6 +5,8 @@ interface ProfileHeaderProps {
   email: string | null;
   plan: string | null;
   nextBillingDate?: string | null;
+  nextPlan?: string | null;
+  planExpiresAt?: string | null;
   onManagePlan: () => void;
 }
 
@@ -26,14 +28,29 @@ const formatDate = (dateString: string): string => {
   }
 };
 
+const getPlanDisplayName = (plan: string | null): string => {
+  if (!plan) return 'Free';
+  const names: Record<string, string> = {
+    'start': 'Start Plan',
+    'normal': 'Weekly Normal Plan',
+    'high': 'Monthly Normal Plan',
+    'ultra': 'Monthly Ultra Plan',
+    'premium': 'Monthly Premium Plan',
+    'internal': 'Internal Plan'
+  };
+  return names[plan] || plan.charAt(0).toUpperCase() + plan.slice(1);
+};
+
 export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
   email,
   plan,
   nextBillingDate,
+  nextPlan,
+  planExpiresAt,
   onManagePlan
 }) => {
   const initials = getInitialsFromEmail(email);
-  const planDisplay = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Free';
+  const planDisplay = getPlanDisplayName(plan);
 
   return (
     <section className="summary-bar">
@@ -48,6 +65,11 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
             <span className="summary-status">Active · {planDisplay}</span>
             {nextBillingDate && (
               <span className="summary-billing">Next billing: {formatDate(nextBillingDate)}</span>
+            )}
+            {nextPlan && planExpiresAt && (
+              <span className="summary-billing">
+                Switching to {getPlanDisplayName(nextPlan)} on {formatDate(planExpiresAt)}
+              </span>
             )}
           </div>
         </div>
