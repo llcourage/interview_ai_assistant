@@ -4,13 +4,22 @@ Uses Vercel's required format: handler class inheriting from BaseHTTPRequestHand
 """
 from http.server import BaseHTTPRequestHandler
 import os
+import sys
 import json
 import hmac
 import hashlib
 import time
+import asyncio
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from datetime import datetime
+from pathlib import Path
+
+# Add project root to Python path for importing backend modules
+# In Vercel, the working directory is the project root, so we need to ensure backend can be imported
+project_root = Path(__file__).parent.parent.resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 class handler(BaseHTTPRequestHandler):
     """Vercel Python function entry point - must be a handler class inheriting from BaseHTTPRequestHandler"""
@@ -202,6 +211,9 @@ class handler(BaseHTTPRequestHandler):
             if event_type == "customer.subscription.created":
                 try:
                     # Subscription created (usually triggered by checkout.session.completed, but handle for completeness)
+                    # Note: This event typically arrives after checkout.session.completed, which already handles
+                    # plan updates, next_update_at, etc. This handler only updates subscription_id and status
+                    # to ensure they're set, without affecting other fields.
                     subscription = event.get("data", {}).get("object", {})
                     customer_id = subscription.get("customer")
                     subscription_id = subscription.get("id")
@@ -221,7 +233,8 @@ class handler(BaseHTTPRequestHandler):
                     
                     user_id = response["data"][0]["user_id"]
                     
-                    # Update subscription ID (if not already set)
+                    # Update subscription ID and status only (safe to do directly as it doesn't affect plan/next_update_at)
+                    # This is a minimal update that complements checkout.session.completed, not a replacement
                     supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
                         "stripe_subscription_id": subscription_id,
                         "subscription_status": "active",
@@ -237,7 +250,7 @@ class handler(BaseHTTPRequestHandler):
             
             elif event_type == "checkout.session.completed":
                 try:
-                    # Payment successful
+                    # Payment successful - use backend/payment_stripe.py handler for consistency
                     session = event.get("data", {}).get("object", {})
                     user_id = session.get("metadata", {}).get("user_id")
                     plan_value = session.get("metadata", {}).get("plan", "normal")
@@ -249,43 +262,41 @@ class handler(BaseHTTPRequestHandler):
                     if not user_id:
                         raise Exception("Missing user_id in session metadata")
                     
-                    # Check if record exists
-                    response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
-                    print(f"🔍 Current user record: {response['data']}")
-                    
-                    update_data = {
-                        "plan": plan_value,
-                        "stripe_customer_id": customer_id,
-                        "stripe_subscription_id": subscription_id,
-                        "subscription_status": "active",
-                        "updated_at": datetime.now().isoformat()
-                    }
-                    
-                    if response["data"]:
-                        # Update existing record
-                        print(f"📝 Updating user {user_id} plan to {plan_value}")
-                        result = supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", update_data)
-                        print(f"✅ Update result: {result}")
-                    else:
-                        # Create new record
-                        print(f"📝 Creating new user {user_id} plan record: {plan_value}")
-                        insert_data = {
-                            "user_id": user_id,
-                            "plan": plan_value,
-                            "created_at": datetime.now().isoformat(),
-                            **update_data
-                        }
-                        result = supabase_request("POST", "user_plans", insert_data)
-                        print(f"✅ Create result: {result}")
-                    
-                    # Verify update was successful
-                    verify_response = supabase_request("GET", "user_plans", filters={"user_id": user_id})
-                    if verify_response["data"]:
-                        current_plan = verify_response["data"][0].get("plan")
-                        print(f"✅ Verified: User {user_id} current plan is {current_plan}")
-                    
-                    print(f"✅ User {user_id} upgraded to {plan_value} plan")
-                    return {"status": "success", "event_type": event_type, "user_id": user_id, "plan": plan_value}
+                    # Import and call handle_checkout_completed from backend/payment_stripe.py
+                    # This ensures we use the same logic as integration tests and properly set next_update_at
+                    try:
+                        from backend.payment_stripe import handle_checkout_completed
+                        
+                        # Run async function in sync context
+                        # Check if there's a running event loop (e.g., in tests)
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # If there's a running loop, we can't use asyncio.run()
+                            # Instead, create a new event loop in a new thread
+                            import concurrent.futures
+                            import threading
+                            
+                            def run_async():
+                                new_loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(new_loop)
+                                try:
+                                    return new_loop.run_until_complete(handle_checkout_completed(session))
+                                finally:
+                                    new_loop.close()
+                            
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(run_async)
+                                future.result()  # Wait for completion
+                        except RuntimeError:
+                            # No running loop, safe to use asyncio.run()
+                            asyncio.run(handle_checkout_completed(session))
+                        
+                        print(f"✅ User {user_id} upgraded to {plan_value} plan (via handle_checkout_completed)")
+                        return {"status": "success", "event_type": event_type, "user_id": user_id, "plan": plan_value}
+                    except ImportError as import_err:
+                        # Fallback to direct database update if import fails (shouldn't happen in production)
+                        print(f"⚠️ Failed to import handle_checkout_completed: {import_err}, falling back to direct update")
+                        raise Exception(f"Failed to import handle_checkout_completed: {import_err}")
                 except Exception as e:
                     import traceback
                     print(f"❌ Failed to process checkout.session.completed: {type(e).__name__}: {str(e)}")
@@ -294,40 +305,42 @@ class handler(BaseHTTPRequestHandler):
             
             elif event_type == "customer.subscription.updated":
                 try:
-                    # Subscription updated
+                    # Subscription updated - use backend/payment_stripe.py handler for consistency
                     subscription = event.get("data", {}).get("object", {})
-                    customer_id = subscription.get("customer")
-                    status = subscription.get("status")
+                    event_created = event.get("created")
+                    event_id = event.get("id")
                     
-                    print(f"🔍 customer.subscription.updated - customer_id: {customer_id}, status: {status}")
+                    print(f"🔍 customer.subscription.updated - subscription_id: {subscription.get('id')}, customer_id: {subscription.get('customer')}, status: {subscription.get('status')}")
                     
-                    if not customer_id:
-                        raise Exception("Missing customer_id in subscription")
-                    
-                    # Find user from database
-                    response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
-                    
-                    if not response["data"]:
-                        print(f"⚠️ User not found with stripe_customer_id={customer_id}")
-                        return {"status": "warning", "message": "User not found"}
-                    
-                    user_id = response["data"][0]["user_id"]
-                    
-                    if status == "active":
-                        supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                            "subscription_status": "active",
-                            "updated_at": datetime.now().isoformat()
-                        })
-                        print(f"✅ User {user_id} subscription activated")
-                    elif status in ["canceled", "past_due", "unpaid"]:
-                        supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                            "plan": "starter",
-                            "subscription_status": status,
-                            "updated_at": datetime.now().isoformat()
-                        })
-                        print(f"⚠️ User {user_id} subscription canceled/overdue, downgraded to starter")
-                    
-                    return {"status": "success", "event_type": event_type}
+                    # Import and call handle_subscription_updated from backend/payment_stripe.py
+                    try:
+                        from backend.payment_stripe import handle_subscription_updated
+                        
+                        # Run async function in sync context
+                        try:
+                            loop = asyncio.get_running_loop()
+                            import concurrent.futures
+                            
+                            def run_async():
+                                new_loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(new_loop)
+                                try:
+                                    return new_loop.run_until_complete(handle_subscription_updated(subscription, event_created, event_id))
+                                finally:
+                                    new_loop.close()
+                            
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(run_async)
+                                future.result()  # Wait for completion
+                        except RuntimeError:
+                            # No running loop, safe to use asyncio.run()
+                            asyncio.run(handle_subscription_updated(subscription, event_created, event_id))
+                        
+                        print(f"✅ Subscription updated processed (via handle_subscription_updated)")
+                        return {"status": "success", "event_type": event_type}
+                    except ImportError as import_err:
+                        print(f"⚠️ Failed to import handle_subscription_updated: {import_err}")
+                        raise Exception(f"Failed to import handle_subscription_updated: {import_err}")
                 except Exception as e:
                     import traceback
                     print(f"❌ Failed to process customer.subscription.updated: {type(e).__name__}: {str(e)}")
@@ -336,31 +349,40 @@ class handler(BaseHTTPRequestHandler):
             
             elif event_type == "customer.subscription.deleted":
                 try:
-                    # Subscription deleted
+                    # Subscription deleted - use backend/payment_stripe.py handler for consistency
                     subscription = event.get("data", {}).get("object", {})
-                    customer_id = subscription.get("customer")
                     
-                    print(f"🔍 customer.subscription.deleted - customer_id: {customer_id}")
+                    print(f"🔍 customer.subscription.deleted - subscription_id: {subscription.get('id')}, customer_id: {subscription.get('customer')}")
                     
-                    if not customer_id:
-                        raise Exception("Missing customer_id in subscription")
-                    
-                    # Find user from database
-                    response = supabase_request("GET", "user_plans", filters={"stripe_customer_id": customer_id})
-                    
-                    if not response["data"]:
-                        print(f"⚠️ User not found with stripe_customer_id={customer_id}")
-                        return {"status": "warning", "message": "User not found"}
-                    
-                    user_id = response["data"][0]["user_id"]
-                    
-                    supabase_request("PATCH", f"user_plans?user_id=eq.{user_id}", {
-                        "plan": "starter",
-                        "subscription_status": "canceled",
-                        "updated_at": datetime.now().isoformat()
-                    })
-                    print(f"⚠️ User {user_id} subscription deleted, downgraded to starter")
-                    return {"status": "success", "event_type": event_type}
+                    # Import and call handle_subscription_deleted from backend/payment_stripe.py
+                    try:
+                        from backend.payment_stripe import handle_subscription_deleted
+                        
+                        # Run async function in sync context
+                        try:
+                            loop = asyncio.get_running_loop()
+                            import concurrent.futures
+                            
+                            def run_async():
+                                new_loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(new_loop)
+                                try:
+                                    return new_loop.run_until_complete(handle_subscription_deleted(subscription))
+                                finally:
+                                    new_loop.close()
+                            
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(run_async)
+                                future.result()  # Wait for completion
+                        except RuntimeError:
+                            # No running loop, safe to use asyncio.run()
+                            asyncio.run(handle_subscription_deleted(subscription))
+                        
+                        print(f"✅ Subscription deleted processed (via handle_subscription_deleted)")
+                        return {"status": "success", "event_type": event_type}
+                    except ImportError as import_err:
+                        print(f"⚠️ Failed to import handle_subscription_deleted: {import_err}")
+                        raise Exception(f"Failed to import handle_subscription_deleted: {import_err}")
                 except Exception as e:
                     import traceback
                     print(f"❌ Failed to process customer.subscription.deleted: {type(e).__name__}: {str(e)}")

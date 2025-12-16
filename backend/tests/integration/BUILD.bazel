@@ -18,6 +18,8 @@ py_test(
         "//backend:db_models",
         # Payment/Stripe modules for webhook tests
         "//backend:payment_stripe",
+        # API modules for webhook API tests
+        "//api:stripe_webhook",
         
         # Note: If you have pip_parse configured, uncomment these:
         # "@pypi//pytest",

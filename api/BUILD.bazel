@@ -1,0 +1,12 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# Stripe webhook API module
+py_library(
+    name = "stripe_webhook",
+    srcs = ["stripe_webhook.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//backend:payment_stripe",
+    ],
+)
+
