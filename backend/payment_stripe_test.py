@@ -1135,8 +1135,10 @@ class TestHandleCheckoutCompleted(unittest.IsolatedAsyncioTestCase):
         mock_update_user_plan.assert_called_once()
         call_kwargs = mock_update_user_plan.call_args[1]
         self.assertEqual(call_kwargs['plan'], PlanType.HIGH)
-        # Should not update next_update_at (keep existing value)
-        self.assertNotIn('next_update_at', call_kwargs or 'next_update_at' not in call_kwargs)
+        # When Stripe retrieve fails, next_update_at should be set to a default value (30 days from now)
+        self.assertIn('next_update_at', call_kwargs, 
+            "next_update_at should be set to default value when Stripe retrieve fails")
+        self.assertIsNotNone(call_kwargs['next_update_at'])
 
 
 class TestExtractPriceIdFromPendingUpdate(unittest.TestCase):
@@ -2185,6 +2187,359 @@ class TestGetSubscriptionInfo(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result["current_period_end"])
         self.assertIsNotNone(result["current_period_end"].tzinfo)  # Should have timezone
         self.assertEqual(result["current_period_end"].tzinfo, timezone.utc)
+
+
+class TestHandleSubscriptionUpdatedStartPlanBug(unittest.IsolatedAsyncioTestCase):
+    """
+    Test to reproduce bug: START plan users with active subscriptions should have 
+    their subscriptions canceled when subscription.updated event is received.
+    
+    Bug scenario:
+    - User has START plan (free, shouldn't have subscription)
+    - But still has active subscription in Stripe (bug state)
+    - When subscription.updated webhook arrives, subscription should be canceled
+    - Current bug: Subscription status is synced, user continues to be charged
+    """
+    
+    def setUp(self):
+        self.user_id = "test_user_start_plan"
+        self.customer_id = "cus_test_start"
+        self.subscription_id = "sub_test_start"
+    
+    @patch('backend.payment_stripe.stripe.Subscription.delete')
+    @patch('backend.payment_stripe.update_user_plan')
+    @patch('backend.db_supabase.get_supabase_admin')
+    async def test_subscription_updated_should_cancel_for_start_plan_user(self, mock_get_supabase_admin, mock_update_user_plan, mock_stripe_delete):
+        """
+        Test that subscription.updated event cancels subscription when user has START plan.
+        This test reproduces the bug where START plan users are incorrectly charged.
+        """
+        # Mock Supabase response: user has START plan but still has subscription
+        mock_supabase = MagicMock()
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+            "user_id": self.user_id,
+            "plan": "start",  # START plan (free, shouldn't have subscription)
+            "stripe_customer_id": self.customer_id,
+            "stripe_subscription_id": self.subscription_id,  # But subscription still exists (bug)
+            "subscription_status": "active",  # Active subscription (shouldn't exist for START plan)
+            "stripe_event_ts": None,
+            "next_plan": None,
+            "plan_expires_at": None,
+            "next_update_at": None,
+            "cancel_at_period_end": False,
+        }]
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Mock Stripe subscription delete
+        mock_stripe_delete.return_value = None
+        
+        # Create subscription.updated event
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+        subscription_event = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "current_period_end": int(future_date.timestamp()),
+            "cancel_at_period_end": False,
+        }
+        
+        event_created = int(datetime.now(timezone.utc).timestamp())
+        event_id = "evt_test_start_plan"
+        
+        # Execute: Handle subscription.updated event
+        await handle_subscription_updated(
+            subscription=subscription_event,
+            event_created=event_created,
+            event_id=event_id
+        )
+        
+        # Assert: Stripe subscription should be canceled
+        # This assertion will FAIL with current code (reproducing the bug)
+        mock_stripe_delete.assert_called_once_with(self.subscription_id), \
+            "BUG REPRODUCED: stripe.Subscription.delete was NOT called. START plan user subscription should be canceled!"
+        
+        # Assert: Database should be updated to clear subscription fields
+        mock_update_user_plan.assert_called()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        self.assertEqual(
+            call_kwargs.get('stripe_subscription_id'), _CLEAR_FIELD,
+            "stripe_subscription_id should be cleared for START plan user"
+        )
+        self.assertEqual(
+            call_kwargs.get('subscription_status'), 'canceled',
+            "subscription_status should be 'canceled' for START plan user"
+        )
+
+
+class TestDowngradeToStartBug(unittest.IsolatedAsyncioTestCase):
+    """
+    Bug 1: downgrade_subscription to START plan should cancel Stripe subscription.
+    
+    Current bug: downgrade_subscription only updates database, doesn't cancel Stripe subscription.
+    Result: User is still charged by Stripe even though they're on START (free) plan.
+    """
+    
+    def setUp(self):
+        self.user_id = "test_user_downgrade_start"
+        self.subscription_id = "sub_test_downgrade"
+        self.now = datetime.now(timezone.utc)
+        self.future_time = self.now + timedelta(days=30)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.modify')
+    @patch('backend.payment_stripe.stripe.Subscription.delete')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_downgrade_to_start_should_cancel_stripe_subscription(
+        self, mock_update_user_plan, mock_get_user_plan, mock_stripe_retrieve, 
+        mock_stripe_delete, mock_stripe_modify
+    ):
+        """
+        Bug 1: Downgrading to START should cancel Stripe subscription.
+        This test will FAIL with current code.
+        """
+        # Setup: User has HIGH plan with active subscription
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription retrieve
+        mock_subscription = Mock()
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_subscription.status = "active"
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute: Downgrade to START
+        result = await downgrade_subscription(self.user_id, PlanType.START)
+        
+        # Assert: Should succeed
+        self.assertTrue(result)
+        
+        # Assert: Stripe subscription should be canceled (delete or modify with cancel_at_period_end)
+        # This will FAIL with current code - Bug 1 reproduced
+        stripe_canceled = mock_stripe_delete.called or (
+            mock_stripe_modify.called and 
+            mock_stripe_modify.call_args[1].get('cancel_at_period_end') == True
+        )
+        self.assertTrue(
+            stripe_canceled,
+            "BUG 1 REPRODUCED: Stripe subscription was NOT canceled when downgrading to START. "
+            "User will continue to be charged!"
+        )
+
+
+class TestSubscriptionUpdatedExpiredNextPlanBug(unittest.IsolatedAsyncioTestCase):
+    """
+    Bug 3: subscription.updated should apply next_plan when next_update_at has passed.
+    
+    Current bug: subscription.updated only syncs status, doesn't check if next_plan should be applied.
+    Result: If user is offline for a long time, downgrade is never applied.
+    """
+    
+    def setUp(self):
+        self.user_id = "test_user_expired_next_plan"
+        self.customer_id = "cus_test_expired"
+        self.subscription_id = "sub_test_expired"
+        self.now = datetime.now(timezone.utc)
+    
+    @patch('backend.payment_stripe.update_user_plan')
+    @patch('backend.db_supabase.get_supabase_admin')
+    async def test_subscription_updated_should_apply_expired_next_plan(
+        self, mock_get_supabase_admin, mock_update_user_plan
+    ):
+        """
+        Bug 3: When subscription.updated arrives and next_update_at has passed, apply next_plan.
+        This test will FAIL with current code.
+        """
+        # Setup: User has HIGH plan with expired next_plan=NORMAL
+        past_time = self.now - timedelta(days=5)  # 5 days ago
+        mock_supabase = MagicMock()
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+            "user_id": self.user_id,
+            "plan": "high",
+            "stripe_customer_id": self.customer_id,
+            "stripe_subscription_id": self.subscription_id,
+            "subscription_status": "active",
+            "stripe_event_ts": None,
+            "next_plan": "normal",  # Scheduled downgrade
+            "next_update_at": past_time.isoformat(),  # Already expired!
+            "plan_expires_at": past_time.isoformat(),
+            "cancel_at_period_end": False,
+        }]
+        mock_get_supabase_admin.return_value = mock_supabase
+        
+        # Create subscription.updated event
+        future_date = self.now + timedelta(days=30)
+        subscription_event = {
+            "id": self.subscription_id,
+            "customer": self.customer_id,
+            "status": "active",
+            "current_period_end": int(future_date.timestamp()),
+            "cancel_at_period_end": False,
+        }
+        
+        event_created = int(self.now.timestamp())
+        event_id = "evt_test_expired"
+        
+        # Execute
+        await handle_subscription_updated(
+            subscription=subscription_event,
+            event_created=event_created,
+            event_id=event_id
+        )
+        
+        # Assert: next_plan should be applied (plan changed to NORMAL)
+        mock_update_user_plan.assert_called()
+        call_kwargs = mock_update_user_plan.call_args[1]
+        
+        # This will FAIL with current code - Bug 3 reproduced
+        self.assertEqual(
+            call_kwargs.get('plan'), PlanType.NORMAL,
+            "BUG 3 REPRODUCED: next_plan was NOT applied even though next_update_at has passed. "
+            "User is still on HIGH plan instead of scheduled NORMAL plan!"
+        )
+        # Also check next_plan is cleared
+        self.assertEqual(
+            call_kwargs.get('next_plan'), _CLEAR_FIELD,
+            "BUG 3 REPRODUCED: next_plan was NOT cleared after applying"
+        )
+
+
+class TestDowngradeToPaidPlanBug(unittest.IsolatedAsyncioTestCase):
+    """
+    Bug 4: downgrade_subscription to a paid plan should modify Stripe subscription price.
+    
+    Current bug: downgrade_subscription only updates database, doesn't modify Stripe price.
+    Result: User is charged at old (higher) price instead of new (lower) price.
+    """
+    
+    def setUp(self):
+        self.user_id = "test_user_downgrade_paid"
+        self.subscription_id = "sub_test_downgrade_paid"
+        self.now = datetime.now(timezone.utc)
+        self.future_time = self.now + timedelta(days=30)
+    
+    @patch('backend.payment_stripe.STRIPE_PRICE_IDS', {
+        PlanType.NORMAL: "price_normal_real",
+        PlanType.HIGH: "price_high_real",
+        PlanType.ULTRA: "price_ultra_real",
+        PlanType.PREMIUM: "price_premium_real"
+    })
+    @patch('backend.payment_stripe.stripe.Subscription.modify')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_downgrade_to_paid_plan_should_modify_stripe_subscription(
+        self, mock_update_user_plan, mock_get_user_plan, mock_stripe_retrieve, mock_stripe_modify
+    ):
+        """
+        Bug 4: Downgrading from ULTRA to HIGH should modify Stripe subscription.
+        """
+        # Setup: User has ULTRA plan
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.ULTRA,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription retrieve with items structure
+        mock_subscription = Mock()
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_subscription.status = "active"
+        mock_subscription.get = Mock(side_effect=lambda key: {
+            "items": {"data": [{"id": "si_test_item"}]}
+        }.get(key))
+        mock_subscription.__getitem__ = Mock(side_effect=lambda key: {
+            "items": {"data": [{"id": "si_test_item"}]}
+        }[key])
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Execute: Downgrade to HIGH
+        result = await downgrade_subscription(self.user_id, PlanType.HIGH)
+        
+        # Assert: Should succeed
+        self.assertTrue(result)
+        
+        # Assert: Stripe subscription should be modified with new price
+        self.assertTrue(
+            mock_stripe_modify.called,
+            "BUG 4 FIX VERIFICATION: Stripe subscription should be modified when downgrading to paid plan"
+        )
+
+
+class TestCancelSubscriptionOrderBug(unittest.IsolatedAsyncioTestCase):
+    """
+    Bug 5: cancel_subscription writes DB before Stripe, causing inconsistency if Stripe fails.
+    
+    Current bug: DB is updated first, then Stripe is called.
+    Result: If Stripe call fails, DB shows canceled but Stripe subscription is still active.
+    """
+    
+    def setUp(self):
+        self.user_id = "test_user_cancel_order"
+        self.subscription_id = "sub_test_cancel_order"
+        self.now = datetime.now(timezone.utc)
+        self.future_time = self.now + timedelta(days=30)
+    
+    @patch('backend.payment_stripe.stripe.Subscription.modify')
+    @patch('backend.payment_stripe.stripe.Subscription.retrieve')
+    @patch('backend.payment_stripe.get_user_plan')
+    @patch('backend.payment_stripe.update_user_plan')
+    async def test_cancel_subscription_stripe_failure_should_not_update_db(
+        self, mock_update_user_plan, mock_get_user_plan, mock_stripe_retrieve, mock_stripe_modify
+    ):
+        """
+        Bug 5: If Stripe call fails, DB should not be updated.
+        This test will FAIL with current code.
+        """
+        # Setup: User has active subscription
+        user_plan = UserPlan(
+            user_id=self.user_id,
+            plan=PlanType.HIGH,
+            stripe_subscription_id=self.subscription_id,
+            subscription_status="active",
+            cancel_at_period_end=False,
+            created_at=self.now,
+            updated_at=self.now
+        )
+        mock_get_user_plan.return_value = user_plan
+        
+        # Mock Stripe subscription retrieve
+        mock_subscription = Mock()
+        mock_subscription.current_period_end = int(self.future_time.timestamp())
+        mock_stripe_retrieve.return_value = mock_subscription
+        
+        # Mock Stripe modify to FAIL
+        mock_stripe_modify.side_effect = StripeError("Stripe API error")
+        
+        # Execute: Cancel subscription (should fail)
+        result = await cancel_subscription(self.user_id)
+        
+        # Assert: Should return False (failure)
+        self.assertFalse(result, "cancel_subscription should return False when Stripe fails")
+        
+        # Assert: DB should NOT be updated with cancel_at_period_end=True
+        # This will FAIL with current code - Bug 5 reproduced
+        # Current code updates DB first, so update_user_plan is called even though Stripe fails
+        if mock_update_user_plan.called:
+            call_kwargs = mock_update_user_plan.call_args[1]
+            self.assertNotEqual(
+                call_kwargs.get('cancel_at_period_end'), True,
+                "BUG 5 REPRODUCED: DB was updated with cancel_at_period_end=True even though Stripe call failed. "
+                "DB and Stripe are now inconsistent!"
+            )
 
 
 if __name__ == '__main__':

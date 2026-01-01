@@ -466,6 +466,34 @@ async def handle_subscription_updated(
         
         print(f"🔍 Found user: user_id={user_id}, current_plan={current_plan}")
         
+        # ✅ Fix Bug 2: If user has START plan, they shouldn't have an active subscription
+        # Cancel the subscription in Stripe and clear subscription fields in DB
+        try:
+            current_plan_type = PlanType(current_plan) if isinstance(current_plan, str) else current_plan
+            if current_plan_type == PlanType.START and status == "active":
+                print(f"⚠️ User {user_id} has START plan but active subscription {subscription_id}, canceling subscription")
+                try:
+                    stripe.Subscription.delete(subscription_id)
+                    print(f"✅ Canceled subscription {subscription_id} for START plan user {user_id}")
+                except stripe.error.StripeError as stripe_err:
+                    print(f"⚠️ Failed to cancel Stripe subscription {subscription_id}: {stripe_err}")
+                    # Continue to clear DB fields even if Stripe cancellation fails
+                
+                # Clear subscription fields in DB
+                await update_user_plan(
+                    user_id=user_id,
+                    stripe_subscription_id=_CLEAR_FIELD,
+                    subscription_status="canceled",
+                    cancel_at_period_end=False,
+                    next_update_at=_CLEAR_FIELD,
+                    next_plan=_CLEAR_FIELD,
+                    plan_expires_at=_CLEAR_FIELD,
+                )
+                print(f"✅ Cleared subscription fields for START plan user {user_id}")
+                return  # Don't process further, subscription is canceled
+        except (ValueError, TypeError) as e:
+            print(f"⚠️ Invalid plan value '{current_plan}' for user {user_id}: {e}, continuing...")
+        
         # ✅ Sync cancel_at_period_end from Stripe
         cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
         
@@ -479,6 +507,42 @@ async def handle_subscription_updated(
         
         # ✅ Check if there's a scheduled change using already-fetched data
         has_scheduled_change = user_row.get("next_plan") is not None
+        
+        # ✅ Fix Bug 3: Check if next_plan should be applied (next_update_at has passed)
+        if has_scheduled_change and status == "active":
+            next_plan_raw = user_row.get("next_plan")
+            next_update_at_raw = user_row.get("next_update_at")
+            plan_expires_at_raw = user_row.get("plan_expires_at")
+            
+            # Determine effective_at (when the scheduled change should take effect)
+            effective_at = None
+            if next_update_at_raw:
+                effective_at = _parse_dt_maybe(next_update_at_raw)
+            elif plan_expires_at_raw:
+                effective_at = _parse_dt_maybe(plan_expires_at_raw)
+            
+            # Check if the scheduled change has expired (should be applied now)
+            if effective_at and effective_at <= utcnow():
+                try:
+                    next_plan = PlanType(next_plan_raw) if isinstance(next_plan_raw, str) else next_plan_raw
+                    print(f"⏰ User {user_id} scheduled plan change has expired (effective_at={effective_at}), applying: {current_plan} -> {next_plan.value}")
+                    
+                    # Apply the scheduled plan change
+                    await update_user_plan(
+                        user_id=user_id,
+                        plan=next_plan,
+                        next_plan=_CLEAR_FIELD,
+                        next_update_at=next_update_at,  # Set to new billing date from Stripe
+                        plan_expires_at=_CLEAR_FIELD if next_plan != PlanType.START else user_row.get("plan_expires_at"),
+                        subscription_status="active",
+                        cancel_at_period_end=cancel_at_period_end,
+                        stripe_subscription_id=subscription_id,
+                        stripe_event_ts=event_created,
+                    )
+                    print(f"✅ User {user_id} plan changed to {next_plan.value}, scheduled change cleared")
+                    return  # Applied, don't continue with normal status sync
+                except (ValueError, TypeError) as e:
+                    print(f"⚠️ Invalid next_plan value '{next_plan_raw}' for user {user_id}: {e}, continuing with normal sync...")
         
         # Update subscription status
         if status == "active":
@@ -836,7 +900,16 @@ async def cancel_subscription(user_id: str) -> bool:
             datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
         )
         
-        # 2) Write DB state machine first (source of truth for your app logic)
+        # ✅ Fix Bug 5: Call Stripe FIRST, then update DB
+        # This ensures DB is only updated if Stripe call succeeds
+        # 2) Tell Stripe to cancel at period end (no immediate cancel)
+        stripe.Subscription.modify(
+            user_plan.stripe_subscription_id,
+            cancel_at_period_end=True
+        )
+        print(f"✅ Stripe subscription {user_plan.stripe_subscription_id} set to cancel at period end")
+        
+        # 3) Now update DB (Stripe succeeded, safe to update)
         # Cancel should override any existing scheduled downgrade
         await update_user_plan(
             user_id=user_id,
@@ -844,12 +917,6 @@ async def cancel_subscription(user_id: str) -> bool:
             next_plan=PlanType.START,        # Schedule downgrade to START
             cancel_at_period_end=True,        # Mark cancel at period end
             next_update_at=_CLEAR_FIELD,      # Explicitly clear scheduled plan change trigger (override any existing downgrade)
-        )
-        
-        # 3) Then tell Stripe to cancel at period end (no immediate cancel)
-        stripe.Subscription.modify(
-            user_plan.stripe_subscription_id,
-            cancel_at_period_end=True
         )
         
         print(f"✅ User {user_id} subscription will cancel at period end: {plan_expires_at}")
@@ -1130,18 +1197,61 @@ async def downgrade_subscription(user_id: str, target_plan: PlanType) -> bool:
             )
             # Proceed with override (you can change this to raise ValueError if you prefer to reject)
         
-        # Update database: set next_plan, plan_expires_at, next_update_at, cancel_at_period_end=False
-        # Note: We set cancel_at_period_end=False because this is a downgrade, not a cancellation
-        # The subscription will continue, but at a lower tier
-        # Important: next_update_at must be set to ensure get_user_plan uses it (not plan_expires_at) 
-        # to determine effective_at, preventing immediate application when plan_expires_at is NULL or past
-        await update_user_plan(
-            user_id=user_id,
-            next_plan=target_plan,
-            plan_expires_at=plan_expires_at,
-            next_update_at=plan_expires_at,  # Set next_update_at to ensure proper scheduling
-            cancel_at_period_end=False
-        )
+        # ✅ Fix Bug 1 & 4: Communicate with Stripe based on target_plan
+        if target_plan == PlanType.START:
+            # Bug 1 Fix: Downgrading to START (free) - cancel Stripe subscription at period end
+            try:
+                stripe.Subscription.modify(
+                    user_plan.stripe_subscription_id,
+                    cancel_at_period_end=True
+                )
+                print(f"✅ Stripe subscription {user_plan.stripe_subscription_id} set to cancel at period end for START downgrade")
+            except stripe.error.StripeError as e:
+                print(f"❌ Failed to cancel Stripe subscription for START downgrade: {e}")
+                raise ValueError(f"Failed to cancel Stripe subscription: {e}")
+            
+            # Update database with cancel_at_period_end=True for START
+            await update_user_plan(
+                user_id=user_id,
+                next_plan=target_plan,
+                plan_expires_at=plan_expires_at,
+                next_update_at=plan_expires_at,
+                cancel_at_period_end=True  # Mark as canceling for START plan
+            )
+        else:
+            # Bug 4 Fix: Downgrading to a paid plan - schedule price change in Stripe
+            target_price_id = STRIPE_PRICE_IDS.get(target_plan)
+            if target_price_id and target_price_id not in ["price_xxx", "price_yyy", "price_zzz", "price_premium"]:
+                try:
+                    # Get subscription to find the item ID
+                    subscription = stripe.Subscription.retrieve(user_plan.stripe_subscription_id)
+                    if subscription.get("items") and subscription["items"].get("data"):
+                        item_id = subscription["items"]["data"][0]["id"]
+                        # Schedule price change at period end using billing_cycle_anchor
+                        stripe.Subscription.modify(
+                            user_plan.stripe_subscription_id,
+                            proration_behavior='none',  # No proration for downgrade
+                            items=[{
+                                'id': item_id,
+                                'price': target_price_id,
+                            }],
+                            billing_cycle_anchor='unchanged'
+                        )
+                        print(f"✅ Stripe subscription {user_plan.stripe_subscription_id} scheduled price change to {target_plan.value}")
+                except stripe.error.StripeError as e:
+                    print(f"⚠️ Failed to modify Stripe subscription price (will still update DB): {e}")
+                    # Continue with DB update even if Stripe fails - webhook will sync later
+            else:
+                print(f"⚠️ No valid Stripe Price ID for {target_plan.value}, skipping Stripe modification")
+            
+            # Update database
+            await update_user_plan(
+                user_id=user_id,
+                next_plan=target_plan,
+                plan_expires_at=plan_expires_at,
+                next_update_at=plan_expires_at,
+                cancel_at_period_end=False
+            )
         
         print(
             f"✅ User {user_id} scheduled downgrade from {current_plan.value} to {target_plan.value} "

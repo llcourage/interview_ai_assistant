@@ -866,3 +866,93 @@ async def test_stripe_webhook_subscription_created():
             supabase.table("user_plans").delete().eq("user_id", user_id).execute()
         except Exception:
             pass
+
+
+@pytest.mark.asyncio
+async def test_subscription_updated_should_cancel_for_start_plan_user():
+    """
+    Test that subscription.updated event cancels subscription when user has START plan.
+    
+    Bug scenario:
+    - Precondition: User has START plan but still has active subscription in Stripe
+    - Trigger: subscription.updated webhook event with status="active"
+    - Expected: Subscription should be canceled in Stripe, subscription fields cleared in DB
+    - Current bug: Subscription status is synced, user continues to be charged
+    
+    This test reproduces the bug where START plan users are incorrectly charged.
+    """
+    from backend.payment_stripe import handle_subscription_updated
+    import unittest.mock
+    
+    supabase = get_supabase_admin()
+    user_id = str(uuid.uuid4())
+    customer_id = f"cus_test_{uuid.uuid4().hex[:8]}"
+    subscription_id = f"sub_test_{uuid.uuid4().hex[:8]}"
+    
+    try:
+        # Setup: Create user with START plan but still has subscription (bug scenario)
+        supabase.table("user_plans").upsert({
+            "user_id": user_id,
+            "plan": "start",  # START plan (free, shouldn't have subscription)
+            "stripe_customer_id": customer_id,
+            "stripe_subscription_id": subscription_id,  # But subscription still exists (bug)
+            "subscription_status": "active",  # Active subscription (shouldn't exist for START plan)
+            "stripe_event_ts": None,
+        }).execute()
+        
+        # Create subscription.updated event (e.g., from renewal/billing)
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+        subscription_event = {
+            "id": subscription_id,
+            "customer": customer_id,
+            "status": "active",
+            "current_period_end": int(future_date.timestamp()),
+            "cancel_at_period_end": False,
+        }
+        
+        event_created = int(datetime.now(timezone.utc).timestamp())
+        event_id = f"evt_test_{uuid.uuid4().hex[:8]}"
+        
+        # Mock Stripe API to cancel subscription
+        with unittest.mock.patch('backend.payment_stripe.stripe.Subscription.delete') as mock_delete:
+            mock_delete.return_value = None  # Successful deletion
+            
+            # Trigger: Handle subscription.updated event
+            await handle_subscription_updated(
+                subscription=subscription_event,
+                event_created=event_created,
+                event_id=event_id
+            )
+            
+            # Assert: Stripe subscription should be canceled
+            mock_delete.assert_called_once_with(subscription_id)
+            print(f"✅ Verified: stripe.Subscription.delete was called with {subscription_id}")
+        
+        # Assert: Check DB state - subscription fields should be cleared
+        user_plan = await get_user_plan(user_id)
+        assert user_plan is not None, "User plan should exist"
+        
+        # Critical assertions: Subscription should be canceled/cleared
+        assert user_plan.stripe_subscription_id is None, \
+            f"Expected stripe_subscription_id=None (cleared), got {user_plan.stripe_subscription_id}"
+        assert user_plan.subscription_status == "canceled", \
+            f"Expected subscription_status='canceled', got {user_plan.subscription_status}"
+        assert user_plan.plan == PlanType.START, \
+            f"Expected plan=START (unchanged), got {user_plan.plan.value}"
+        assert user_plan.next_plan is None, \
+            f"Expected next_plan=None (cleared), got {user_plan.next_plan}"
+        assert user_plan.next_update_at is None, \
+            f"Expected next_update_at=None (cleared), got {user_plan.next_update_at}"
+        assert user_plan.plan_expires_at is None, \
+            f"Expected plan_expires_at=None (cleared), got {user_plan.plan_expires_at}"
+        assert user_plan.cancel_at_period_end == False, \
+            f"Expected cancel_at_period_end=False, got {user_plan.cancel_at_period_end}"
+        
+        print(f"✅ Test passed: START plan user subscription correctly canceled and cleared")
+        
+    finally:
+        # Cleanup
+        try:
+            supabase.table("user_plans").delete().eq("user_id", user_id).execute()
+        except Exception:
+            pass
